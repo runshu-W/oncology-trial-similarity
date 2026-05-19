@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Oncology Trial Similarity Agent</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2f1;
+      --brand: #3157d5;
+      --brand-dark: #233f9a;
+      --warn-bg: #fff4e5;
+      --warn: #9a4b00;
+      --good-bg: #eafaf1;
+      --medium-bg: #eef4ff;
+      --low-bg: #fff4e5;
+      --danger-bg: #fdecec;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, #dfe8ff 0, transparent 30rem), var(--bg);
+      color: var(--ink);
+    }
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 36px 0 60px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 22px;
+      align-items: stretch;
+      margin-bottom: 22px;
+    }
+    .panel, .candidate {
+      background: rgba(255,255,255,0.92);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 18px 40px rgba(21, 34, 72, 0.08);
+    }
+    .panel { padding: 24px; }
+    h1 { margin: 0 0 10px; font-size: clamp(30px, 5vw, 54px); letter-spacing: -0.05em; }
+    h2, h3 { margin-top: 0; }
+    p { color: var(--muted); line-height: 1.55; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: #edf2ff;
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+    label { display: block; font-weight: 700; margin: 14px 0 8px; }
+    input[type=file], textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fbfdff;
+      padding: 12px 14px;
+      font: inherit;
+    }
+    textarea { min-height: 260px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    button {
+      border: 0;
+      border-radius: 14px;
+      background: var(--brand);
+      color: white;
+      padding: 12px 16px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(49, 87, 213, 0.22);
+    }
+    button.secondary {
+      background: #eef2ff;
+      color: var(--brand-dark);
+      box-shadow: none;
+    }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .status {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #f0f4ff;
+      color: var(--brand-dark);
+      font-weight: 700;
+    }
+    .status.error { background: var(--danger-bg); color: #9b1c1c; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: #fbfdff;
+    }
+    .metric small { display: block; color: var(--muted); font-weight: 700; }
+    .metric strong { display: block; margin-top: 3px; font-size: 20px; }
+    .candidate {
+      padding: 20px;
+      margin-top: 16px;
+    }
+    .candidate-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: flex-start;
+    }
+    .badge {
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+      background: var(--medium-bg);
+      color: var(--brand-dark);
+    }
+    .badge.high { background: var(--good-bg); color: #067647; }
+    .badge.low { background: var(--low-bg); color: var(--warn); }
+    .badge.do_not_borrow { background: var(--danger-bg); color: #9b1c1c; }
+    details {
+      border-top: 1px solid var(--line);
+      margin-top: 14px;
+      padding-top: 12px;
+    }
+    summary { cursor: pointer; font-weight: 800; }
+    .flags li {
+      color: var(--warn);
+      background: var(--warn-bg);
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin: 6px 0;
+    }
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 18px;
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+    code { white-space: pre-wrap; }
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .candidate-head { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="panel">
+        <div class="pill">Local prototype · ClinicalBERT retrieval · Prior-borrowing rerank</div>
+        <h1>Oncology Trial Similarity Agent</h1>
+        <p>Upload or paste one ClinicalTrials.gov-style oncology trial JSON. The agent runs the existing pipeline and returns ranked historical trials with suitability, discounts, red flags, and borrowable quantities.</p>
+        <p><strong>Important:</strong> suggested discounts are sensitivity-analysis aids, not final statistical prior weights.</p>
+      </div>
+      <div class="panel">
+        <h2>Pipeline Status</h2>
+        <div id="health" class="status">Checking index...</div>
+        <div class="grid">
+          <div class="metric"><small>Top K</small><strong>10</strong></div>
+          <div class="metric"><small>Rerank</small><strong>100</strong></div>
+          <div class="metric"><small>Input</small><strong>JSON</strong></div>
+          <div class="metric"><small>Mode</small><strong>Local</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Input Trial JSON</h2>
+      <form id="search-form">
+        <label for="upload">Upload JSON file</label>
+        <input id="upload" name="upload" type="file" accept=".json,application/json" />
+        <label for="json-text">Or paste JSON</label>
+        <textarea id="json-text" name="json_text" placeholder='{"Study details": {"1. NCT number": "NCT..."}}'></textarea>
+        <div class="actions">
+          <button id="run-button" type="submit">Run Similarity Search</button>
+          <button class="secondary" id="clear-button" type="button">Clear</button>
+        </div>
+      </form>
+      <div id="status" class="status">Ready.</div>
+    </section>
+
+    <section id="results" style="margin-top: 22px;">
+      <div class="empty">Results will appear here after a successful run.</div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.querySelector("#search-form");
+    const statusBox = document.querySelector("#status");
+    const results = document.querySelector("#results");
+    const runButton = document.querySelector("#run-button");
+    const clearButton = document.querySelector("#clear-button");
+    const healthBox = document.querySelector("#health");
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
+
+    function asList(items) {
+      if (!items || !items.length) return "<li>None reported</li>";
+      return items.map(item => `<li>${escapeHtml(item)}</li>`).join("");
+    }
+
+    function renderBorrowable(quantities) {
+      if (!quantities || !quantities.length) return "<p>No borrowable quantities reported.</p>";
+      return quantities.map(quantity => `
+        <div class="metric" style="margin-top:10px">
+          <small>${escapeHtml(quantity.endpoint_family || "Endpoint")}</small>
+          <strong style="font-size:15px">${escapeHtml(quantity.endpoint || "")}</strong>
+          <p>${escapeHtml((quantity.arm_results || []).length)} arm result(s)</p>
+        </div>
+      `).join("");
+    }
+
+    function renderCandidate(candidate) {
+      const suitability = candidate.prior_borrowing_suitability || candidate.suitability || "unknown";
+      const title = candidate.brief_title || candidate.title || "";
+      const nctId = candidate.candidate_nct_id || candidate.nct_id || "";
+      const scores = Object.entries(candidate.dimension_scores || {})
+        .map(([key, value]) => `<li><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</li>`)
+        .join("");
+      return `
+        <article class="candidate">
+          <div class="candidate-head">
+            <div>
+              <h3>#${escapeHtml(candidate.rank || "")} ${escapeHtml(nctId)} — ${escapeHtml(title)}</h3>
+              <p>${escapeHtml(candidate.explanation || "No rationale reported.")}</p>
+            </div>
+            <span class="badge ${escapeHtml(suitability)}">${escapeHtml(suitability)}</span>
+          </div>
+          <div class="grid">
+            <div class="metric"><small>Overall</small><strong>${escapeHtml(candidate.overall_similarity_score ?? candidate.score ?? "")}</strong></div>
+            <div class="metric"><small>Retrieval</small><strong>${escapeHtml(candidate.retrieval_score ?? "")}</strong></div>
+            <div class="metric"><small>Discount</small><strong>${escapeHtml(candidate.suggested_borrowing_discount ?? candidate.discount ?? "")}</strong></div>
+            <div class="metric"><small>Borrowable</small><strong>${escapeHtml((candidate.borrowable_quantities || []).length)}</strong></div>
+          </div>
+          <details open>
+            <summary>Red flags</summary>
+            <ul class="flags">${asList(candidate.red_flags || [])}</ul>
+          </details>
+          <details>
+            <summary>Dimension scores</summary>
+            <ul>${scores || "<li>No scores reported</li>"}</ul>
+          </details>
+          <details>
+            <summary>Borrowable quantities</summary>
+            ${renderBorrowable(candidate.borrowable_quantities || [])}
+          </details>
+        </article>
+      `;
+    }
+
+    function downloadBlob(filename, content, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function checkHealth() {
+      const response = await fetch("/api/health");
+      const health = await response.json();
+      healthBox.textContent = health.index_available
+        ? `ClinicalBERT index found: ${health.index_dir}`
+        : `ClinicalBERT index missing: ${health.index_dir}`;
+      healthBox.classList.toggle("error", !health.index_available);
+    }
+
+    clearButton.addEventListener("click", () => {
+      form.reset();
+      statusBox.textContent = "Ready.";
+      statusBox.classList.remove("error");
+      results.innerHTML = '<div class="empty">Results will appear here after a successful run.</div>';
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      statusBox.textContent = "Running pipeline. ClinicalBERT search can take a moment...";
+      statusBox.classList.remove("error");
+      results.innerHTML = "";
+      runButton.disabled = true;
+      try {
+        const formData = new FormData(form);
+        const response = await fetch("/api/search", { method: "POST", body: formData });
+        const payload = await response.json();
+        if (!response.ok) {
+          statusBox.textContent = payload.detail || "Search failed.";
+          statusBox.classList.add("error");
+          return;
+        }
+        const result = payload.result;
+        const query = result.query_summary || result.query || {};
+        const candidates = result.reranked_top10 || result.reranked_top_matches || result.top10 || [];
+        statusBox.textContent = "Search complete. Review red flags before any borrowing decision.";
+        results.innerHTML = `
+          <section class="panel">
+            <h2>${escapeHtml(query.nct_id || "Query Trial")}: ${escapeHtml(query.brief_title || "")}</h2>
+            <div class="grid">
+              <div class="metric"><small>Phase</small><strong>${escapeHtml(query.phase || "Not reported")}</strong></div>
+              <div class="metric"><small>Candidates</small><strong>${escapeHtml(candidates.length)}</strong></div>
+              <div class="metric"><small>Backend</small><strong>${escapeHtml(result.embedding_backend || "index default")}</strong></div>
+              <div class="metric"><small>Decision</small><strong>Review</strong></div>
+            </div>
+            <div class="actions">
+              <button id="download-json" type="button">Download JSON</button>
+              <button class="secondary" id="download-md" type="button">Download Markdown</button>
+            </div>
+          </section>
+          <section>${candidates.map(renderCandidate).join("")}</section>
+        `;
+        document.querySelector("#download-json").addEventListener("click", () => {
+          downloadBlob("trial_similarity_result.json", JSON.stringify(result, null, 2), "application/json");
+        });
+        document.querySelector("#download-md").addEventListener("click", () => {
+          downloadBlob("trial_similarity_report.md", payload.markdown_report, "text/markdown");
+        });
+      } finally {
+        runButton.disabled = false;
+      }
+    });
+
+    checkHealth();
+  </script>
+</body>
+</html>

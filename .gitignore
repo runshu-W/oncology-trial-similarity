@@ -1,0 +1,8 @@
+.DS_Store
+.venv/
+.pycache/
+__pycache__/
+.superpowers/
+artifacts/
+*.npz
+*.jsonl

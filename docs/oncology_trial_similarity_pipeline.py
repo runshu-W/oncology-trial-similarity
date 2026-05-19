@@ -1,0 +1,1405 @@
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+
+DEFAULT_DB_ROOT = Path(
+    "/Users/wang/PHD/clinic.gov/Oncology_All_Trials/Oncology_All_Trials"
+)
+
+
+SUMMARY_PROMPT_PATH = "oncology_trial_similarity_pipeline.md"
+
+
+ASPECT_WEIGHTS = {
+    "disease_population": 0.30,
+    "intervention": 0.25,
+    "endpoint": 0.20,
+    "design": 0.15,
+    "results_safety": 0.10,
+}
+
+
+DEFAULT_CLINICALBERT_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
+
+
+@dataclass
+class TrialRecord:
+    nct_id: str
+    folder: Path
+    json_path: Path
+    protocol_path: Path | None
+    sap_path: Path | None
+    raw_json: dict[str, Any]
+    extracted: dict[str, Any]
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def find_trial_json(folder: Path) -> Path | None:
+    json_files = sorted(folder.glob("*.json"))
+    if not json_files:
+        return None
+    exact = folder / f"{folder.name}.json"
+    return exact if exact.exists() else json_files[0]
+
+
+def find_supporting_pdfs(folder: Path) -> dict[str, Path | None]:
+    pdfs = sorted(folder.glob("*.pdf"))
+    protocol = None
+    sap = None
+    for pdf in pdfs:
+        name = pdf.name.lower()
+        if protocol is None and "protocol" in name:
+            protocol = pdf
+        if sap is None and (
+            "statistical_analysis" in name
+            or "statistical analysis" in name
+            or "sap" in name
+        ):
+            sap = pdf
+    return {"protocol": protocol, "sap": sap}
+
+
+def read_pdf_excerpt(path: Path | None, max_chars: int = 12000) -> str:
+    if path is None or not path.exists():
+        return ""
+    if shutil.which("pdftotext") is None:
+        return read_pdf_excerpt_with_python(path, max_chars=max_chars)
+    try:
+        result = subprocess.run(
+            ["pdftotext", "-layout", "-q", str(path), "-"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if result.returncode != 0:
+        return read_pdf_excerpt_with_python(path, max_chars=max_chars)
+    return clean_text(result.stdout[:max_chars])
+
+
+def read_pdf_excerpt_with_python(path: Path, max_chars: int = 12000) -> str:
+    reader_class = None
+    for module_name in ("pypdf", "PyPDF2"):
+        try:
+            module = __import__(module_name, fromlist=["PdfReader"])
+        except ImportError:
+            continue
+        reader_class = getattr(module, "PdfReader", None)
+        if reader_class is not None:
+            break
+    if reader_class is None:
+        return ""
+
+    chunks = []
+    try:
+        reader = reader_class(str(path))
+        for page in reader.pages:
+            text = page.extract_text() or ""
+            if text:
+                chunks.append(text)
+            if sum(len(chunk) for chunk in chunks) >= max_chars:
+                break
+    except Exception:
+        return ""
+    return clean_text(" ".join(chunks)[:max_chars])
+
+
+def clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return "; ".join(clean_text(x) for x in value if clean_text(x))
+    if isinstance(value, dict):
+        return "; ".join(f"{k}: {clean_text(v)}" for k, v in value.items())
+    text = str(value)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def compact_arm_label(label: str, max_len: int = 240) -> str:
+    text = clean_text(label)
+    text = re.sub(r"\s*\([^)]{80,}\)", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3].rstrip() + "..."
+
+
+def get_nested(obj: dict[str, Any], *keys: str, default: Any = "") -> Any:
+    cur: Any = obj
+    for key in keys:
+        if not isinstance(cur, dict) or key not in cur:
+            return default
+        cur = cur[key]
+    return cur
+
+
+def parse_count_percent(text: str) -> dict[str, Any]:
+    match = re.search(r"(?P<count>\d+(?:\.\d+)?)\s*(?:\((?P<pct>\d+(?:\.\d+)?)%\))?", text)
+    if not match:
+        return {"raw": text}
+    out: dict[str, Any] = {"raw": text, "count": float(match.group("count"))}
+    if match.group("pct") is not None:
+        out["percent"] = float(match.group("pct"))
+    return out
+
+
+def parse_enrollment_count(text: str) -> int | None:
+    match = re.search(r"\d+", text or "")
+    return int(match.group(0)) if match else None
+
+
+def extract_outcomes(results_posted: dict[str, Any]) -> list[dict[str, Any]]:
+    outcomes = results_posted.get("5. Outcome measures", [])
+    extracted: list[dict[str, Any]] = []
+    if not isinstance(outcomes, list):
+        return extracted
+
+    for outcome in outcomes:
+        if not isinstance(outcome, dict):
+            continue
+        table = outcome.get("Data Table", [])
+        measurements = []
+        denominators = []
+        if isinstance(table, list):
+            for row in table:
+                if not isinstance(row, dict):
+                    continue
+                category = clean_text(row.get("Category")).lower()
+                if category == "measurement":
+                    for arm, value in row.items():
+                        if arm != "Category":
+                            measurements.append(
+                                {
+                                    "arm": compact_arm_label(arm),
+                                    **parse_count_percent(clean_text(value)),
+                                }
+                            )
+                elif category.startswith("denominator"):
+                    for arm, value in row.items():
+                        if arm != "Category":
+                            parsed = parse_count_percent(clean_text(value))
+                            denominators.append(
+                                {
+                                    "arm": compact_arm_label(arm),
+                                    "denominator": parsed.get("count"),
+                                    "raw": parsed.get("raw", clean_text(value)),
+                                }
+                            )
+        denominator_by_arm = {
+            d["arm"]: d.get("denominator")
+            for d in denominators
+            if d.get("denominator") is not None
+        }
+        arm_results = []
+        for measurement in measurements:
+            denominator = denominator_by_arm.get(measurement["arm"])
+            result = dict(measurement)
+            if denominator is not None:
+                result["denominator"] = denominator
+                if "count" in result and denominator:
+                    result["proportion"] = round(float(result["count"]) / float(denominator), 6)
+            arm_results.append(result)
+        extracted.append(
+            {
+                "type": clean_text(outcome.get("Type")),
+                "title": clean_text(outcome.get("Title")),
+                "description": clean_text(outcome.get("Description")),
+                "time_frame": clean_text(outcome.get("Time Frame")),
+                "population_description": clean_text(outcome.get("Population Description")),
+                "unit": clean_text(outcome.get("Unit of Measure")),
+                "param_type": clean_text(outcome.get("Param Type")),
+                "denominators": denominators,
+                "measurements": measurements,
+                "arm_results": arm_results,
+            }
+        )
+    return extracted
+
+
+def infer_endpoint_family(title: str) -> str:
+    low = title.lower()
+    rules = [
+        ("progression free", "PFS"),
+        ("progression-free", "PFS"),
+        ("event free", "EFS"),
+        ("event-free", "EFS"),
+        ("disease free", "DFS"),
+        ("disease-free", "DFS"),
+        ("relapse free", "RFS"),
+        ("relapse-free", "RFS"),
+        ("duration of response", "DOR"),
+        ("overall survival", "OS"),
+        ("disease control", "DCR"),
+        ("response", "ORR/CR/PR"),
+        ("complete response", "CR"),
+        ("partial response", "PR"),
+        ("minimal residual", "MRD"),
+        ("mrd", "MRD"),
+        ("dose limiting", "DLT"),
+        ("adverse", "Safety/AE"),
+        ("toxicity", "Safety/AE"),
+        ("discontinuation", "Treatment discontinuation"),
+    ]
+    for needle, family in rules:
+        if needle in low:
+            return family
+    if re.search(r"\bsurvival\b", low):
+        return "OS"
+    return "Other"
+
+
+def infer_oncology_concepts(text: str) -> dict[str, Any]:
+    low = text.lower()
+
+    histology_rules = [
+        (r"\bdiffuse large b[- ]cell lymphoma\b|\bdlbcl\b", "DLBCL"),
+        (r"\bprimary mediastinal b[- ]cell lymphoma\b|\bpmbl\b", "PMBL"),
+        (r"\bburkitt\b", "Burkitt lymphoma"),
+        (r"\bmantle cell\b", "Mantle cell lymphoma"),
+        (r"\bnon[- ]hodgkin", "Non-Hodgkin lymphoma"),
+        (r"(?<!non[- ])(?<!non )\bhodgkin", "Hodgkin lymphoma"),
+        (r"\bmultiple myeloma\b", "Multiple myeloma"),
+        (r"\bacute lymphoblastic\b", "ALL"),
+        (r"\bacute myeloid\b|\baml\b", "AML"),
+        (r"\bchronic lymphocytic\b|\bcll\b", "CLL"),
+        (r"\bnon[- ]small cell lung\b|\bnsclc\b", "NSCLC"),
+        (r"\bsmall cell lung\b|\bsclc\b", "SCLC"),
+        (r"\bbreast cancer\b", "Breast cancer"),
+        (r"\bovarian\b", "Ovarian cancer"),
+        (r"\bcolorectal\b", "Colorectal cancer"),
+        (r"\bpancreatic\b", "Pancreatic cancer"),
+        (r"\bprostate\b", "Prostate cancer"),
+        (r"\bmelanoma\b", "Melanoma"),
+        (r"\bglioblastoma\b", "Glioblastoma"),
+    ]
+    marker_rules = [
+        (r"\bcd20\b", "CD20"),
+        (r"\bher2\b", "HER2"),
+        (r"\begfr\b", "EGFR"),
+        (r"\balk\b", "ALK"),
+        (r"\bbraf\b", "BRAF"),
+        (r"\bkras\b", "KRAS"),
+        (r"\bbcl[- ]?2\b", "BCL2"),
+        (r"\bpd[- ]?l1\b", "PD-L1"),
+        (r"\bmsi\b", "MSI"),
+        (r"\bmismatch repair\b", "MMR"),
+    ]
+    primary_site_rules = [
+        (r"\blymphoma\b", "Hematologic malignancy"),
+        (r"\bleukemia\b", "Hematologic malignancy"),
+        (r"\bmyeloma\b", "Hematologic malignancy"),
+        (r"\blung\b", "Lung"),
+        (r"\bbreast\b", "Breast"),
+        (r"\bovarian\b", "Ovary"),
+        (r"\bcolorectal\b|\bcolon\b|\brectal\b", "Colorectal"),
+        (r"\bpancreatic\b", "Pancreas"),
+        (r"\bprostate\b", "Prostate"),
+        (r"\bmelanoma\b", "Skin"),
+        (r"\bglioblastoma\b", "Brain/CNS"),
+    ]
+
+    histologies = [label for pattern, label in histology_rules if re.search(pattern, low)]
+    markers = [label for pattern, label in marker_rules if re.search(pattern, low)]
+    primary_sites = [label for pattern, label in primary_site_rules if re.search(pattern, low)]
+
+    if re.search(r"relapsed|refractory|\br/r\b|previously treated", low):
+        line = "Relapsed/refractory or previously treated"
+    elif re.search(r"\bpreviously untreated\b|\buntreated\b|\bfront[- ]?line\b|\bfirst[- ]?line\b|newly diagnosed", low):
+        line = "Frontline / previously untreated"
+    elif "maintenance" in low:
+        line = "Maintenance"
+    elif "neoadjuvant" in low or "neo-adjuvant" in low:
+        line = "Neoadjuvant"
+    elif "adjuvant" in low:
+        line = "Adjuvant"
+    else:
+        line = "Not reported"
+
+    stage_matches = sorted(set(re.findall(r"\bstage\s+(?:i{1,3}|iv|[1-4][a-d]?)\b", low)))
+    age = "Pediatric and adult" if re.search(r"children|pediatric|paediatric", low) and re.search(r"adult", low) else (
+        "Pediatric" if re.search(r"children|pediatric|paediatric", low) else (
+            "Adult" if re.search(r"\badult", low) else "Not reported"
+        )
+    )
+
+    return {
+        "primary_site": sorted(set(primary_sites)) or ["Not normalized"],
+        "histology": sorted(set(histologies)) or ["Not normalized"],
+        "molecular_marker": sorted(set(markers)) or ["Not reported"],
+        "stage_or_risk": stage_matches or ["Not reported"],
+        "line_of_therapy": line,
+        "age": age,
+    }
+
+
+def infer_intervention_concepts(interventions: Any, text: str) -> dict[str, Any]:
+    combined = f"{clean_text(interventions)} {text}".lower()
+    drug_class_rules = [
+        (r"\brituximab\b", "Anti-CD20 antibody"),
+        (r"\bofatumumab\b", "Anti-CD20 antibody"),
+        (r"\bcheckpoint\b", "Immunotherapy/checkpoint inhibitor"),
+        (r"\bpembrolizumab\b", "PD-1/PD-L1 inhibitor"),
+        (r"\bnivolumab\b", "PD-1/PD-L1 inhibitor"),
+        (r"\batezolizumab\b", "PD-1/PD-L1 inhibitor"),
+        (r"\bdurvalumab\b", "PD-1/PD-L1 inhibitor"),
+        (r"\bchemotherapy\b", "Chemotherapy"),
+        (r"\betoposide\b", "Chemotherapy"),
+        (r"\bcyclophosphamide\b", "Chemotherapy"),
+        (r"\bdoxorubicin\b", "Chemotherapy"),
+        (r"\bvincristine\b", "Chemotherapy"),
+        (r"\bprednisone\b", "Corticosteroid"),
+        (r"\bibrutinib\b", "BTK inhibitor"),
+        (r"\bacalabrutinib\b", "BTK inhibitor"),
+        (r"\bbortezomib\b", "Proteasome inhibitor"),
+        (r"\bcarfilzomib\b", "Proteasome inhibitor"),
+        (r"\blenalidomide\b", "Immunomodulatory drug"),
+        (r"\bcopanlisib\b", "PI3K inhibitor"),
+        (r"\bbevacizumab\b", "Anti-VEGF antibody"),
+    ]
+    backbone_rules = [
+        (r"\bda[- ]?epoch[- ]?r\b|\bdose[- ]adjusted epoch[- ]rituximab\b", "DA-EPOCH-R"),
+        (r"\bepoch[- ]?r\b|\br[- ]?epoch\b", "EPOCH-R"),
+        (r"\bepoch\b", "EPOCH"),
+        (r"\br[- ]?chop\b", "R-CHOP"),
+        (r"\bchop\b", "CHOP"),
+        (r"\br[- ]?ice\b", "R-ICE"),
+        (r"\bifosfamide\b.*\bcarboplatin\b.*\betoposide\b|\bice regimen\b", "ICE"),
+        (r"\bgemcitabine\b", "Gemcitabine-based"),
+        (r"\bcisplatin\b|\bcarboplatin\b", "Platinum-based"),
+    ]
+    classes = [label for pattern, label in drug_class_rules if re.search(pattern, combined)]
+    backbones = [label for pattern, label in backbone_rules if re.search(pattern, combined)]
+    if "DA-EPOCH-R" in backbones:
+        backbones = [b for b in backbones if b not in {"EPOCH-R", "EPOCH"}]
+    elif "EPOCH-R" in backbones:
+        backbones = [b for b in backbones if b != "EPOCH"]
+    return {
+        "drug_classes": sorted(set(classes)),
+        "backbone_regimen": sorted(set(backbones)) or ["Not normalized"],
+    }
+
+
+def infer_design_concepts(design: dict[str, Any], outcomes: list[dict[str, Any]]) -> dict[str, str]:
+    allocation = clean_text(design.get("Allocation")).lower()
+    model = clean_text(design.get("Interventional Model")).lower()
+    if "non_random" in allocation or "non-random" in allocation or "non random" in allocation:
+        randomized = "No"
+    elif "random" in allocation:
+        randomized = "Yes"
+    else:
+        randomized = "Not reported" if not allocation else "No"
+    if "single" in model:
+        arm_structure = "Single-arm"
+    elif "parallel" in model or "factorial" in model or "crossover" in model:
+        arm_structure = "Multi-arm"
+    else:
+        arm_structure = "Not reported"
+    number_of_arms = "Not reported"
+    if outcomes:
+        arms = set()
+        for outcome in outcomes:
+            for row in outcome.get("arm_results", []):
+                arms.add(row.get("arm", ""))
+        if arms:
+            number_of_arms = str(len(arms))
+    return {
+        "single_or_multi_arm": arm_structure,
+        "randomized": randomized,
+        "number_of_arms": number_of_arms,
+    }
+
+
+def summarize_borrowable_quantities(primary: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    quantities = []
+    for outcome in primary:
+        usable_results = []
+        for row in outcome.get("arm_results", []):
+            usable_results.append(
+                {
+                    "arm": row.get("arm", ""),
+                    "count": row.get("count"),
+                    "denominator": row.get("denominator"),
+                    "percent": row.get("percent"),
+                    "proportion": row.get("proportion"),
+                    "raw": row.get("raw", ""),
+                }
+            )
+        quantities.append(
+            {
+                "endpoint": outcome.get("title", ""),
+                "endpoint_family": outcome.get("endpoint_family", ""),
+                "unit": outcome.get("unit", ""),
+                "param_type": outcome.get("param_type", ""),
+                "time_frame": outcome.get("time_frame", ""),
+                "arm_results": usable_results,
+            }
+        )
+    return quantities
+
+
+def extract_trial_record(folder: Path) -> TrialRecord | None:
+    json_path = find_trial_json(folder)
+    if json_path is None:
+        return None
+    pdfs = find_supporting_pdfs(folder)
+    raw = read_json(json_path)
+    details = raw.get("Study details", {})
+    results = raw.get("Results Posted", {})
+    overview = get_nested(details, "5. Study Overview", default={})
+    design = get_nested(results, "2. Study Design", default={})
+    dates = get_nested(results, "4. Study Record Dates", default={})
+    outcomes = extract_outcomes(results if isinstance(results, dict) else {})
+
+    nct_id = clean_text(details.get("1. NCT number")) or folder.name
+    interventions = results.get("1. Intervention/Treatment", []) if isinstance(results, dict) else []
+    protocol_excerpt = read_pdf_excerpt(pdfs["protocol"], max_chars=8000)
+    sap_excerpt = read_pdf_excerpt(pdfs["sap"], max_chars=5000)
+    extracted = {
+        "nct_id": nct_id,
+        "json_path": str(json_path),
+        "brief_title": clean_text(overview.get("Brief Title") if isinstance(overview, dict) else ""),
+        "official_title": clean_text(overview.get("Official Title") if isinstance(overview, dict) else ""),
+        "brief_summary": clean_text(overview.get("Brief Summary") if isinstance(overview, dict) else ""),
+        "detailed_description": clean_text(overview.get("Detailed Description") if isinstance(overview, dict) else ""),
+        "status": clean_text(details.get("2. Study status") if isinstance(details, dict) else ""),
+        "phase": clean_text(details.get("7. Phase") if isinstance(details, dict) else ""),
+        "interventions": interventions,
+        "design": design if isinstance(design, dict) else {},
+        "enrollment": clean_text(results.get("3. Enrollment (Actual)") if isinstance(results, dict) else ""),
+        "dates": dates if isinstance(dates, dict) else {},
+        "supporting_documents": {
+            "protocol_pdf": str(pdfs["protocol"]) if pdfs["protocol"] else "",
+            "sap_pdf": str(pdfs["sap"]) if pdfs["sap"] else "",
+            "protocol_excerpt": protocol_excerpt,
+            "sap_excerpt": sap_excerpt,
+        },
+        "outcomes": [
+            {**o, "endpoint_family": infer_endpoint_family(o["title"])}
+            for o in outcomes
+        ],
+    }
+    return TrialRecord(
+        nct_id=nct_id,
+        folder=folder,
+        json_path=json_path,
+        protocol_path=pdfs["protocol"],
+        sap_path=pdfs["sap"],
+        raw_json=raw,
+        extracted=extracted,
+    )
+
+
+def make_rule_based_summary(extracted: dict[str, Any]) -> dict[str, Any]:
+    primary = [o for o in extracted["outcomes"] if o.get("type") == "PRIMARY"]
+    secondary = [o for o in extracted["outcomes"] if o.get("type") != "PRIMARY"]
+    source_text = " ".join(
+        [
+            extracted.get("brief_title", ""),
+            extracted.get("official_title", ""),
+            extracted.get("brief_summary", ""),
+            extracted.get("detailed_description", ""),
+            clean_text(extracted.get("interventions", "")),
+            extracted.get("supporting_documents", {}).get("protocol_excerpt", ""),
+            extracted.get("supporting_documents", {}).get("sap_excerpt", ""),
+        ]
+    )
+    oncology = infer_oncology_concepts(source_text)
+    intervention = infer_intervention_concepts(extracted.get("interventions", ""), source_text)
+    design_concepts = infer_design_concepts(extracted.get("design", {}), extracted.get("outcomes", []))
+    enrollment_count = parse_enrollment_count(extracted.get("enrollment", ""))
+    denominators = [
+        {
+            "endpoint": outcome.get("title", ""),
+            "endpoint_family": outcome.get("endpoint_family", ""),
+            "denominators": outcome.get("denominators", []),
+        }
+        for outcome in extracted["outcomes"]
+        if outcome.get("denominators")
+    ]
+    borrowable_quantities = summarize_borrowable_quantities(primary)
+    nonborrowability_risks = []
+    if not extracted.get("outcomes"):
+        nonborrowability_risks.append("No posted outcome results available in JSON.")
+    if oncology["line_of_therapy"] == "Not reported":
+        nonborrowability_risks.append("Line of therapy was not normalized from available text.")
+    if oncology["histology"] == ["Not normalized"]:
+        nonborrowability_risks.append("Cancer histology was not normalized from available text.")
+
+    full_text = " ".join(
+        [
+            extracted.get("brief_title", ""),
+            extracted.get("brief_summary", ""),
+            extracted.get("detailed_description", ""),
+            clean_text(extracted.get("interventions", "")),
+            clean_text(oncology),
+            clean_text(intervention),
+            clean_text(primary[:3]),
+        ]
+    )
+    return {
+        "nct_id": extracted["nct_id"],
+        "brief_title": extracted.get("brief_title", ""),
+        "phase": extracted.get("phase", ""),
+        "status": extracted.get("status", ""),
+        "cancer_type": {
+            "primary_site": oncology["primary_site"],
+            "histology": oncology["histology"],
+            "molecular_marker": oncology["molecular_marker"],
+            "stage_or_risk": oncology["stage_or_risk"],
+            "line_of_therapy": oncology["line_of_therapy"],
+            "prior_treatment": "Not reported",
+        },
+        "population": {
+            "age": oncology["age"],
+            "key_inclusion": [],
+            "key_exclusion": [],
+            "performance_status": "Not reported",
+            "subgroups": [],
+        },
+        "intervention": {
+            "experimental_regimen": clean_text(extracted.get("interventions", "")),
+            "control_or_comparator": "Not reported",
+            "drug_classes": intervention["drug_classes"],
+            "backbone_regimen": intervention["backbone_regimen"],
+            "dose_schedule_summary": "See source record",
+            "treatment_duration": "Not reported",
+        },
+        "design": {
+            "allocation": clean_text(extracted.get("design", {}).get("Allocation")),
+            "interventional_model": clean_text(extracted.get("design", {}).get("Interventional Model")),
+            "masking": clean_text(extracted.get("design", {}).get("Masking")),
+            "primary_purpose": clean_text(extracted.get("design", {}).get("Primary Purpose")),
+            "single_or_multi_arm": design_concepts["single_or_multi_arm"],
+            "randomized": design_concepts["randomized"],
+            "sample_size": extracted.get("enrollment", ""),
+            "sample_size_n": enrollment_count,
+            "number_of_arms": design_concepts["number_of_arms"],
+            "follow_up": "Not reported",
+        },
+        "endpoints": {
+            "primary": primary,
+            "secondary_or_other": secondary[:10],
+        },
+        "results": {
+            "has_posted_results": bool(extracted.get("outcomes")),
+            "primary_results": primary,
+            "safety_results": [
+                o for o in extracted["outcomes"] if "Safety" in o.get("endpoint_family", "")
+            ],
+            "denominators": denominators,
+            "follow_up_duration": "Not normalized",
+        },
+        "borrowing_relevance": {
+            "borrowable_quantities": borrowable_quantities,
+            "major_similarity_drivers": [
+                f"Histology: {', '.join(oncology['histology'])}",
+                f"Line of therapy: {oncology['line_of_therapy']}",
+                f"Backbone regimen: {', '.join(intervention['backbone_regimen'])}",
+                f"Primary endpoint families: {', '.join(sorted(set(o.get('endpoint_family', '') for o in primary if o.get('endpoint_family')))) or 'Not reported'}",
+            ],
+            "major_nonborrowability_risks": nonborrowability_risks,
+            "notes": "Rule-based fallback summary. Use LLM prompt for stronger normalization.",
+        },
+        "source_documents": {
+            "json_path": extracted.get("json_path", ""),
+            "protocol_pdf": extracted.get("supporting_documents", {}).get("protocol_pdf", ""),
+            "sap_pdf": extracted.get("supporting_documents", {}).get("sap_pdf", ""),
+            "protocol_text_available": bool(extracted.get("supporting_documents", {}).get("protocol_excerpt")),
+            "sap_text_available": bool(extracted.get("supporting_documents", {}).get("sap_excerpt")),
+        },
+        "one_paragraph_summary_for_embedding": full_text[:4000],
+    }
+
+
+def aspect_text(summary: dict[str, Any], aspect: str) -> str:
+    if aspect == "disease_population":
+        return clean_text({"cancer_type": summary["cancer_type"], "population": summary["population"]})
+    if aspect == "intervention":
+        return clean_text(summary["intervention"])
+    if aspect == "endpoint":
+        return clean_text(summary["endpoints"])
+    if aspect == "design":
+        return clean_text(summary["design"])
+    if aspect == "results_safety":
+        return clean_text(summary["results"])
+    return clean_text(summary)
+
+
+def hashing_embedding(text: str, dim: int = 2048) -> np.ndarray:
+    vec = np.zeros(dim, dtype=np.float32)
+    tokens = re.findall(r"[a-zA-Z0-9][a-zA-Z0-9+\-/_.]+", text.lower())
+    for token in tokens:
+        digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+        idx = int.from_bytes(digest[:4], "little") % dim
+        sign = 1.0 if digest[4] % 2 == 0 else -1.0
+        vec[idx] += sign
+    norm = np.linalg.norm(vec)
+    return vec / norm if norm else vec
+
+
+class TextEmbedder:
+    backend_name = "base"
+    model_name = ""
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        raise NotImplementedError
+
+
+class HashingEmbedder(TextEmbedder):
+    backend_name = "hashing"
+    model_name = "signed-token-hashing-2048"
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        return np.vstack([hashing_embedding(text) for text in texts])
+
+
+class ClinicalBertEmbedder(TextEmbedder):
+    backend_name = "clinicalbert"
+
+    def __init__(
+        self,
+        model_name: str = DEFAULT_CLINICALBERT_MODEL,
+        batch_size: int = 16,
+        max_length: int = 256,
+        device: str | None = None,
+    ) -> None:
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+        try:
+            import torch
+            from transformers import AutoModel, AutoTokenizer
+        except ImportError as exc:
+            raise RuntimeError(
+                "ClinicalBERT embedding requires torch and transformers in the active Python environment."
+            ) from exc
+
+        self.torch = torch
+        self.batch_size = batch_size
+        self.max_length = max_length
+        self.model_name = model_name
+        if device is None:
+            if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+                device = "mps"
+            elif torch.cuda.is_available():
+                device = "cuda"
+            else:
+                device = "cpu"
+        self.device = device
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+        self.model = AutoModel.from_pretrained(
+            model_name,
+            local_files_only=True,
+            use_safetensors=False,
+        )
+        self.model.to(self.device)
+        self.model.eval()
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        vectors = []
+        torch = self.torch
+        for start in range(0, len(texts), self.batch_size):
+            batch = texts[start : start + self.batch_size]
+            encoded = self.tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                max_length=self.max_length,
+                return_tensors="pt",
+            )
+            encoded = {key: value.to(self.device) for key, value in encoded.items()}
+            with torch.no_grad():
+                output = self.model(**encoded)
+                token_embeddings = output.last_hidden_state
+                mask = encoded["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
+                summed = (token_embeddings * mask).sum(dim=1)
+                counts = mask.sum(dim=1).clamp(min=1e-9)
+                pooled = summed / counts
+                pooled = torch.nn.functional.normalize(pooled, p=2, dim=1)
+            vectors.append(pooled.detach().cpu().numpy().astype(np.float32))
+        return np.vstack(vectors)
+
+
+def make_embedder(
+    backend: str,
+    model_name: str = DEFAULT_CLINICALBERT_MODEL,
+    batch_size: int = 16,
+    max_length: int = 256,
+) -> TextEmbedder:
+    if backend == "hashing":
+        return HashingEmbedder()
+    if backend == "clinicalbert":
+        return ClinicalBertEmbedder(
+            model_name=model_name,
+            batch_size=batch_size,
+            max_length=max_length,
+        )
+    raise ValueError(f"Unsupported embedding backend: {backend}")
+
+
+def summary_embedding(summary: dict[str, Any], embedder: TextEmbedder | None = None) -> dict[str, np.ndarray]:
+    embedder = embedder or HashingEmbedder()
+    return {
+        aspect: embedder.encode([aspect_text(summary, aspect)])[0]
+        for aspect in ASPECT_WEIGHTS
+    }
+
+
+def cosine(a: np.ndarray, b: np.ndarray) -> float:
+    denom = float(np.linalg.norm(a) * np.linalg.norm(b))
+    if denom == 0:
+        return 0.0
+    return float(np.dot(a, b) / denom)
+
+
+def weighted_similarity(query: dict[str, np.ndarray], candidate: dict[str, np.ndarray]) -> tuple[float, dict[str, float]]:
+    by_aspect = {
+        aspect: cosine(query[aspect], candidate[aspect])
+        for aspect in ASPECT_WEIGHTS
+    }
+    score = sum(ASPECT_WEIGHTS[a] * by_aspect[a] for a in ASPECT_WEIGHTS)
+    return score, by_aspect
+
+
+def build_index(
+    db_root: Path,
+    output_dir: Path,
+    embedding_backend: str = "hashing",
+    embedding_model: str = DEFAULT_CLINICALBERT_MODEL,
+    embedding_batch_size: int = 16,
+    embedding_max_length: int = 256,
+) -> None:
+    if not db_root.exists():
+        raise FileNotFoundError(f"Database root does not exist: {db_root}")
+    if not db_root.is_dir():
+        raise NotADirectoryError(f"Database root is not a directory: {db_root}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summaries_path = output_dir / "trial_summaries.jsonl"
+    embeddings_path = output_dir / "trial_embeddings.npz"
+
+    folders = sorted([p for p in db_root.iterdir() if p.is_dir() and p.name.startswith("NCT")])
+    summaries: list[dict[str, Any]] = []
+    nct_ids: list[str] = []
+
+    with summaries_path.open("w", encoding="utf-8") as out:
+        for i, folder in enumerate(folders, start=1):
+            record = extract_trial_record(folder)
+            if record is None:
+                continue
+            summary = make_rule_based_summary(record.extracted)
+            summaries.append(summary)
+            nct_ids.append(summary["nct_id"])
+            out.write(json.dumps(summary, ensure_ascii=False) + "\n")
+            if i % 500 == 0:
+                print(f"Indexed {i}/{len(folders)} folders")
+
+    if not nct_ids:
+        raise RuntimeError(
+            f"No trials were indexed. Check that {db_root} contains NCT* folders with JSON files."
+        )
+
+    print(f"Encoding {len(summaries)} trials with {embedding_backend} embeddings...")
+    embedder = make_embedder(
+        embedding_backend,
+        model_name=embedding_model,
+        batch_size=embedding_batch_size,
+        max_length=embedding_max_length,
+    )
+    embeddings = {}
+    for aspect in ASPECT_WEIGHTS:
+        texts = [aspect_text(summary, aspect) for summary in summaries]
+        embeddings[aspect] = embedder.encode(texts)
+        print(f"Encoded aspect: {aspect} ({embeddings[aspect].shape[1]} dims)")
+
+    arrays = {
+        "nct_ids": np.array(nct_ids),
+        "embedding_backend": np.array([embedder.backend_name]),
+        "embedding_model": np.array([embedder.model_name]),
+        **embeddings,
+    }
+    np.savez_compressed(embeddings_path, **arrays)
+    print(f"Wrote {summaries_path}")
+    print(f"Wrote {embeddings_path}")
+
+
+def load_summaries(path: Path) -> dict[str, dict[str, Any]]:
+    records = {}
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                item = json.loads(line)
+                records[item["nct_id"]] = {
+                    "nct_id": item.get("nct_id", ""),
+                    "brief_title": item.get("brief_title", ""),
+                    "phase": item.get("phase", ""),
+                    "status": item.get("status", ""),
+                    "cancer_type": item.get("cancer_type", {}),
+                    "population": item.get("population", {}),
+                    "intervention": item.get("intervention", {}),
+                    "design": item.get("design", {}),
+                    "endpoints": item.get("endpoints", {}),
+                    "results": {
+                        "has_posted_results": item.get("results", {}).get("has_posted_results"),
+                        "denominators": item.get("results", {}).get("denominators", []),
+                        "follow_up_duration": item.get("results", {}).get("follow_up_duration", ""),
+                    },
+                    "borrowing_relevance": item.get("borrowing_relevance", {}),
+                    "source_documents": item.get("source_documents", {}),
+                }
+    return records
+
+
+def normalized_values(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, (list, tuple, set)):
+        values = [str(x) for x in value]
+    else:
+        values = [str(value)]
+    ignored = {"", "not reported", "not normalized", "none", "unknown"}
+    return {v.strip().lower() for v in values if v and v.strip().lower() not in ignored}
+
+
+def overlap_score(query_values: Any, candidate_values: Any) -> tuple[float, list[str]]:
+    q = normalized_values(query_values)
+    c = normalized_values(candidate_values)
+    if not q or not c:
+        return 0.0, []
+    overlap = sorted(q & c)
+    denom = max(len(q), len(c), 1)
+    return len(overlap) / denom, overlap
+
+
+def primary_endpoint_families(summary: dict[str, Any]) -> list[str]:
+    endpoints = summary.get("endpoints", {}).get("primary", [])
+    families = []
+    for endpoint in endpoints:
+        family = endpoint.get("endpoint_family")
+        if family:
+            families.append(family)
+    return sorted(set(families))
+
+
+def candidate_endpoint_families(candidate: dict[str, Any]) -> list[str]:
+    families = []
+    for quantity in candidate.get("borrowable_quantities", []):
+        family = quantity.get("endpoint_family")
+        if family:
+            families.append(family)
+    if not families:
+        endpoints = candidate.get("endpoints", {}).get("primary", [])
+        for endpoint in endpoints:
+            family = endpoint.get("endpoint_family")
+            if family:
+                families.append(family)
+    return sorted(set(families))
+
+
+def has_usable_arm_results(candidate: dict[str, Any]) -> bool:
+    for quantity in candidate.get("borrowable_quantities", []):
+        for row in quantity.get("arm_results", []):
+            if row.get("count") is not None and row.get("denominator") is not None:
+                return True
+    return False
+
+
+def score_phase_match(query_phase: str, candidate_phase: str) -> float:
+    q = clean_text(query_phase).lower()
+    c = clean_text(candidate_phase).lower()
+    if not q or not c:
+        return 0.2
+    if q == c:
+        return 1.0
+    q_num = re.search(r"\d+", q)
+    c_num = re.search(r"\d+", c)
+    if q_num and c_num and abs(int(q_num.group()) - int(c_num.group())) <= 1:
+        return 0.65
+    return 0.25
+
+
+def score_prior_borrowing_pair(
+    query_summary: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    red_flags: list[str] = list(candidate.get("nonborrowability_risks", []))
+    explanations: list[str] = []
+
+    q_cancer = query_summary.get("cancer_type", {})
+    c_cancer = candidate.get("cancer_type", {})
+    hist_overlap, hist_terms = overlap_score(q_cancer.get("histology"), c_cancer.get("histology"))
+    site_overlap, site_terms = overlap_score(q_cancer.get("primary_site"), c_cancer.get("primary_site"))
+    marker_overlap, marker_terms = overlap_score(q_cancer.get("molecular_marker"), c_cancer.get("molecular_marker"))
+    q_line = clean_text(q_cancer.get("line_of_therapy")).lower()
+    c_line = clean_text(c_cancer.get("line_of_therapy")).lower()
+    line_match = 1.0 if q_line and q_line == c_line and q_line != "not reported" else 0.0
+    disease_raw = 0.45 * hist_overlap + 0.25 * site_overlap + 0.15 * marker_overlap + 0.15 * line_match
+    disease_score = round(5 * disease_raw, 2)
+    if hist_terms:
+        explanations.append(f"Shared histology: {', '.join(hist_terms)}.")
+    if site_terms:
+        explanations.append(f"Shared primary site/category: {', '.join(site_terms)}.")
+    if marker_terms:
+        explanations.append(f"Shared marker: {', '.join(marker_terms)}.")
+    if q_line != c_line and q_line != "not reported" and c_line != "not reported":
+        red_flags.append(f"Treatment line mismatch: query={q_cancer.get('line_of_therapy')} candidate={c_cancer.get('line_of_therapy')}.")
+
+    q_intervention = query_summary.get("intervention", {})
+    c_intervention = candidate.get("intervention", {})
+    backbone_overlap, backbone_terms = overlap_score(
+        q_intervention.get("backbone_regimen"),
+        c_intervention.get("backbone_regimen"),
+    )
+    class_overlap, class_terms = overlap_score(
+        q_intervention.get("drug_classes"),
+        c_intervention.get("drug_classes"),
+    )
+    treatment_raw = 0.7 * backbone_overlap + 0.3 * class_overlap
+    treatment_score = round(5 * treatment_raw, 2)
+    if backbone_terms:
+        explanations.append(f"Shared regimen backbone: {', '.join(backbone_terms)}.")
+    elif normalized_values(q_intervention.get("backbone_regimen")):
+        red_flags.append("No normalized regimen-backbone overlap.")
+    if class_terms:
+        explanations.append(f"Shared drug classes: {', '.join(class_terms)}.")
+
+    q_endpoints = primary_endpoint_families(query_summary)
+    c_endpoints = candidate_endpoint_families(candidate)
+    endpoint_overlap, endpoint_terms = overlap_score(q_endpoints, c_endpoints)
+    has_denominators = candidate.get("result_usability", {}).get("denominators_available", False)
+    endpoint_raw = 0.75 * endpoint_overlap + 0.25 * (1.0 if has_denominators else 0.0)
+    endpoint_score = round(5 * endpoint_raw, 2)
+    if endpoint_terms:
+        explanations.append(f"Shared primary endpoint families: {', '.join(endpoint_terms)}.")
+    else:
+        red_flags.append("No primary endpoint-family overlap.")
+
+    q_design = query_summary.get("design", {})
+    c_design = candidate.get("design", {})
+    same_arm_structure = (
+        clean_text(q_design.get("single_or_multi_arm")).lower()
+        == clean_text(c_design.get("single_or_multi_arm")).lower()
+        and clean_text(q_design.get("single_or_multi_arm")).lower() not in {"", "not reported"}
+    )
+    same_randomization = (
+        clean_text(q_design.get("randomized")).lower()
+        == clean_text(c_design.get("randomized")).lower()
+        and clean_text(q_design.get("randomized")).lower() not in {"", "not reported"}
+    )
+    phase_match = score_phase_match(query_summary.get("phase", ""), candidate.get("phase", ""))
+    design_raw = 0.4 * phase_match + 0.3 * float(same_arm_structure) + 0.3 * float(same_randomization)
+    design_score = round(5 * design_raw, 2)
+    if same_arm_structure:
+        explanations.append(f"Same arm structure: {q_design.get('single_or_multi_arm')}.")
+    if same_randomization:
+        explanations.append(f"Same randomization status: {q_design.get('randomized')}.")
+
+    has_results = bool(candidate.get("result_usability", {}).get("has_posted_results"))
+    usable_arm_results = has_usable_arm_results(candidate)
+    result_raw = 0.4 * float(has_results) + 0.4 * float(usable_arm_results) + 0.2 * float(has_denominators)
+    result_score = round(5 * result_raw, 2)
+    if not has_results:
+        red_flags.append("Candidate has no posted results in indexed JSON.")
+    if not usable_arm_results:
+        red_flags.append("No arm-level count/denominator pair found for primary borrowable quantities.")
+
+    has_safety = any(
+        q.get("endpoint_family") in {"Safety/AE", "DLT", "Treatment discontinuation"}
+        for q in candidate.get("borrowable_quantities", [])
+    )
+    followup_known = clean_text(candidate.get("results", {}).get("follow_up_duration", "")).lower() not in {
+        "",
+        "not normalized",
+        "not reported",
+    }
+    safety_raw = 0.6 * float(has_safety) + 0.4 * float(followup_known)
+    safety_score = round(5 * safety_raw, 2)
+
+    dimension_scores = {
+        "disease_population_match": disease_score,
+        "treatment_regimen_match": treatment_score,
+        "endpoint_estimand_match": endpoint_score,
+        "design_phase_match": design_score,
+        "result_usability": result_score,
+        "safety_and_followup_relevance": safety_score,
+    }
+    weighted_dimension_score = (
+        0.30 * disease_score
+        + 0.25 * treatment_score
+        + 0.20 * endpoint_score
+        + 0.10 * design_score
+        + 0.10 * result_score
+        + 0.05 * safety_score
+    )
+    clinical_score = 20 * weighted_dimension_score
+    retrieval_score = float(candidate.get("score_0_100", 0.0))
+    overall = round(0.75 * clinical_score + 0.25 * retrieval_score, 2)
+
+    if disease_score < 1.5:
+        red_flags.append("Low disease/population match.")
+    if treatment_score < 1.5:
+        red_flags.append("Low treatment-regimen match.")
+    if endpoint_score < 1.5:
+        red_flags.append("Low endpoint/estimand match.")
+
+    if overall >= 80 and not any("Low " in flag for flag in red_flags):
+        suitability = "high"
+        discount = 0.75
+        adjustments = ["commensurate prior", "sensitivity analysis with robust mixture prior"]
+    elif overall >= 60:
+        suitability = "medium"
+        discount = 0.40
+        adjustments = ["robust mixture prior", "discount for residual heterogeneity"]
+    elif overall >= 40:
+        suitability = "low"
+        discount = 0.15
+        adjustments = ["sensitivity analysis only", "strong discounting"]
+    else:
+        suitability = "do_not_borrow"
+        discount = 0.0
+        adjustments = ["do not borrow in primary analysis"]
+
+    return {
+        "candidate_nct_id": candidate.get("nct_id", ""),
+        "title": candidate.get("title", ""),
+        "retrieval_score": retrieval_score,
+        "overall_similarity_score": overall,
+        "prior_borrowing_suitability": suitability,
+        "suggested_borrowing_discount": discount,
+        "dimension_scores": dimension_scores,
+        "borrowable_quantities": candidate.get("borrowable_quantities", []),
+        "required_adjustments": adjustments,
+        "explanation": " ".join(explanations) if explanations else "No strong structured similarity drivers were detected.",
+        "red_flags": sorted(set(red_flags)),
+        "candidate_snapshot": {
+            "phase": candidate.get("phase", ""),
+            "status": candidate.get("status", ""),
+            "cancer_type": candidate.get("cancer_type", {}),
+            "intervention": candidate.get("intervention", {}),
+            "design": candidate.get("design", {}),
+            "result_usability": candidate.get("result_usability", {}),
+        },
+    }
+
+
+def rerank_candidates(
+    query_summary: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    rerank_top_n: int,
+) -> list[dict[str, Any]]:
+    reranked = [
+        score_prior_borrowing_pair(query_summary, candidate)
+        for candidate in candidates[:rerank_top_n]
+    ]
+    reranked.sort(key=lambda x: x["overall_similarity_score"], reverse=True)
+    for rank, item in enumerate(reranked, start=1):
+        item["rank"] = rank
+    return reranked
+
+
+def render_markdown_report(result: dict[str, Any], max_rows: int = 10) -> str:
+    query = result.get("query_summary", {})
+    rows = result.get("reranked_top_matches") or result.get("top10", [])
+    lines = [
+        "# Oncology Trial Similarity Report",
+        "",
+        f"Query: {query.get('nct_id', 'QUERY')} - {query.get('brief_title', '')}",
+        "",
+        "## Query Summary",
+        "",
+        f"- Phase: {query.get('phase', '')}",
+        f"- Cancer: {clean_text(query.get('cancer_type', {}))}",
+        f"- Intervention: {clean_text(query.get('intervention', {}))}",
+        f"- Design: {clean_text(query.get('design', {}))}",
+        "",
+        "## Reranked Top Matches",
+        "",
+        "| Rank | NCT ID | Score | Suitability | Discount | Key rationale | Red flags |",
+        "|---:|---|---:|---|---:|---|---|",
+    ]
+    for idx, item in enumerate(rows[:max_rows], start=1):
+        rank = item.get("rank", idx)
+        score = item.get("overall_similarity_score", item.get("score_0_100", 0))
+        suitability = item.get("prior_borrowing_suitability", "candidate")
+        discount = item.get("suggested_borrowing_discount", "")
+        rationale = clean_text(item.get("explanation", item.get("title", "")))[:180]
+        flags = clean_text(item.get("red_flags", item.get("nonborrowability_risks", [])))[:180]
+        lines.append(
+            f"| {rank} | {item.get('candidate_nct_id', item.get('nct_id', ''))} "
+            f"| {score} | {suitability} | {discount} | {rationale} | {flags} |"
+        )
+    lines.append("")
+    lines.append("## Notes")
+    lines.append("")
+    lines.append("- Scores are generated by a deterministic structured reranker and should be reviewed before use in a primary Bayesian analysis.")
+    lines.append("- `suggested_borrowing_discount` is a starting value for power-prior/commensurate-prior sensitivity analysis, not an automatic final borrowing weight.")
+    return "\n".join(lines) + "\n"
+
+
+def search(
+    query_json: Path,
+    index_dir: Path,
+    top_k: int,
+    rerank_top_n: int = 0,
+    embedding_backend: str | None = None,
+    embedding_model: str | None = None,
+    embedding_batch_size: int = 16,
+    embedding_max_length: int = 256,
+) -> dict[str, Any]:
+    if not query_json.exists():
+        raise FileNotFoundError(f"Query JSON does not exist: {query_json}")
+    embeddings_path = index_dir / "trial_embeddings.npz"
+    summaries_path = index_dir / "trial_summaries.jsonl"
+    if not embeddings_path.exists() or not summaries_path.exists():
+        raise FileNotFoundError(
+            "Index files were not found. Run build-index first, or pass the correct --index-dir. "
+            f"Expected: {embeddings_path} and {summaries_path}"
+        )
+
+    tmp_folder = query_json.parent
+    raw = read_json(query_json)
+    folder_name = clean_text(get_nested(raw, "Study details", "1. NCT number", default="QUERY")) or tmp_folder.name
+    record = TrialRecord(
+        nct_id=folder_name,
+        folder=tmp_folder,
+        json_path=query_json,
+        protocol_path=find_supporting_pdfs(tmp_folder)["protocol"],
+        sap_path=find_supporting_pdfs(tmp_folder)["sap"],
+        raw_json=raw,
+        extracted=extract_trial_record_like(raw, folder_name, query_json),
+    )
+    query_summary = make_rule_based_summary(record.extracted)
+
+    embeddings_file = np.load(embeddings_path, allow_pickle=False)
+    stored_backend = str(embeddings_file["embedding_backend"][0]) if "embedding_backend" in embeddings_file else "hashing"
+    stored_model = str(embeddings_file["embedding_model"][0]) if "embedding_model" in embeddings_file else "signed-token-hashing-2048"
+    active_backend = embedding_backend or stored_backend
+    active_model = embedding_model or (stored_model if active_backend != "hashing" else DEFAULT_CLINICALBERT_MODEL)
+    if active_backend != stored_backend:
+        raise ValueError(
+            f"Query embedding backend ({active_backend}) does not match index backend ({stored_backend}). "
+            "Rebuild the index with the desired backend or pass the matching --embedding-backend."
+        )
+    query_embedder = make_embedder(
+        active_backend,
+        model_name=active_model,
+        batch_size=embedding_batch_size,
+        max_length=embedding_max_length,
+    )
+    query_emb = summary_embedding(query_summary, query_embedder)
+    embeddings = {
+        "nct_ids": embeddings_file["nct_ids"],
+        **{aspect: embeddings_file[aspect] for aspect in ASPECT_WEIGHTS},
+    }
+    summaries = load_summaries(summaries_path)
+    nct_ids = embeddings["nct_ids"]
+    scored = []
+
+    for idx, nct_id_raw in enumerate(nct_ids):
+        nct_id = str(nct_id_raw)
+        if nct_id == query_summary.get("nct_id"):
+            continue
+        by_aspect = {}
+        score = 0.0
+        for aspect, weight in ASPECT_WEIGHTS.items():
+            sim = cosine(query_emb[aspect], embeddings[aspect][idx])
+            by_aspect[aspect] = sim
+            score += weight * sim
+        candidate_summary = summaries.get(nct_id, {})
+        borrowing = candidate_summary.get("borrowing_relevance", {})
+        scored.append(
+            {
+                "nct_id": nct_id,
+                "score": score,
+                "score_0_100": round(100 * max(0.0, score), 2),
+                "aspect_scores": {k: round(v, 4) for k, v in by_aspect.items()},
+                "title": candidate_summary.get("brief_title", ""),
+                "phase": candidate_summary.get("phase", ""),
+                "status": candidate_summary.get("status", ""),
+                "cancer_type": candidate_summary.get("cancer_type", {}),
+                "intervention": candidate_summary.get("intervention", {}),
+                "design": candidate_summary.get("design", {}),
+                "results": candidate_summary.get("results", {}),
+                "result_usability": {
+                    "has_posted_results": candidate_summary.get("results", {}).get("has_posted_results"),
+                    "denominators_available": bool(candidate_summary.get("results", {}).get("denominators")),
+                    "source_documents": candidate_summary.get("source_documents", {}),
+                },
+                "similarity_drivers": borrowing.get("major_similarity_drivers", []),
+                "nonborrowability_risks": borrowing.get("major_nonborrowability_risks", []),
+                "borrowable_quantities": borrowing.get("borrowable_quantities", []),
+            }
+        )
+
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    top_matches = scored[:top_k]
+    result = {
+        "query_summary": query_summary,
+        "embedding_backend": stored_backend,
+        "embedding_model": stored_model,
+        "top_matches": top_matches,
+        "top10": top_matches[: min(top_k, 10)],
+    }
+    if rerank_top_n > 0:
+        rerank_input = scored[: max(rerank_top_n, top_k)]
+        reranked = rerank_candidates(query_summary, rerank_input, rerank_top_n)
+        result["reranked_top_matches"] = reranked
+        result["reranked_top10"] = reranked[:10]
+    return result
+
+
+def extract_trial_record_like(raw: dict[str, Any], fallback_nct_id: str, json_path: Path) -> dict[str, Any]:
+    details = raw.get("Study details", {})
+    results = raw.get("Results Posted", {})
+    overview = get_nested(details, "5. Study Overview", default={})
+    design = get_nested(results, "2. Study Design", default={})
+    dates = get_nested(results, "4. Study Record Dates", default={})
+    outcomes = extract_outcomes(results if isinstance(results, dict) else {})
+    nct_id = clean_text(details.get("1. NCT number")) or fallback_nct_id
+    pdfs = find_supporting_pdfs(json_path.parent)
+    return {
+        "nct_id": nct_id,
+        "json_path": str(json_path),
+        "brief_title": clean_text(overview.get("Brief Title") if isinstance(overview, dict) else ""),
+        "official_title": clean_text(overview.get("Official Title") if isinstance(overview, dict) else ""),
+        "brief_summary": clean_text(overview.get("Brief Summary") if isinstance(overview, dict) else ""),
+        "detailed_description": clean_text(overview.get("Detailed Description") if isinstance(overview, dict) else ""),
+        "status": clean_text(details.get("2. Study status") if isinstance(details, dict) else ""),
+        "phase": clean_text(details.get("7. Phase") if isinstance(details, dict) else ""),
+        "interventions": results.get("1. Intervention/Treatment", []) if isinstance(results, dict) else [],
+        "design": design if isinstance(design, dict) else {},
+        "enrollment": clean_text(results.get("3. Enrollment (Actual)") if isinstance(results, dict) else ""),
+        "dates": dates if isinstance(dates, dict) else {},
+        "supporting_documents": {
+            "protocol_pdf": str(pdfs["protocol"]) if pdfs["protocol"] else "",
+            "sap_pdf": str(pdfs["sap"]) if pdfs["sap"] else "",
+            "protocol_excerpt": read_pdf_excerpt(pdfs["protocol"], max_chars=8000),
+            "sap_excerpt": read_pdf_excerpt(pdfs["sap"], max_chars=5000),
+        },
+        "outcomes": [{**o, "endpoint_family": infer_endpoint_family(o["title"])} for o in outcomes],
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build and search an oncology clinical trial similarity index."
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    build = sub.add_parser("build-index")
+    build.add_argument("--db-root", type=Path, default=DEFAULT_DB_ROOT)
+    build.add_argument("--output-dir", type=Path, default=Path("artifacts/oncology_trial_similarity"))
+    build.add_argument(
+        "--embedding-backend",
+        choices=["hashing", "clinicalbert"],
+        default="hashing",
+        help="Embedding backend for index construction. clinicalbert uses cached Bio_ClinicalBERT via transformers.",
+    )
+    build.add_argument("--embedding-model", default=DEFAULT_CLINICALBERT_MODEL)
+    build.add_argument("--embedding-batch-size", type=int, default=16)
+    build.add_argument("--embedding-max-length", type=int, default=256)
+
+    query = sub.add_parser("search")
+    query.add_argument("--query-json", type=Path, required=True)
+    query.add_argument("--index-dir", type=Path, default=Path("artifacts/oncology_trial_similarity"))
+    query.add_argument("--top-k", type=int, default=10)
+    query.add_argument(
+        "--embedding-backend",
+        choices=["hashing", "clinicalbert"],
+        default=None,
+        help="Optional query embedding backend. Defaults to the backend stored in the index.",
+    )
+    query.add_argument("--embedding-model", default=None)
+    query.add_argument("--embedding-batch-size", type=int, default=16)
+    query.add_argument("--embedding-max-length", type=int, default=256)
+    query.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Run deterministic prior-borrowing rerank over the first-stage candidates.",
+    )
+    query.add_argument(
+        "--rerank-top-n",
+        type=int,
+        default=100,
+        help="Number of first-stage candidates to rerank when --rerank is used.",
+    )
+    query.add_argument("--output", type=Path, default=None)
+    query.add_argument(
+        "--report-output",
+        type=Path,
+        default=None,
+        help="Optional Markdown report path for reranked or first-stage results.",
+    )
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        print(
+            "\nExamples:\n"
+            "  Build the local trial index:\n"
+            "    python3 oncology_trial_similarity_pipeline.py build-index\n\n"
+            "  Search similar trials for one query JSON:\n"
+            "    python3 oncology_trial_similarity_pipeline.py search "
+            "--query-json /path/to/new_trial.json "
+            "--output artifacts/oncology_trial_similarity/new_trial_top10.json\n"
+        )
+        return
+
+    args = parser.parse_args()
+    if args.command == "build-index":
+        build_index(
+            args.db_root,
+            args.output_dir,
+            embedding_backend=args.embedding_backend,
+            embedding_model=args.embedding_model,
+            embedding_batch_size=args.embedding_batch_size,
+            embedding_max_length=args.embedding_max_length,
+        )
+    elif args.command == "search":
+        rerank_top_n = args.rerank_top_n if args.rerank else 0
+        result = search(
+            args.query_json,
+            args.index_dir,
+            args.top_k,
+            rerank_top_n,
+            embedding_backend=args.embedding_backend,
+            embedding_model=args.embedding_model,
+            embedding_batch_size=args.embedding_batch_size,
+            embedding_max_length=args.embedding_max_length,
+        )
+        text = json.dumps(result, indent=2, ensure_ascii=False)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(text, encoding="utf-8")
+            print(f"Wrote {args.output}")
+        else:
+            print(text)
+        if args.report_output:
+            args.report_output.parent.mkdir(parents=True, exist_ok=True)
+            args.report_output.write_text(render_markdown_report(result), encoding="utf-8")
+            print(f"Wrote {args.report_output}")
+
+
+if __name__ == "__main__":
+    main()
