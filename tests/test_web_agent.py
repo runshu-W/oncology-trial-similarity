@@ -89,11 +89,187 @@ class WebAgentTests(unittest.TestCase):
 
         self.assertEqual(result["query"]["nct_id"], "NCTTEMP")
 
+    def test_bayesian_analysis_summarizes_weighted_orr_borrowing(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 12, "denominator": 40},
+                                {"arm": "Placebo Comparator", "count": 6, "denominator": 40},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST1",
+                    "suggested_borrowing_discount": 0.4,
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 10, "denominator": 50},
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "candidate_nct_id": "NCTHIST2",
+                    "suggested_borrowing_discount": 0.75,
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Treatment Arm", "count": 18, "denominator": 60},
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+
+        enriched = app_module.pipeline.add_bayesian_analysis(result)
+        analysis = enriched["bayesian_analysis"]
+
+        self.assertEqual(analysis["status"], "available")
+        endpoint = analysis["endpoint_analyses"][0]
+        self.assertEqual(endpoint["endpoint_family"], "ORR")
+        self.assertEqual(endpoint["analysis_mode"], "posterior")
+        self.assertGreater(endpoint["effective_sample_size"], 0)
+        self.assertIn("observed_weights", {row["scenario"] for row in endpoint["weight_sensitivity"]})
+        self.assertTrue(endpoint["success_probability_grid"])
+        self.assertTrue(endpoint["tipping_points"])
+        self.assertGreater(analysis["two_arm_decision_support"]["orr"]["posterior_or_mean"], 1.0)
+
+    def test_bayesian_analysis_excludes_duration_of_response(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Duration of Response",
+                            "endpoint_family": "DOR",
+                            "arm_results": [{"arm": "Experimental", "count": 5, "denominator": 10}],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "suggested_borrowing_discount": 0.4,
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Duration of Response",
+                            "endpoint_family": "DOR",
+                            "arm_results": [{"arm": "Experimental", "count": 4, "denominator": 10}],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        analysis = app_module.pipeline.add_bayesian_analysis(result)["bayesian_analysis"]
+
+        self.assertEqual(analysis["status"], "not_available")
+        self.assertEqual(analysis["endpoint_analyses"], [])
+
+    def test_bayesian_analysis_supports_prior_only_when_query_has_no_results(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "suggested_borrowing_discount": 0.75,
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [{"arm": "Experimental", "count": 15, "denominator": 50}],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        analysis = app_module.pipeline.add_bayesian_analysis(result)["bayesian_analysis"]
+
+        self.assertEqual(analysis["status"], "available")
+        endpoint = analysis["endpoint_analyses"][0]
+        self.assertEqual(endpoint["analysis_mode"], "prior_only")
+        observed = next(row for row in endpoint["weight_sensitivity"] if row["scenario"] == "observed_weights")
+        self.assertEqual(observed["posterior"], None)
+        self.assertIsNotNone(observed["prior"])
+
+    def test_treatment_arm_selection_skips_active_comparator(self) -> None:
+        rows = [
+            {"arm": "Active Comparator: Standard Therapy", "count": 4, "denominator": 20},
+            {"arm": "Experimental: Drug X", "count": 10, "denominator": 20},
+        ]
+
+        selected, observation = app_module.pipeline.select_arm_observation(rows, "treatment")
+
+        self.assertEqual(selected["arm"], "Experimental: Drug X")
+        self.assertEqual(observation["count"], 10.0)
+
+    def test_endpoint_score_requires_matched_endpoint_denominator(self) -> None:
+        query = {
+            "phase": "Phase 2",
+            "cancer_type": {"histology": ["NSCLC"], "primary_site": ["Lung"], "molecular_marker": ["Not reported"], "line_of_therapy": "Not reported"},
+            "intervention": {"backbone_regimen": ["Not normalized"], "drug_classes": []},
+            "design": {"single_or_multi_arm": "Single-arm", "randomized": "No"},
+            "endpoints": {"primary": [{"endpoint_family": "ORR/CR/PR"}]},
+        }
+        candidate = {
+            "nct_id": "NCTHIST",
+            "score_0_100": 50,
+            "phase": "Phase 2",
+            "cancer_type": {"histology": ["NSCLC"], "primary_site": ["Lung"], "molecular_marker": ["Not reported"], "line_of_therapy": "Not reported"},
+            "intervention": {"backbone_regimen": ["Not normalized"], "drug_classes": []},
+            "design": {"single_or_multi_arm": "Single-arm", "randomized": "No"},
+            "result_usability": {"has_posted_results": True, "denominators_available": True},
+            "borrowable_quantities": [
+                {
+                    "endpoint": "Overall Survival",
+                    "endpoint_family": "OS",
+                    "arm_results": [{"arm": "Experimental", "count": 10, "denominator": 20}],
+                }
+            ],
+        }
+
+        scored = app_module.pipeline.score_prior_borrowing_pair(query, candidate)
+
+        self.assertEqual(scored["dimension_scores"]["endpoint_estimand_match"], 0.0)
+
     def test_root_serves_html(self) -> None:
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.headers["content-type"])
+        html = response.text
+        self.assertIn("renderDensityChart", html)
+        self.assertIn("renderWeightSensitivityChart", html)
+        self.assertIn("renderTippingPointChart", html)
 
 
 if __name__ == "__main__":

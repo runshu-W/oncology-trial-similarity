@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -918,6 +919,18 @@ def candidate_endpoint_families(candidate: dict[str, Any]) -> list[str]:
     return sorted(set(families))
 
 
+def has_matched_endpoint_arm_results(candidate: dict[str, Any], query_families: list[str]) -> bool:
+    query_family_set = set(query_families)
+    for quantity in candidate.get("borrowable_quantities", []):
+        family = quantity.get("endpoint_family")
+        if family not in query_family_set:
+            continue
+        for row in quantity.get("arm_results", []):
+            if row.get("count") is not None and row.get("denominator") is not None:
+                return True
+    return False
+
+
 def has_usable_arm_results(candidate: dict[str, Any]) -> bool:
     for quantity in candidate.get("borrowable_quantities", []):
         for row in quantity.get("arm_results", []):
@@ -988,8 +1001,8 @@ def score_prior_borrowing_pair(
     q_endpoints = primary_endpoint_families(query_summary)
     c_endpoints = candidate_endpoint_families(candidate)
     endpoint_overlap, endpoint_terms = overlap_score(q_endpoints, c_endpoints)
-    has_denominators = candidate.get("result_usability", {}).get("denominators_available", False)
-    endpoint_raw = 0.75 * endpoint_overlap + 0.25 * (1.0 if has_denominators else 0.0)
+    has_matched_denominators = has_matched_endpoint_arm_results(candidate, q_endpoints)
+    endpoint_raw = 0.75 * endpoint_overlap + 0.25 * (1.0 if has_matched_denominators else 0.0)
     endpoint_score = round(5 * endpoint_raw, 2)
     if endpoint_terms:
         explanations.append(f"Shared primary endpoint families: {', '.join(endpoint_terms)}.")
@@ -1018,7 +1031,7 @@ def score_prior_borrowing_pair(
 
     has_results = bool(candidate.get("result_usability", {}).get("has_posted_results"))
     usable_arm_results = has_usable_arm_results(candidate)
-    result_raw = 0.4 * float(has_results) + 0.4 * float(usable_arm_results) + 0.2 * float(has_denominators)
+    result_raw = 0.4 * float(has_results) + 0.4 * float(usable_arm_results) + 0.2 * float(has_matched_denominators)
     result_score = round(5 * result_raw, 2)
     if not has_results:
         red_flags.append("Candidate has no posted results in indexed JSON.")
@@ -1119,6 +1132,362 @@ def rerank_candidates(
     return reranked
 
 
+def to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
+
+
+def canonical_bayesian_endpoint(family: str, title: str = "", time_frame: str = "") -> str | None:
+    text = clean_text([family, title, time_frame]).lower()
+    if "dor" in text or "duration of response" in text:
+        return None
+    if "pfs" in text or "progression free" in text or "progression-free" in text:
+        if re.search(r"\b6\b|\bsix\b", text) and re.search(r"month|mo\b|months", text):
+            return "PFS6"
+        return None
+    if "orr" in text or "objective response" in text or "response rate" in text:
+        return "ORR"
+    return None
+
+
+def arm_role(arm: str) -> str:
+    low = clean_text(arm).lower()
+    if re.search(r"placebo|control|comparator|standard of care|best supportive|observation", low):
+        return "control"
+    if re.search(r"experimental|treatment arm|investigational|intervention", low):
+        return "treatment"
+    return "treatment"
+
+
+def endpoint_observation_from_row(row: dict[str, Any]) -> dict[str, float] | None:
+    count = to_float(row.get("count"))
+    denominator = to_float(row.get("denominator"))
+    if count is None or denominator is None or denominator <= 0 or count < 0 or count > denominator:
+        return None
+    return {
+        "count": count,
+        "denominator": denominator,
+        "rate": count / denominator,
+    }
+
+
+def select_arm_observation(
+    arm_results: list[dict[str, Any]],
+    desired_role: str = "treatment",
+) -> tuple[dict[str, Any], dict[str, float]] | None:
+    usable = []
+    for row in arm_results:
+        observation = endpoint_observation_from_row(row)
+        if observation is not None:
+            usable.append((row, observation))
+    if not usable:
+        return None
+    for row, observation in usable:
+        if arm_role(row.get("arm", "")) == desired_role:
+            return row, observation
+    if desired_role == "treatment":
+        return usable[0]
+    return None
+
+
+def query_endpoint_observations(query_summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    observations: dict[str, dict[str, Any]] = {}
+    for endpoint in query_summary.get("endpoints", {}).get("primary", []):
+        endpoint_key = canonical_bayesian_endpoint(
+            endpoint.get("endpoint_family", ""),
+            endpoint.get("title", ""),
+            endpoint.get("time_frame", ""),
+        )
+        if endpoint_key is None or endpoint_key in observations:
+            continue
+        treatment = select_arm_observation(endpoint.get("arm_results", []), "treatment")
+        item = {
+            "endpoint": endpoint.get("title", ""),
+            "endpoint_family": endpoint_key,
+            "time_frame": endpoint.get("time_frame", ""),
+        }
+        if treatment is not None:
+            treatment_row, treatment_obs = treatment
+            item.update(
+                {
+                    "treatment_arm": treatment_row.get("arm", ""),
+                    "treatment_count": treatment_obs["count"],
+                    "treatment_denominator": treatment_obs["denominator"],
+                    "treatment_rate": round(treatment_obs["rate"], 6),
+                }
+            )
+            control = select_arm_observation(endpoint.get("arm_results", []), "control")
+            if control is not None:
+                control_row, control_obs = control
+                item.update(
+                    {
+                        "control_arm": control_row.get("arm", ""),
+                        "control_count": control_obs["count"],
+                        "control_denominator": control_obs["denominator"],
+                        "control_rate": round(control_obs["rate"], 6),
+                    }
+                )
+        observations[endpoint_key] = item
+    return observations
+
+
+def historical_endpoint_observations(
+    rows: list[dict[str, Any]],
+    endpoint_key: str,
+) -> list[dict[str, Any]]:
+    observations = []
+    for item in rows:
+        discount = to_float(item.get("suggested_borrowing_discount")) or 0.0
+        if discount <= 0:
+            continue
+        for quantity in item.get("borrowable_quantities", []):
+            candidate_key = canonical_bayesian_endpoint(
+                quantity.get("endpoint_family", ""),
+                quantity.get("endpoint", ""),
+                quantity.get("time_frame", ""),
+            )
+            if candidate_key != endpoint_key:
+                continue
+            selected = select_arm_observation(quantity.get("arm_results", []), "treatment")
+            if selected is None:
+                continue
+            row, observation = selected
+            observations.append(
+                {
+                    "nct_id": item.get("candidate_nct_id", item.get("nct_id", "")),
+                    "endpoint": quantity.get("endpoint", ""),
+                    "arm": row.get("arm", ""),
+                    "count": observation["count"],
+                    "denominator": observation["denominator"],
+                    "rate": round(observation["rate"], 6),
+                    "weight": max(0.0, min(1.0, discount)),
+                    "suitability": item.get("prior_borrowing_suitability", ""),
+                }
+            )
+    return observations
+
+
+def beta_grid(alpha: float, beta: float, points: int = 4001) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    grid = np.linspace(0.0001, 0.9999, points)
+    log_norm = math.lgamma(alpha) + math.lgamma(beta) - math.lgamma(alpha + beta)
+    log_pdf = (alpha - 1.0) * np.log(grid) + (beta - 1.0) * np.log1p(-grid) - log_norm
+    log_pdf = log_pdf - float(np.max(log_pdf))
+    weights = np.exp(log_pdf)
+    weights = weights / float(np.sum(weights))
+    cdf = np.cumsum(weights)
+    return grid, weights, cdf
+
+
+def beta_probability_greater(alpha: float, beta: float, threshold: float) -> float:
+    threshold = max(0.0, min(1.0, threshold))
+    grid, weights, _ = beta_grid(alpha, beta)
+    return float(np.sum(weights[grid >= threshold]))
+
+
+def beta_quantile(alpha: float, beta: float, probability: float) -> float:
+    probability = max(0.0, min(1.0, probability))
+    grid, _, cdf = beta_grid(alpha, beta)
+    idx = int(np.searchsorted(cdf, probability, side="left"))
+    idx = min(max(idx, 0), len(grid) - 1)
+    return float(grid[idx])
+
+
+def beta_summary(alpha: float, beta: float) -> dict[str, Any]:
+    return {
+        "alpha": round(alpha, 4),
+        "beta": round(beta, 4),
+        "mean": round(alpha / (alpha + beta), 6),
+        "median": round(beta_quantile(alpha, beta, 0.5), 6),
+        "credible_interval_95": [
+            round(beta_quantile(alpha, beta, 0.025), 6),
+            round(beta_quantile(alpha, beta, 0.975), 6),
+        ],
+    }
+
+
+def borrowing_pi_summaries(weights: list[float]) -> dict[str, float]:
+    if not weights:
+        return {"mean": 0.0, "top_m": 0.0, "softmax": 0.0}
+    clipped = np.array([max(0.0, min(1.0, w)) for w in weights], dtype=float)
+    top_m = min(5, len(clipped))
+    softmax_lambda = 3.0
+    scaled = np.exp(softmax_lambda * clipped)
+    softmax = float(np.sum((scaled / np.sum(scaled)) * clipped))
+    return {
+        "mean": round(float(np.mean(clipped)), 6),
+        "top_m": round(float(np.mean(np.sort(clipped)[-top_m:])), 6),
+        "softmax": round(softmax, 6),
+    }
+
+
+def posterior_for_weight_multiplier(
+    historical: list[dict[str, Any]],
+    query: dict[str, Any],
+    multiplier: float,
+) -> dict[str, Any]:
+    alpha = 1.0
+    beta = 1.0
+    effective_sample_size = 0.0
+    weighted_events = 0.0
+    for item in historical:
+        weight = max(0.0, min(1.0, item["weight"] * multiplier))
+        alpha += weight * item["count"]
+        beta += weight * (item["denominator"] - item["count"])
+        effective_sample_size += weight * item["denominator"]
+        weighted_events += weight * item["count"]
+    prior = beta_summary(alpha, beta)
+    query_count = to_float(query.get("treatment_count"))
+    query_denominator = to_float(query.get("treatment_denominator"))
+    has_query_result = query_count is not None and query_denominator is not None
+    if query_count is not None and query_denominator is not None:
+        alpha += query_count
+        beta += query_denominator - query_count
+    posterior = beta_summary(alpha, beta) if has_query_result else None
+    active_summary = posterior or prior
+    thresholds = [round(x, 2) for x in np.arange(0.10, 0.91, 0.05)]
+    probability_grid = [
+        {
+            "threshold": float(threshold),
+            "posterior_probability": round(beta_probability_greater(alpha, beta, threshold), 6),
+        }
+        for threshold in thresholds
+    ]
+    tipping_points = [
+        {
+            "posterior_probability_level": level,
+            "rate_threshold": round(beta_quantile(active_summary["alpha"], active_summary["beta"], 1.0 - level), 6),
+        }
+        for level in (0.5, 0.7, 0.8, 0.9)
+    ]
+    return {
+        "effective_sample_size": round(effective_sample_size, 4),
+        "weighted_events": round(weighted_events, 4),
+        "weighted_rate": round(weighted_events / effective_sample_size, 6) if effective_sample_size > 0 else None,
+        "prior": prior,
+        "posterior": posterior,
+        "active_distribution": "posterior" if has_query_result else "prior",
+        "success_probability_grid": probability_grid,
+        "tipping_points": tipping_points,
+    }
+
+
+def two_arm_orr_support(endpoint_analysis: dict[str, Any], query: dict[str, Any]) -> dict[str, Any] | None:
+    control_count = to_float(query.get("control_count"))
+    control_denominator = to_float(query.get("control_denominator"))
+    if control_count is None or control_denominator is None or control_denominator <= 0:
+        return None
+    observed = next(
+        (row for row in endpoint_analysis.get("weight_sensitivity", []) if row.get("scenario") == "observed_weights"),
+        None,
+    )
+    if observed is None or observed.get("posterior") is None:
+        return None
+    treatment_alpha = float(observed["posterior"]["alpha"])
+    treatment_beta = float(observed["posterior"]["beta"])
+    control_alpha = 1.0 + control_count
+    control_beta = 1.0 + control_denominator - control_count
+    rng = np.random.default_rng(20260519)
+    treatment_samples = rng.beta(treatment_alpha, treatment_beta, size=20000)
+    control_samples = rng.beta(control_alpha, control_beta, size=20000)
+    odds_ratio = (treatment_samples / (1.0 - treatment_samples)) / (
+        control_samples / (1.0 - control_samples)
+    )
+    return {
+        "model": "path_a_treatment_absolute_rate_prior_control_weak_prior",
+        "control_arm": query.get("control_arm", ""),
+        "control_posterior": beta_summary(control_alpha, control_beta),
+        "posterior_or_mean": round(float(np.mean(odds_ratio)), 6),
+        "posterior_or_median": round(float(np.quantile(odds_ratio, 0.5)), 6),
+        "posterior_or_credible_interval_95": [
+            round(float(np.quantile(odds_ratio, 0.025)), 6),
+            round(float(np.quantile(odds_ratio, 0.975)), 6),
+        ],
+        "probability_grid": [
+            {
+                "or_threshold": threshold,
+                "posterior_probability": round(float(np.mean(odds_ratio >= threshold)), 6),
+            }
+            for threshold in (1.0, 1.25, 1.5, 2.0, 3.0)
+        ],
+        "note": "OR thresholds are reference grid values only; user-defined OR_target and gamma are required for go/no-go.",
+    }
+
+
+def add_bayesian_analysis(result: dict[str, Any]) -> dict[str, Any]:
+    query_summary = result.get("query_summary", result.get("query", {}))
+    rows = result.get("reranked_top_matches") or result.get("reranked_top10") or result.get("top10") or []
+    query_observations = query_endpoint_observations(query_summary)
+    endpoint_analyses = []
+    two_arm: dict[str, Any] = {}
+
+    for endpoint_key, query in query_observations.items():
+        historical = historical_endpoint_observations(rows, endpoint_key)
+        if not historical:
+            continue
+        weights = [item["weight"] for item in historical]
+        scenarios = [
+            ("no_borrowing", 0.0),
+            ("25pct_weights", 0.25),
+            ("50pct_weights", 0.50),
+            ("75pct_weights", 0.75),
+            ("observed_weights", 1.0),
+            ("125pct_capped_weights", 1.25),
+        ]
+        sensitivity = []
+        observed_summary: dict[str, Any] | None = None
+        for label, multiplier in scenarios:
+            summary = posterior_for_weight_multiplier(historical, query, multiplier)
+            row = {"scenario": label, "weight_multiplier": multiplier, **summary}
+            sensitivity.append(row)
+            if label == "observed_weights":
+                observed_summary = summary
+        if observed_summary is None:
+            continue
+        has_query_result = to_float(query.get("treatment_count")) is not None and to_float(query.get("treatment_denominator")) is not None
+        analysis = {
+            "endpoint_family": endpoint_key,
+            "analysis_mode": "posterior" if has_query_result else "prior_only",
+            "query_endpoint": query,
+            "historical_observations": historical,
+            "historical_trial_count": len(historical),
+            "effective_sample_size": observed_summary["effective_sample_size"],
+            "weighted_historical_rate": observed_summary["weighted_rate"],
+            "mixture_weight_pi": borrowing_pi_summaries(weights),
+            "weight_sensitivity": sensitivity,
+            "success_probability_grid": observed_summary["success_probability_grid"],
+            "tipping_points": observed_summary["tipping_points"],
+            "notes": [
+                "Targets and gamma are user-defined and are not set by this analysis.",
+                "This implementation uses a lightweight weighted beta-binomial power-prior approximation.",
+            ],
+        }
+        endpoint_analyses.append(analysis)
+        if endpoint_key == "ORR":
+            or_support = two_arm_orr_support(analysis, query)
+            if or_support is not None:
+                two_arm["orr"] = or_support
+
+    result["bayesian_analysis"] = {
+        "status": "available" if endpoint_analyses else "not_available",
+        "model": "weighted_beta_binomial_path_a",
+        "endpoint_analyses": endpoint_analyses,
+        "two_arm_decision_support": two_arm,
+        "limitations": [
+            "PFS is analyzed only when a 6-month count/denominator endpoint is available.",
+            "Two-arm path A borrows treatment-arm absolute-rate information; OR/HR decision thresholds remain user-defined.",
+            "Mixture-weight pi summaries are sensitivity descriptors; the current posterior is not a full robust MAP mixture posterior.",
+        ],
+    }
+    return result
+
+
 def render_markdown_report(result: dict[str, Any], max_rows: int = 10) -> str:
     query = result.get("query_summary", {})
     rows = result.get("reranked_top_matches") or result.get("top10", [])
@@ -1155,6 +1524,38 @@ def render_markdown_report(result: dict[str, Any], max_rows: int = 10) -> str:
     lines.append("")
     lines.append("- Scores are generated by a deterministic structured reranker and should be reviewed before use in a primary Bayesian analysis.")
     lines.append("- `suggested_borrowing_discount` is a starting value for power-prior/commensurate-prior sensitivity analysis, not an automatic final borrowing weight.")
+    bayesian = result.get("bayesian_analysis", {})
+    endpoint_analyses = bayesian.get("endpoint_analyses", [])
+    if endpoint_analyses:
+        lines.append("")
+        lines.append("## Bayesian Prior Borrowing Analysis")
+        lines.append("")
+        lines.append("- Targets and gamma are user-defined; this report does not make a go/no-go call.")
+        for endpoint in endpoint_analyses:
+            observed = next(
+                (row for row in endpoint.get("weight_sensitivity", []) if row.get("scenario") == "observed_weights"),
+                {},
+            )
+            posterior = observed.get("posterior") or observed.get("prior", {})
+            distribution_label = "Posterior" if observed.get("posterior") is not None else "Prior-only"
+            lines.append("")
+            lines.append(f"### {endpoint.get('endpoint_family', '')}")
+            lines.append("")
+            lines.append(f"- Analysis mode: {endpoint.get('analysis_mode', '')}")
+            lines.append(f"- Historical trials used: {endpoint.get('historical_trial_count', 0)}")
+            lines.append(f"- Effective sample size: {endpoint.get('effective_sample_size', 0)}")
+            lines.append(f"- Weighted historical rate: {endpoint.get('weighted_historical_rate')}")
+            lines.append(f"- {distribution_label} mean: {posterior.get('mean')}")
+            lines.append(f"- {distribution_label} 95% credible interval: {posterior.get('credible_interval_95')}")
+            lines.append("")
+            lines.append("| Scenario | ESS | Active distribution | Mean | 95% CI |")
+            lines.append("|---|---:|---|---:|---|")
+            for row in endpoint.get("weight_sensitivity", []):
+                row_posterior = row.get("posterior") or row.get("prior", {})
+                lines.append(
+                    f"| {row.get('scenario', '')} | {row.get('effective_sample_size', 0)} "
+                    f"| {row.get('active_distribution', '')} | {row_posterior.get('mean')} | {row_posterior.get('credible_interval_95')} |"
+                )
     return "\n".join(lines) + "\n"
 
 
@@ -1267,7 +1668,7 @@ def search(
         reranked = rerank_candidates(query_summary, rerank_input, rerank_top_n)
         result["reranked_top_matches"] = reranked
         result["reranked_top10"] = reranked[:10]
-    return result
+    return add_bayesian_analysis(result)
 
 
 def extract_trial_record_like(raw: dict[str, Any], fallback_nct_id: str, json_path: Path) -> dict[str, Any]:

@@ -147,6 +147,93 @@
       padding: 8px 10px;
       margin: 6px 0;
     }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .chart {
+      width: 100%;
+      min-height: 260px;
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    .chart svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .chart-title {
+      font-weight: 800;
+      fill: var(--ink);
+    }
+    .chart-note, .axis-label {
+      fill: var(--muted);
+      font-size: 12px;
+    }
+    .axis-line, .grid-line {
+      stroke: #d9e2f1;
+      stroke-width: 1;
+    }
+    .prior-line {
+      fill: none;
+      stroke: #0aa344;
+      stroke-width: 3;
+      stroke-dasharray: 8 6;
+    }
+    .posterior-line {
+      fill: none;
+      stroke: #9b1c1c;
+      stroke-width: 3;
+    }
+    .vague-line {
+      fill: none;
+      stroke: #1f65d6;
+      stroke-width: 2.5;
+      stroke-dasharray: 6 7;
+    }
+    .sensitivity-ci {
+      stroke: #1f65d6;
+      stroke-width: 4;
+      stroke-linecap: round;
+    }
+    .sensitivity-point {
+      fill: #1f65d6;
+      stroke: white;
+      stroke-width: 2;
+    }
+    .observed-marker {
+      stroke: #0aa344;
+      stroke-width: 4;
+    }
+    .probability-line {
+      fill: none;
+      stroke: #3157d5;
+      stroke-width: 3;
+    }
+    .probability-area {
+      fill: rgba(49, 87, 213, 0.10);
+    }
+    .tipping-line {
+      fill: none;
+      stroke: #f97316;
+      stroke-width: 3;
+    }
     .empty {
       border: 1px dashed var(--line);
       border-radius: 18px;
@@ -210,6 +297,11 @@
     const runButton = document.querySelector("#run-button");
     const clearButton = document.querySelector("#clear-button");
     const healthBox = document.querySelector("#health");
+    const apiBase = window.location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
+
+    function apiUrl(path) {
+      return `${apiBase}${path}`;
+    }
 
     function escapeHtml(value) {
       return String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -235,6 +327,345 @@
           <p>${escapeHtml((quantity.arm_results || []).length)} arm result(s)</p>
         </div>
       `).join("");
+    }
+
+    function formatNumber(value) {
+      if (value === null || value === undefined || value === "") return "NA";
+      if (typeof value !== "number") return escapeHtml(value);
+      return Number.isInteger(value) ? String(value) : value.toFixed(3);
+    }
+
+    function logGamma(z) {
+      const coefficients = [
+        676.5203681218851,
+        -1259.1392167224028,
+        771.32342877765313,
+        -176.61502916214059,
+        12.507343278686905,
+        -0.13857109526572012,
+        9.9843695780195716e-6,
+        1.5056327351493116e-7
+      ];
+      if (z < 0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
+      let x = 0.99999999999980993;
+      const shifted = z - 1;
+      for (let i = 0; i < coefficients.length; i += 1) x += coefficients[i] / (shifted + i + 1);
+      const t = shifted + coefficients.length - 0.5;
+      return 0.5 * Math.log(2 * Math.PI) + (shifted + 0.5) * Math.log(t) - t + Math.log(x);
+    }
+
+    function betaPdf(x, alpha, beta) {
+      if (!(alpha > 0) || !(beta > 0) || x <= 0 || x >= 1) return 0;
+      const logDensity = (alpha - 1) * Math.log(x) + (beta - 1) * Math.log(1 - x)
+        - (logGamma(alpha) + logGamma(beta) - logGamma(alpha + beta));
+      return Math.exp(Math.min(80, logDensity));
+    }
+
+    function polyline(points) {
+      return points.map(point => `${point[0].toFixed(1)},${point[1].toFixed(1)}`).join(" ");
+    }
+
+    function chartFrame(title, inner, note = "") {
+      return `
+        <div class="chart">
+          <svg viewBox="0 0 820 300" role="img" aria-label="${escapeHtml(title)}">
+            <text class="chart-title" x="28" y="30">${escapeHtml(title)}</text>
+            ${note ? `<text class="chart-note" x="28" y="52">${escapeHtml(note)}</text>` : ""}
+            ${inner}
+          </svg>
+        </div>
+      `;
+    }
+
+    function renderDensityChart(endpoint) {
+      const observed = (endpoint.weight_sensitivity || []).find(row => row.scenario === "observed_weights") || {};
+      const prior = observed.prior || {};
+      const posterior = observed.posterior || prior;
+      if (!prior.alpha || !posterior.alpha) return "";
+      const posteriorLabel = observed.posterior ? "posterior" : "prior-only active distribution";
+      const left = 70;
+      const right = 790;
+      const top = 66;
+      const bottom = 248;
+      const xs = Array.from({ length: 140 }, (_, index) => 0.01 + index * 0.98 / 139);
+      const priorDensity = xs.map(x => betaPdf(x, prior.alpha, prior.beta));
+      const posteriorDensity = xs.map(x => betaPdf(x, posterior.alpha, posterior.beta));
+      const vagueDensity = xs.map(x => betaPdf(x, 1, 1));
+      const maxDensity = Math.max(...priorDensity, ...posteriorDensity, ...vagueDensity, 1);
+      const scaleX = x => left + x * (right - left);
+      const scaleY = y => bottom - y / maxDensity * (bottom - top);
+      const priorPoints = xs.map((x, index) => [scaleX(x), scaleY(priorDensity[index])]);
+      const posteriorPoints = xs.map((x, index) => [scaleX(x), scaleY(posteriorDensity[index])]);
+      const vaguePoints = xs.map((x, index) => [scaleX(x), scaleY(vagueDensity[index])]);
+      return chartFrame(
+        "Prior and posterior density",
+        `
+          <line class="axis-line" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" />
+          <line class="axis-line" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}" />
+          ${[0.2, 0.4, 0.6, 0.8].map(x => `<text class="axis-label" x="${scaleX(x) - 10}" y="272">${x.toFixed(1)}</text>`).join("")}
+          <text class="axis-label" x="400" y="292">Response or PFS6 rate</text>
+          <text class="axis-label" transform="translate(20 172) rotate(-90)">Density</text>
+          <polyline class="vague-line" points="${polyline(vaguePoints)}" />
+          <polyline class="prior-line" points="${polyline(priorPoints)}" />
+          <polyline class="posterior-line" points="${polyline(posteriorPoints)}" />
+          <text class="axis-label" x="585" y="90">vague prior</text>
+          <line class="vague-line" x1="665" y1="86" x2="735" y2="86" />
+          <text class="axis-label" x="585" y="112">borrowed prior</text>
+          <line class="prior-line" x1="665" y1="108" x2="735" y2="108" />
+          <text class="axis-label" x="585" y="134">${escapeHtml(posteriorLabel)}</text>
+          <line class="posterior-line" x1="665" y1="130" x2="735" y2="130" />
+        `,
+        "Power-prior approximation overlay: weak component, weighted borrowed prior, and active analysis distribution."
+      );
+    }
+
+    function scenarioLabel(row) {
+      if (row.scenario === "no_borrowing") return "0%";
+      if (row.scenario === "observed_weights") return "Obs.";
+      return `${Math.round((row.weight_multiplier || 0) * 100)}%`;
+    }
+
+    function renderWeightSensitivityChart(rows) {
+      const validRows = (rows || []).filter(row => (row.posterior || row.prior) && (row.posterior || row.prior).credible_interval_95);
+      if (!validRows.length) return "";
+      const left = 70;
+      const right = 790;
+      const top = 64;
+      const bottom = 230;
+      const values = validRows.flatMap(row => {
+        const distribution = row.posterior || row.prior;
+        return [distribution.mean, ...distribution.credible_interval_95];
+      });
+      const minY = Math.max(0, Math.min(...values) - 0.05);
+      const maxY = Math.min(1, Math.max(...values) + 0.05);
+      const span = Math.max(0.01, maxY - minY);
+      const scaleX = index => left + (validRows.length === 1 ? 0.5 : index / (validRows.length - 1)) * (right - left);
+      const scaleY = value => bottom - (value - minY) / span * (bottom - top);
+      const observedIndex = validRows.findIndex(row => row.scenario === "observed_weights");
+      return chartFrame(
+        "Borrowing weight sensitivity",
+        `
+          <line class="axis-line" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" />
+          <line class="axis-line" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}" />
+          <line class="grid-line" x1="${left}" y1="${scaleY(0.5)}" x2="${right}" y2="${scaleY(0.5)}" stroke-dasharray="5 5" />
+          ${observedIndex >= 0 ? `<line class="observed-marker" x1="${scaleX(observedIndex)}" y1="${top}" x2="${scaleX(observedIndex)}" y2="${bottom}" />` : ""}
+          ${validRows.map((row, index) => {
+            const x = scaleX(index);
+            const distribution = row.posterior || row.prior;
+            const ci = distribution.credible_interval_95;
+            return `
+              <line class="sensitivity-ci" x1="${x}" y1="${scaleY(ci[0])}" x2="${x}" y2="${scaleY(ci[1])}" />
+              <circle class="sensitivity-point" cx="${x}" cy="${scaleY(distribution.mean)}" r="6" />
+              <text class="axis-label" x="${x - 14}" y="258">${escapeHtml(scenarioLabel(row))}</text>
+            `;
+          }).join("")}
+          <text class="axis-label" x="330" y="292">Borrowing weight multiplier</text>
+          <text class="axis-label" transform="translate(20 176) rotate(-90)">Posterior rate (95% CrI)</text>
+          <text class="axis-label" x="88" y="${scaleY(maxY) + 4}">${formatNumber(maxY)}</text>
+          <text class="axis-label" x="88" y="${scaleY(minY) + 4}">${formatNumber(minY)}</text>
+        `,
+        "Forest-style display adapted from tipping-point borrowing analyses."
+      );
+    }
+
+    function renderProbabilityCurve(rows, keyName, label, title) {
+      const validRows = (rows || []).filter(row => typeof row[keyName] === "number" && typeof row.posterior_probability === "number");
+      if (!validRows.length) return "";
+      const left = 70;
+      const right = 790;
+      const top = 64;
+      const bottom = 230;
+      const xs = validRows.map(row => row[keyName]);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const scaleX = value => left + (value - minX) / Math.max(0.001, maxX - minX) * (right - left);
+      const scaleY = value => bottom - value * (bottom - top);
+      const points = validRows.map(row => [scaleX(row[keyName]), scaleY(row.posterior_probability)]);
+      const area = `${left},${bottom} ${polyline(points)} ${right},${bottom}`;
+      return chartFrame(
+        title,
+        `
+          <line class="axis-line" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" />
+          <line class="axis-line" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}" />
+          <line class="grid-line" x1="${left}" y1="${scaleY(0.5)}" x2="${right}" y2="${scaleY(0.5)}" stroke-dasharray="5 5" />
+          <polygon class="probability-area" points="${area}" />
+          <polyline class="probability-line" points="${polyline(points)}" />
+          ${validRows.map(row => `<circle class="sensitivity-point" cx="${scaleX(row[keyName])}" cy="${scaleY(row.posterior_probability)}" r="4" />`).join("")}
+          <text class="axis-label" x="380" y="292">${escapeHtml(label)}</text>
+          <text class="axis-label" transform="translate(20 190) rotate(-90)">Posterior probability</text>
+          <text class="axis-label" x="${left - 8}" y="252">${formatNumber(minX)}</text>
+          <text class="axis-label" x="${right - 24}" y="252">${formatNumber(maxX)}</text>
+          <text class="axis-label" x="42" y="${scaleY(1) + 4}">1.0</text>
+          <text class="axis-label" x="42" y="${scaleY(0) + 4}">0.0</text>
+        `
+      );
+    }
+
+    function renderTippingPointChart(rows) {
+      const validRows = (rows || []).filter(row => typeof row.posterior_probability_level === "number" && typeof row.rate_threshold === "number");
+      if (!validRows.length) return "";
+      const left = 70;
+      const right = 790;
+      const top = 64;
+      const bottom = 230;
+      const xs = validRows.map(row => row.posterior_probability_level);
+      const ys = validRows.map(row => row.rate_threshold);
+      const minY = Math.max(0, Math.min(...ys) - 0.03);
+      const maxY = Math.min(1, Math.max(...ys) + 0.03);
+      const scaleX = value => left + (value - Math.min(...xs)) / Math.max(0.001, Math.max(...xs) - Math.min(...xs)) * (right - left);
+      const scaleY = value => bottom - (value - minY) / Math.max(0.001, maxY - minY) * (bottom - top);
+      const points = validRows.map(row => [scaleX(row.posterior_probability_level), scaleY(row.rate_threshold)]);
+      return chartFrame(
+        "Tipping point curve",
+        `
+          <line class="axis-line" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" />
+          <line class="axis-line" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}" />
+          <polyline class="tipping-line" points="${polyline(points)}" />
+          ${validRows.map(row => `
+            <circle class="sensitivity-point" cx="${scaleX(row.posterior_probability_level)}" cy="${scaleY(row.rate_threshold)}" r="5" />
+            <text class="axis-label" x="${scaleX(row.posterior_probability_level) - 13}" y="258">${formatNumber(row.posterior_probability_level)}</text>
+          `).join("")}
+          <text class="axis-label" x="330" y="292">Posterior probability level</text>
+          <text class="axis-label" transform="translate(20 178) rotate(-90)">Rate threshold</text>
+          <text class="axis-label" x="88" y="${scaleY(maxY) + 4}">${formatNumber(maxY)}</text>
+          <text class="axis-label" x="88" y="${scaleY(minY) + 4}">${formatNumber(minY)}</text>
+        `,
+        "Higher probability levels imply more conservative rate thresholds."
+      );
+    }
+
+    function renderProbabilityGrid(rows, keyName, label) {
+      if (!rows || !rows.length) return "<p>No probability grid available.</p>";
+      return `
+        <table>
+          <thead><tr><th>${escapeHtml(label)}</th><th>Posterior probability</th></tr></thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                <td>${formatNumber(row[keyName])}</td>
+                <td>${formatNumber(row.posterior_probability)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderWeightSensitivity(rows) {
+      if (!rows || !rows.length) return "<p>No sensitivity results available.</p>";
+      return `
+        <table>
+          <thead><tr><th>Scenario</th><th>ESS</th><th>Posterior mean</th><th>95% credible interval</th></tr></thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                <td>${escapeHtml(row.scenario)}</td>
+                <td>${formatNumber(row.effective_sample_size)}</td>
+                <td>${formatNumber((row.posterior || row.prior) && (row.posterior || row.prior).mean)}</td>
+                <td>${escapeHtml(((row.posterior || row.prior) && (row.posterior || row.prior).credible_interval_95 || []).map(formatNumber).join(" - "))}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderTippingPoints(rows) {
+      if (!rows || !rows.length) return "<p>No tipping points available.</p>";
+      return `
+        <table>
+          <thead><tr><th>Posterior probability level</th><th>Rate threshold</th></tr></thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                <td>${formatNumber(row.posterior_probability_level)}</td>
+                <td>${formatNumber(row.rate_threshold)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderBayesianAnalysis(analysis) {
+      if (!analysis || analysis.status !== "available") {
+        return `
+          <section class="panel" style="margin-top:16px">
+            <h2>Bayesian Analysis</h2>
+            <p>No ORR or PFS6 count/denominator data were available for Bayesian borrowing analysis.</p>
+          </section>
+        `;
+      }
+      const endpointSections = (analysis.endpoint_analyses || []).map(endpoint => {
+        const observed = (endpoint.weight_sensitivity || []).find(row => row.scenario === "observed_weights") || {};
+        const activeDistribution = observed.posterior || observed.prior || {};
+        const pi = endpoint.mixture_weight_pi || {};
+        const activeLabel = endpoint.analysis_mode === "prior_only" ? "Prior mean" : "Posterior mean";
+        return `
+          <article class="candidate">
+            <div class="candidate-head">
+              <div>
+                <h3>${escapeHtml(endpoint.endpoint_family)} Bayesian Prior Borrowing</h3>
+                <p>Targets and gamma are user-defined. This section shows ${endpoint.analysis_mode === "prior_only" ? "prior" : "posterior"} behavior across borrowing weights.</p>
+              </div>
+              <span class="badge high">ESS ${formatNumber(endpoint.effective_sample_size)}</span>
+            </div>
+            <div class="grid">
+              <div class="metric"><small>${escapeHtml(activeLabel)}</small><strong>${formatNumber(activeDistribution.mean)}</strong></div>
+              <div class="metric"><small>Weighted rate</small><strong>${formatNumber(endpoint.weighted_historical_rate)}</strong></div>
+              <div class="metric"><small>Trials borrowed</small><strong>${formatNumber(endpoint.historical_trial_count)}</strong></div>
+              <div class="metric"><small>Pi mean/top/softmax</small><strong>${formatNumber(pi.mean)} / ${formatNumber(pi.top_m)} / ${formatNumber(pi.softmax)}</strong></div>
+            </div>
+            <details open>
+              <summary>Weight sensitivity</summary>
+              ${renderDensityChart(endpoint)}
+              ${renderWeightSensitivityChart(endpoint.weight_sensitivity || [])}
+              ${renderWeightSensitivity(endpoint.weight_sensitivity || [])}
+            </details>
+            <details>
+              <summary>Probability of success grid</summary>
+              ${renderProbabilityCurve(endpoint.success_probability_grid || [], "threshold", "Rate threshold", "Posterior probability by rate threshold")}
+              ${renderProbabilityGrid(endpoint.success_probability_grid || [], "threshold", "Rate threshold")}
+            </details>
+            <details>
+              <summary>Tipping points</summary>
+              ${renderTippingPointChart(endpoint.tipping_points || [])}
+              ${renderTippingPoints(endpoint.tipping_points || [])}
+            </details>
+          </article>
+        `;
+      }).join("");
+      const orSupport = analysis.two_arm_decision_support && analysis.two_arm_decision_support.orr;
+      const orSection = orSupport ? `
+        <article class="candidate">
+          <div class="candidate-head">
+            <div>
+              <h3>Two-arm ORR Decision Support</h3>
+              <p>Treatment arm uses borrowed absolute-rate prior; control arm uses weak prior.</p>
+            </div>
+            <span class="badge">OR median ${formatNumber(orSupport.posterior_or_median)}</span>
+          </div>
+          <div class="grid">
+            <div class="metric"><small>OR mean</small><strong>${formatNumber(orSupport.posterior_or_mean)}</strong></div>
+            <div class="metric"><small>OR 95% CI</small><strong>${escapeHtml((orSupport.posterior_or_credible_interval_95 || []).map(formatNumber).join(" - "))}</strong></div>
+            <div class="metric"><small>Control posterior mean</small><strong>${formatNumber(orSupport.control_posterior && orSupport.control_posterior.mean)}</strong></div>
+            <div class="metric"><small>Control arm</small><strong>${escapeHtml(orSupport.control_arm || "NA")}</strong></div>
+          </div>
+          <details open>
+            <summary>OR probability grid</summary>
+            ${renderProbabilityCurve(orSupport.probability_grid || [], "or_threshold", "OR threshold", "Posterior probability by OR threshold")}
+            ${renderProbabilityGrid(orSupport.probability_grid || [], "or_threshold", "OR threshold")}
+          </details>
+        </article>
+      ` : "";
+      return `
+        <section class="panel" style="margin-top:16px">
+          <h2>Bayesian Analysis</h2>
+          <p>Weighted beta-binomial power-prior approximation for path A: historical treatment-arm absolute rates are borrowed; decision thresholds remain user-defined.</p>
+        </section>
+        ${endpointSections}
+        ${orSection}
+      `;
     }
 
     function renderCandidate(candidate) {
@@ -286,12 +717,17 @@
     }
 
     async function checkHealth() {
-      const response = await fetch("/api/health");
-      const health = await response.json();
-      healthBox.textContent = health.index_available
-        ? `ClinicalBERT index found: ${health.index_dir}`
-        : `ClinicalBERT index missing: ${health.index_dir}`;
-      healthBox.classList.toggle("error", !health.index_available);
+      try {
+        const response = await fetch(apiUrl("/api/health"));
+        const health = await response.json();
+        healthBox.textContent = health.index_available
+          ? `ClinicalBERT index found: ${health.index_dir}`
+          : `ClinicalBERT index missing: ${health.index_dir}`;
+        healthBox.classList.toggle("error", !health.index_available);
+      } catch (error) {
+        healthBox.textContent = `FastAPI server not reachable at ${apiBase || window.location.origin}. Start the web agent with uvicorn, then retry.`;
+        healthBox.classList.add("error");
+      }
     }
 
     clearButton.addEventListener("click", () => {
@@ -309,7 +745,7 @@
       runButton.disabled = true;
       try {
         const formData = new FormData(form);
-        const response = await fetch("/api/search", { method: "POST", body: formData });
+        const response = await fetch(apiUrl("/api/search"), { method: "POST", body: formData });
         const payload = await response.json();
         if (!response.ok) {
           statusBox.textContent = payload.detail || "Search failed.";
@@ -334,6 +770,7 @@
               <button class="secondary" id="download-md" type="button">Download Markdown</button>
             </div>
           </section>
+          ${renderBayesianAnalysis(result.bayesian_analysis)}
           <section>${candidates.map(renderCandidate).join("")}</section>
         `;
         document.querySelector("#download-json").addEventListener("click", () => {
@@ -342,6 +779,10 @@
         document.querySelector("#download-md").addEventListener("click", () => {
           downloadBlob("trial_similarity_report.md", payload.markdown_report, "text/markdown");
         });
+      } catch (error) {
+        statusBox.textContent = `Search request failed. Make sure the FastAPI web agent is running at ${apiBase || window.location.origin}.`;
+        statusBox.classList.add("error");
+        results.innerHTML = '<div class="empty">No results returned because the API request failed.</div>';
       } finally {
         runButton.disabled = false;
       }
