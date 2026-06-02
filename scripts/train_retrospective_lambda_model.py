@@ -47,6 +47,8 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("features must be 2D")
     if features.shape[0] == 0:
         raise ValueError("features must be non-empty")
+    if features.shape[1] == 0:
+        raise ValueError("features must have at least one column")
 
     components = example["components"]
     if not components:
@@ -164,11 +166,9 @@ def train_model(
         raise ValueError("examples must not be empty")
     if epochs <= 0:
         raise ValueError("epochs must be greater than 0")
-    first_features = torch.tensor(examples[0]["features"], dtype=torch.float32)
-    if first_features.ndim != 2 or first_features.shape[0] == 0:
-        raise ValueError("examples must include non-empty 2D feature sets")
+    first_tensors = _validated_example_tensors(examples[0])
 
-    input_dim = first_features.shape[1]
+    input_dim = first_tensors["features"].shape[1]
     model = LambdaScorer(input_dim=input_dim, hidden_dim=hidden_dim)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_history = []
@@ -191,14 +191,14 @@ def train_model(
     }
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--examples-jsonl", required=True)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--hidden-dim", type=int, default=16)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     examples = load_examples(args.examples_jsonl)
     summary = train_model(

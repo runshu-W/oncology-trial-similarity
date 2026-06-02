@@ -1,6 +1,8 @@
 import importlib.util
+import json
 import math
 from pathlib import Path
+import tempfile
 import unittest
 
 import torch
@@ -171,6 +173,55 @@ class RetrospectiveLambdaTrainingTest(unittest.TestCase):
                 example.update(overrides)
                 with self.assertRaisesRegex(ValueError, message):
                     module.predictive_loss_for_example(model, example)
+
+    def test_zero_column_features_raise_value_error(self):
+        module = load_training_module()
+        model = self.zero_model(module)
+        example = self.base_example()
+        example["features"] = [[], []]
+
+        with self.assertRaisesRegex(ValueError, "features must have at least one column"):
+            module.predictive_loss_for_example(model, example)
+
+    def test_train_model_rejects_empty_examples(self):
+        module = load_training_module()
+
+        with self.assertRaisesRegex(ValueError, "examples must not be empty"):
+            module.train_model([], epochs=1, learning_rate=0.01, hidden_dim=6)
+
+    def test_train_model_rejects_non_positive_epochs(self):
+        module = load_training_module()
+
+        for epochs in (0, -1):
+            with self.subTest(epochs=epochs):
+                with self.assertRaisesRegex(ValueError, "epochs"):
+                    module.train_model([self.base_example()], epochs=epochs, learning_rate=0.01, hidden_dim=6)
+
+    def test_main_creates_output_parent_directories(self):
+        module = load_training_module()
+        example = self.base_example()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            examples_path = tmp_path / "examples.jsonl"
+            output_path = tmp_path / "nested" / "reports" / "summary.json"
+            examples_path.write_text(json.dumps(example) + "\n", encoding="utf-8")
+
+            module.main(
+                [
+                    "--examples-jsonl",
+                    str(examples_path),
+                    "--output-json",
+                    str(output_path),
+                    "--epochs",
+                    "1",
+                    "--hidden-dim",
+                    "6",
+                ]
+            )
+
+            self.assertTrue(output_path.exists())
+            summary = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(summary["epochs"], 1)
 
 
 if __name__ == "__main__":
