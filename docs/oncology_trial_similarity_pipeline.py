@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import inspect
+import importlib.util
 import json
 import math
 import os
@@ -16,13 +17,32 @@ from typing import Any
 
 import numpy as np
 
-try:
-    import mixture_prior
-except ImportError:
+
+def _load_mixture_prior() -> Any:
+    if __package__:
+        try:
+            from . import mixture_prior as package_mixture_prior
+
+            return package_mixture_prior
+        except ImportError:
+            pass
+
+    sibling_path = Path(__file__).with_name("mixture_prior.py")
     try:
-        from . import mixture_prior
-    except ImportError:
-        mixture_prior = None
+        spec = importlib.util.spec_from_file_location(
+            "_oncology_trial_similarity_mixture_prior",
+            sibling_path,
+        )
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except (ImportError, OSError):
+        return None
+
+
+mixture_prior = _load_mixture_prior()
 
 
 DEFAULT_DB_ROOT = Path(

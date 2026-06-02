@@ -109,7 +109,13 @@ class WebAgentTests(unittest.TestCase):
             "reranked_top_matches": [
                 {
                     "candidate_nct_id": "NCTHIST1",
+                    "overall_similarity_score": 82.0,
                     "suggested_borrowing_discount": 0.4,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
                     "borrowable_quantities": [
                         {
                             "endpoint": "Objective Response Rate",
@@ -122,7 +128,13 @@ class WebAgentTests(unittest.TestCase):
                 },
                 {
                     "candidate_nct_id": "NCTHIST2",
+                    "overall_similarity_score": 76.0,
                     "suggested_borrowing_discount": 0.75,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
                     "borrowable_quantities": [
                         {
                             "endpoint": "Objective Response Rate",
@@ -147,8 +159,13 @@ class WebAgentTests(unittest.TestCase):
         mixture = endpoint["mixture_prior"]
         self.assertIn("lambda_0", mixture)
         self.assertIn("components", mixture)
-        self.assertGreaterEqual(mixture["lambda_0"], 0.0)
-        self.assertLessEqual(mixture["lambda_0"], 1.0)
+        self.assertAlmostEqual(mixture["lambda_0"], 0.2)
+        self.assertTrue(mixture["components"])
+        first_component = mixture["components"][0]
+        self.assertIn("nct_id", first_component)
+        self.assertIn("lambda_rule", first_component)
+        self.assertIn("alpha", first_component)
+        self.assertIn("beta", first_component)
         self.assertAlmostEqual(
             mixture["lambda_0"] + sum(component["lambda_rule"] for component in mixture["components"]),
             1.0,
