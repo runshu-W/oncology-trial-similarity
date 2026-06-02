@@ -1,0 +1,166 @@
+import argparse
+import json
+import math
+from pathlib import Path
+from typing import Any
+
+import torch
+
+
+class LambdaScorer(torch.nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int) -> None:
+        super().__init__()
+        self.network = torch.nn.Sequential(
+            torch.nn.Linear(input_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, 1),
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        return self.network(features).squeeze(-1)
+
+
+def _log_choose(n: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
+    return torch.lgamma(n + 1.0) - torch.lgamma(k + 1.0) - torch.lgamma(n - k + 1.0)
+
+
+def _log_beta(alpha: torch.Tensor, beta: torch.Tensor) -> torch.Tensor:
+    return torch.lgamma(alpha) + torch.lgamma(beta) - torch.lgamma(alpha + beta)
+
+
+def beta_binomial_log_predictive(
+    count: torch.Tensor,
+    denominator: torch.Tensor,
+    alpha: torch.Tensor,
+    beta: torch.Tensor,
+) -> torch.Tensor:
+    return (
+        _log_choose(denominator, count)
+        + _log_beta(count + alpha, denominator - count + beta)
+        - _log_beta(alpha, beta)
+    )
+
+
+def predictive_loss_for_example(
+    model: LambdaScorer,
+    example: dict[str, Any],
+    rho: float = 0.1,
+    ess_cap: float = 100.0,
+) -> torch.Tensor:
+    features = torch.tensor(example["features"], dtype=torch.float32)
+    scores = model(features)
+
+    components = example["components"]
+    alpha = torch.tensor([component["alpha"] for component in components], dtype=torch.float32)
+    beta = torch.tensor([component["beta"] for component in components], dtype=torch.float32)
+    gate = torch.tensor([component.get("gate", 1.0) for component in components], dtype=torch.float32)
+    lambda0 = torch.tensor(float(example.get("lambda_0", 0.2)), dtype=torch.float32)
+
+    raw_weights = gate * torch.exp(scores)
+    raw_weight_sum = raw_weights.sum()
+    lambda_i = torch.where(
+        raw_weight_sum > 0.0,
+        (1.0 - lambda0) * raw_weights / raw_weight_sum.clamp_min(1e-12),
+        torch.zeros_like(raw_weights),
+    )
+
+    query = example.get("query", example)
+    count = torch.tensor(float(query["count"]), dtype=torch.float32)
+    denominator = torch.tensor(float(query["denominator"]), dtype=torch.float32)
+    weak_log_predictive = beta_binomial_log_predictive(
+        count,
+        denominator,
+        torch.tensor(1.0, dtype=torch.float32),
+        torch.tensor(1.0, dtype=torch.float32),
+    )
+    component_log_predictive = beta_binomial_log_predictive(count, denominator, alpha, beta)
+
+    mixture_terms = torch.cat(
+        [
+            (lambda0.clamp_min(1e-12).log() + weak_log_predictive).reshape(1),
+            lambda_i.clamp_min(1e-12).log() + component_log_predictive,
+        ]
+    )
+    loss = -torch.logsumexp(mixture_terms, dim=0)
+
+    lambda_rule_values = example.get("lambda_rule")
+    if lambda_rule_values is not None:
+        lambda_rule = torch.tensor(lambda_rule_values, dtype=torch.float32)
+        rule_sum = lambda_rule.sum()
+        if rule_sum.item() > 0.0:
+            kl = (
+                lambda_rule
+                * (lambda_rule.clamp_min(1e-12).log() - lambda_i.clamp_min(1e-12).log())
+            ).sum()
+            loss = loss + float(rho) * kl
+
+    ess = (lambda_i * (alpha + beta)).sum()
+    cap = torch.tensor(float(ess_cap), dtype=torch.float32)
+    ess_penalty = 1e-4 * torch.relu(ess - cap).pow(2)
+    return loss + ess_penalty
+
+
+def load_examples(path: str | Path) -> list[dict[str, Any]]:
+    examples = []
+    with Path(path).open(encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                examples.append(json.loads(line))
+    return examples
+
+
+def train_model(
+    examples: list[dict[str, Any]],
+    epochs: int,
+    learning_rate: float,
+    hidden_dim: int,
+) -> dict[str, Any]:
+    if not examples:
+        raise ValueError("examples must not be empty")
+
+    input_dim = len(examples[0]["features"][0])
+    model = LambdaScorer(input_dim=input_dim, hidden_dim=hidden_dim)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    loss_history = []
+
+    for _ in range(epochs):
+        optimizer.zero_grad()
+        losses = [predictive_loss_for_example(model, example) for example in examples]
+        mean_loss = torch.stack(losses).mean()
+        mean_loss.backward()
+        optimizer.step()
+        loss_history.append(float(mean_loss.detach().item()))
+
+    final_loss = loss_history[-1] if loss_history else math.nan
+    return {
+        "epochs": epochs,
+        "final_loss": final_loss,
+        "loss_history": loss_history,
+        "input_dim": input_dim,
+        "hidden_dim": hidden_dim,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--examples-jsonl", required=True)
+    parser.add_argument("--output-json", required=True)
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--learning-rate", type=float, default=0.01)
+    parser.add_argument("--hidden-dim", type=int, default=16)
+    args = parser.parse_args()
+
+    examples = load_examples(args.examples_jsonl)
+    summary = train_model(
+        examples,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        hidden_dim=args.hidden_dim,
+    )
+    output_path = Path(args.output_json)
+    output_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(summary, indent=2))
+
+
+if __name__ == "__main__":
+    main()
