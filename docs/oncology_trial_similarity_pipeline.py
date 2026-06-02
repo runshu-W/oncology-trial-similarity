@@ -675,15 +675,36 @@ TRIAL2VEC_COLUMNS = (
 
 
 def summary_to_trial2vec_row(summary: dict[str, Any]) -> dict[str, str]:
-    endpoints = summary.get("endpoints", {}).get("primary", [])
-    endpoint_titles = [endpoint.get("title", "") for endpoint in endpoints]
-    population = summary.get("population", {})
+    summary = summary if isinstance(summary, dict) else {}
+    endpoints = summary.get("endpoints") or {}
+    endpoints = endpoints if isinstance(endpoints, dict) else {}
+    primary_endpoints = endpoints.get("primary") or []
+    if isinstance(primary_endpoints, dict):
+        primary_endpoints = [primary_endpoints]
+    if not isinstance(primary_endpoints, (list, tuple)):
+        primary_endpoints = []
+    endpoint_titles = [
+        clean_text(endpoint.get("title", ""))
+        for endpoint in primary_endpoints
+        if isinstance(endpoint, dict) and clean_text(endpoint.get("title", ""))
+    ]
+    population = summary.get("population") or {}
+    population = population if isinstance(population, dict) else {}
+    inclusion = clean_text(population.get("key_inclusion", []))
+    exclusion = clean_text(population.get("key_exclusion", []))
     criteria = clean_text(
         {
-            "inclusion": population.get("key_inclusion", []),
-            "exclusion": population.get("key_exclusion", []),
+            label: value
+            for label, value in (("inclusion", inclusion), ("exclusion", exclusion))
+            if value
         }
     )
+    intervention = summary.get("intervention") or {}
+    intervention = intervention if isinstance(intervention, dict) else {}
+    cancer_type = summary.get("cancer_type") or {}
+    cancer_type = cancer_type if isinstance(cancer_type, dict) else {}
+    design = summary.get("design") or {}
+    design = design if isinstance(design, dict) else {}
     row = {
         "nct_id": clean_text(summary.get("nct_id", "")),
         "description": clean_text(
@@ -693,13 +714,13 @@ def summary_to_trial2vec_row(summary: dict[str, Any]) -> dict[str, str]:
             ]
         ),
         "title": clean_text(summary.get("brief_title", summary.get("title", ""))),
-        "intervention_name": clean_text(summary.get("intervention", {})),
-        "disease": clean_text(summary.get("cancer_type", {})),
+        "intervention_name": clean_text(intervention),
+        "disease": clean_text(cancer_type),
         "keyword": clean_text(
             [
                 summary.get("phase", ""),
                 summary.get("status", ""),
-                summary.get("design", {}),
+                design,
             ]
         ),
         "outcome_measure": clean_text(endpoint_titles),

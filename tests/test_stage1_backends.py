@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 import unittest
+from unittest import mock
 
 
 pipeline = importlib.import_module("docs.oncology_trial_similarity_pipeline")
+
+
+def load_trial2vec_builder_module(module_name: str = "build_trial2vec_index"):
+    path = Path(__file__).resolve().parents[1] / "scripts" / "build_trial2vec_index.py"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load module spec for {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class Stage1BackendTests(unittest.TestCase):
@@ -67,6 +79,107 @@ class Stage1BackendTests(unittest.TestCase):
         self.assertIn("Lung", row["disease"])
         self.assertIn("Objective Response Rate", row["outcome_measure"])
         self.assertIn("Adults with measurable disease", row["criteria"])
+
+    def test_trial2vec_row_handles_missing_null_and_malformed_nested_fields(self) -> None:
+        malformed_summaries = [
+            {},
+            {
+                "endpoints": None,
+                "population": None,
+                "cancer_type": None,
+                "intervention": None,
+            },
+            {
+                "endpoints": {"primary": [None, "bad endpoint", {"title": None}]},
+                "population": {"key_inclusion": None, "key_exclusion": []},
+                "cancer_type": None,
+                "intervention": None,
+            },
+        ]
+
+        for summary in malformed_summaries:
+            with self.subTest(summary=summary):
+                row = pipeline.summary_to_trial2vec_row(summary)
+
+                self.assertEqual(row["criteria"], "")
+                self.assertEqual(row["outcome_measure"], "")
+                self.assertEqual(row["disease"], "")
+                self.assertEqual(row["intervention_name"], "")
+
+
+class Trial2VecIndexBuilderTests(unittest.TestCase):
+    def test_builder_import_does_not_require_optional_ml_dependencies(self) -> None:
+        original_import = __import__
+
+        def guarded_import(name, *args, **kwargs):
+            if name in {"pandas", "torch", "trial2vec"}:
+                raise ImportError(f"blocked optional dependency: {name}")
+            return original_import(name, *args, **kwargs)
+
+        with mock.patch("builtins.__import__", guarded_import):
+            module = load_trial2vec_builder_module("build_trial2vec_index_no_optional_deps")
+
+        self.assertTrue(hasattr(module, "encode_trial2vec_index"))
+
+    def test_optional_dependency_loader_reports_clear_runtime_error(self) -> None:
+        module = load_trial2vec_builder_module("build_trial2vec_index_missing_deps")
+        original_import = __import__
+
+        def guarded_import(name, *args, **kwargs):
+            if name in {"pandas", "torch", "trial2vec"}:
+                raise ImportError(f"blocked optional dependency: {name}")
+            return original_import(name, *args, **kwargs)
+
+        with mock.patch("builtins.__import__", guarded_import):
+            with self.assertRaisesRegex(RuntimeError, "optional Trial2Vec index dependencies"):
+                module.load_trial2vec_index_dependencies()
+
+    def test_compatible_torch_load_only_adds_supported_weights_only_default(self) -> None:
+        module = load_trial2vec_builder_module("build_trial2vec_index_torch_load")
+        calls = []
+
+        def load_with_weights(path, *, weights_only=None):
+            calls.append((path, weights_only))
+            return weights_only
+
+        wrapped_with_weights = module.make_compatible_torch_load(load_with_weights)
+
+        self.assertFalse(wrapped_with_weights("model.pt"))
+        self.assertTrue(wrapped_with_weights("model.pt", weights_only=True))
+        self.assertEqual(calls, [("model.pt", False), ("model.pt", True)])
+
+        def load_without_weights(path):
+            return path
+
+        wrapped_without_weights = module.make_compatible_torch_load(load_without_weights)
+
+        self.assertEqual(wrapped_without_weights("legacy.pt"), "legacy.pt")
+
+    def test_compatible_load_state_dict_respects_existing_strict_argument(self) -> None:
+        module = load_trial2vec_builder_module("build_trial2vec_index_load_state_dict")
+        calls = []
+
+        def load_state_dict(module_arg, state_dict, *args, **kwargs):
+            calls.append((module_arg, state_dict, args, kwargs))
+            if "strict" in kwargs:
+                return kwargs["strict"]
+            if args:
+                return args[0]
+            return None
+
+        wrapped = module.make_compatible_load_state_dict(load_state_dict)
+
+        self.assertFalse(wrapped("module", {"weight": 1}))
+        self.assertTrue(wrapped("module", {"weight": 1}, True))
+        self.assertTrue(wrapped("module", {"weight": 1}, strict=True))
+        self.assertEqual(
+            calls,
+            [
+                ("module", {"weight": 1}, (), {"strict": False}),
+                ("module", {"weight": 1}, (True,), {}),
+                ("module", {"weight": 1}, (), {"strict": True}),
+            ],
+        )
 
 
 if __name__ == "__main__":

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
-import pandas as pd
-import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -27,13 +26,54 @@ def load_summary_rows(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def make_compatible_torch_load(original_torch_load: Callable[..., Any]) -> Callable[..., Any]:
+    try:
+        supports_weights_only = "weights_only" in inspect.signature(original_torch_load).parameters
+    except (TypeError, ValueError):
+        supports_weights_only = False
+
+    def compatible_torch_load(*args: Any, **kwargs: Any) -> Any:
+        if supports_weights_only and "weights_only" not in kwargs:
+            kwargs["weights_only"] = False
+        return original_torch_load(*args, **kwargs)
+
+    return compatible_torch_load
+
+
+def make_compatible_load_state_dict(original_load_state_dict: Callable[..., Any]) -> Callable[..., Any]:
+    def compatible_load_state_dict(
+        module: Any,
+        state_dict: dict[str, Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        if not args and "strict" not in kwargs:
+            kwargs["strict"] = False
+        return original_load_state_dict(module, state_dict, *args, **kwargs)
+
+    return compatible_load_state_dict
+
+
+def load_trial2vec_index_dependencies() -> tuple[Any, Any, Any]:
+    try:
+        import pandas as pd
+        import torch
+        from trial2vec import Trial2Vec
+    except ImportError as exc:
+        raise RuntimeError(
+            "Building a Trial2Vec index requires optional Trial2Vec index dependencies: "
+            "pandas, torch, and trial2vec."
+        ) from exc
+    return pd, torch, Trial2Vec
+
+
 def encode_trial2vec_index(
     summaries_path: Path,
     output_path: Path,
     model_dir: Path,
     device: str = "cpu",
 ) -> dict[str, Any]:
-    from trial2vec import Trial2Vec
+    pd, torch, Trial2Vec = load_trial2vec_index_dependencies()
 
     summaries = load_summary_rows(summaries_path)
     frame = pd.DataFrame([pipeline.summary_to_trial2vec_row(summary) for summary in summaries])
@@ -42,16 +82,8 @@ def encode_trial2vec_index(
     original_torch_load = torch.load
     original_load_state_dict = torch.nn.Module.load_state_dict
 
-    def compatible_torch_load(*args: Any, **kwargs: Any) -> Any:
-        kwargs.setdefault("weights_only", False)
-        return original_torch_load(*args, **kwargs)
-
-    def compatible_load_state_dict(module: torch.nn.Module, state_dict: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
-        kwargs.setdefault("strict", False)
-        return original_load_state_dict(module, state_dict, *args, **kwargs)
-
-    torch.load = compatible_torch_load
-    torch.nn.Module.load_state_dict = compatible_load_state_dict
+    torch.load = make_compatible_torch_load(original_torch_load)
+    torch.nn.Module.load_state_dict = make_compatible_load_state_dict(original_load_state_dict)
     try:
         model.from_pretrained(str(model_dir))
     finally:
