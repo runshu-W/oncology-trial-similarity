@@ -77,7 +77,7 @@ def beta_binomial_predictive_probability(
     return math.exp(log_probability)
 
 
-def normalize_lambdas(raw_weights: list[float], lambda0: float = 0.2) -> tuple[float, list[float]]:
+def normalize_lambdas(raw_weights: list[float], lambda0: float = 0.2) -> dict[str, float | list[float]]:
     """Reserve lambda0 for the weak component and normalize non-negative candidate weights."""
     lambda0 = _validate_lambda0(lambda0)
 
@@ -87,11 +87,11 @@ def normalize_lambdas(raw_weights: list[float], lambda0: float = 0.2) -> tuple[f
     ]
     total = sum(clipped_weights)
     if total <= 0:
-        return 1.0, [0.0 for _ in clipped_weights]
+        return {"lambda_0": 1.0, "lambda_i": [0.0 for _ in clipped_weights]}
 
     candidate_budget = 1.0 - lambda0
     lambdas = [candidate_budget * weight / total for weight in clipped_weights]
-    return float(lambda0), lambdas
+    return {"lambda_0": float(lambda0), "lambda_i": lambdas}
 
 
 def mixture_predictive_probability(
