@@ -34,6 +34,20 @@ ASPECT_WEIGHTS = {
 
 
 DEFAULT_CLINICALBERT_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
+DEFAULT_RETRIEVAL_BACKEND = "clinicalbert"
+RETRIEVAL_BACKENDS = ("clinicalbert", "trial2vec", "secret")
+
+
+def ensure_supported_retrieval_backend(backend: str) -> None:
+    if backend not in RETRIEVAL_BACKENDS:
+        raise ValueError(
+            f"Unsupported retrieval backend: {backend}. "
+            f"Supported backends: {', '.join(RETRIEVAL_BACKENDS)}"
+        )
+    if backend == "secret":
+        raise NotImplementedError(
+            "SECRET retrieval is reserved for the protocol-summary backend and is not implemented in this revision."
+        )
 
 
 @dataclass
