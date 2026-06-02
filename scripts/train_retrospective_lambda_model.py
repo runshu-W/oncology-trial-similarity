@@ -1,8 +1,16 @@
 import argparse
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "docs") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "docs"))
+
+import mixture_prior  # noqa: E402
+import oncology_trial_similarity_pipeline as pipeline  # noqa: E402
 
 import torch
 
@@ -156,6 +164,83 @@ def load_examples(path: str | Path) -> list[dict[str, Any]]:
     return examples
 
 
+def build_training_example_from_pipeline_result(
+    result: dict[str, Any],
+    endpoint_key: str = "ORR",
+    lambda0: float = 0.2,
+) -> dict[str, Any]:
+    query_observations = pipeline.query_endpoint_observations(result["query_summary"])
+    query = query_observations.get(endpoint_key)
+    if query is None:
+        raise ValueError(f"query_summary does not contain endpoint {endpoint_key}")
+
+    count = query.get("treatment_count")
+    denominator = query.get("treatment_denominator")
+    if count is None or denominator is None:
+        raise ValueError(f"query endpoint {endpoint_key} is missing treatment count/denominator")
+
+    rows = result.get("reranked_top_matches") or result.get("reranked_top10") or []
+    mixture = mixture_prior.components_from_reranked_rows(
+        rows,
+        endpoint_key=endpoint_key,
+        lambda0=lambda0,
+    )
+    features = []
+    components = []
+    lambda_rule = []
+
+    for component in mixture["components"]:
+        denominator_i = float(component.get("denominator", 0.0))
+        discount = float(component.get("discount", 0.0))
+        gate = float(component.get("gate", 0.0))
+        features.append(
+            [
+                float(component.get("overall_similarity_score", 0.0)) / 100.0,
+                float(component.get("rate", 0.0)),
+                discount,
+                math.log1p(denominator_i),
+                gate,
+            ]
+        )
+        components.append(
+            {
+                "alpha": float(component["alpha"]),
+                "beta": float(component["beta"]),
+                "gate": gate,
+                "denominator": denominator_i,
+                "discount": discount,
+            }
+        )
+        lambda_rule.append(float(component.get("lambda_rule", 0.0)))
+
+    return {
+        "query": {"count": int(count), "denominator": int(denominator)},
+        "lambda_0": float(mixture["lambda_0"]),
+        "features": features,
+        "components": components,
+        "lambda_rule": lambda_rule,
+    }
+
+
+def load_examples_from_pipeline_results(
+    path: str | Path,
+    endpoint_key: str = "ORR",
+    lambda0: float = 0.2,
+) -> list[dict[str, Any]]:
+    examples = []
+    with Path(path).open(encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                examples.append(
+                    build_training_example_from_pipeline_result(
+                        json.loads(line),
+                        endpoint_key=endpoint_key,
+                        lambda0=lambda0,
+                    )
+                )
+    return examples
+
+
 def train_model(
     examples: list[dict[str, Any]],
     epochs: int,
@@ -193,14 +278,23 @@ def train_model(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--examples-jsonl", required=True)
+    parser.add_argument("--examples-jsonl", type=Path, default=None)
+    parser.add_argument("--pipeline-results-jsonl", type=Path, default=None)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--hidden-dim", type=int, default=16)
     args = parser.parse_args(argv)
 
-    examples = load_examples(args.examples_jsonl)
+    if args.examples_jsonl is None and args.pipeline_results_jsonl is None:
+        parser.error("one of --examples-jsonl or --pipeline-results-jsonl is required")
+
+    examples = []
+    if args.examples_jsonl is not None:
+        examples.extend(load_examples(args.examples_jsonl))
+    if args.pipeline_results_jsonl is not None:
+        examples.extend(load_examples_from_pipeline_results(args.pipeline_results_jsonl))
+
     summary = train_model(
         examples,
         epochs=args.epochs,

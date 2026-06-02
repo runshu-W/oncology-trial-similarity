@@ -18,7 +18,7 @@ def load_training_module():
     return module
 
 
-class RetrospectiveLambdaTrainingTest(unittest.TestCase):
+class RetrospectiveLambdaTrainingTests(unittest.TestCase):
     def zero_model(self, module):
         model = module.LambdaScorer(input_dim=4, hidden_dim=6)
         with torch.no_grad():
@@ -222,6 +222,89 @@ class RetrospectiveLambdaTrainingTest(unittest.TestCase):
             self.assertTrue(output_path.exists())
             summary = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(summary["epochs"], 1)
+
+    def pipeline_result(self):
+        return {
+            "query_summary": {
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental", "count": 12, "denominator": 40}
+                            ],
+                        }
+                    ]
+                }
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "overall_similarity_score": 82.0,
+                    "retrieval_score": 98.0,
+                    "suggested_borrowing_discount": 0.75,
+                    "dimension_scores": {
+                        "disease_biology_match": 5.0,
+                        "treatment_regimen_match": 4.0,
+                        "endpoint_estimand_match": 5.0,
+                        "outcome_assessment_followup": 2.0,
+                        "eligibility_criteria_overlap": 1.0,
+                        "result_usability": 5.0,
+                    },
+                    "red_flags": [],
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental", "count": 20, "denominator": 50}
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_build_training_example_from_pipeline_result(self) -> None:
+        module = load_training_module()
+        result = self.pipeline_result()
+
+        example = module.build_training_example_from_pipeline_result(result, endpoint_key="ORR")
+
+        self.assertEqual(example["query"], {"count": 12, "denominator": 40})
+        self.assertEqual(len(example["features"]), 1)
+        self.assertEqual(len(example["components"]), 1)
+        self.assertGreater(example["features"][0][0], 0.0)
+
+    def test_main_builds_examples_from_pipeline_results_jsonl(self):
+        module = load_training_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            pipeline_path = tmp_path / "pipeline.jsonl"
+            output_path = tmp_path / "nested" / "reports" / "summary.json"
+            pipeline_path.write_text(
+                json.dumps(self.pipeline_result()) + "\n",
+                encoding="utf-8",
+            )
+
+            module.main(
+                [
+                    "--pipeline-results-jsonl",
+                    str(pipeline_path),
+                    "--output-json",
+                    str(output_path),
+                    "--epochs",
+                    "1",
+                    "--hidden-dim",
+                    "6",
+                ]
+            )
+
+            self.assertTrue(output_path.exists())
+            summary = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(summary["epochs"], 1)
+            self.assertEqual(summary["input_dim"], 5)
 
 
 if __name__ == "__main__":
