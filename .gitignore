@@ -3,6 +3,7 @@
 .pycache/
 __pycache__/
 .superpowers/
+.worktrees/
 artifacts/
 *.npz
 *.jsonl
