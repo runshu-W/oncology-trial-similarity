@@ -41,28 +41,72 @@ def beta_binomial_log_predictive(
     )
 
 
+def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
+    features = torch.tensor(example["features"], dtype=torch.float32)
+    if features.ndim != 2:
+        raise ValueError("features must be 2D")
+    if features.shape[0] == 0:
+        raise ValueError("features must be non-empty")
+
+    components = example["components"]
+    if not components:
+        raise ValueError("components must be non-empty")
+    if features.shape[0] != len(components):
+        raise ValueError("feature rows must equal component count")
+
+    lambda_rule_values = example.get("lambda_rule")
+    if lambda_rule_values is not None and len(lambda_rule_values) != len(components):
+        raise ValueError("lambda_rule length must equal component count")
+
+    return {
+        "features": features,
+        "components": components,
+        "alpha": torch.tensor([component["alpha"] for component in components], dtype=torch.float32),
+        "beta": torch.tensor([component["beta"] for component in components], dtype=torch.float32),
+        "gate": torch.tensor([component.get("gate", 1.0) for component in components], dtype=torch.float32),
+        "discount": torch.tensor([component.get("discount", 0.0) for component in components], dtype=torch.float32),
+        "component_denominator": torch.tensor(
+            [component.get("denominator", 0.0) for component in components],
+            dtype=torch.float32,
+        ),
+        "lambda_rule_values": lambda_rule_values,
+    }
+
+
 def predictive_loss_for_example(
     model: LambdaScorer,
     example: dict[str, Any],
     rho: float = 0.1,
     ess_cap: float = 100.0,
 ) -> torch.Tensor:
-    features = torch.tensor(example["features"], dtype=torch.float32)
+    tensors = _validated_example_tensors(example)
+    features = tensors["features"]
     scores = model(features)
+    if scores.ndim != 1 or scores.shape[0] != features.shape[0]:
+        raise ValueError("model scores must have one value per component")
 
-    components = example["components"]
-    alpha = torch.tensor([component["alpha"] for component in components], dtype=torch.float32)
-    beta = torch.tensor([component["beta"] for component in components], dtype=torch.float32)
-    gate = torch.tensor([component.get("gate", 1.0) for component in components], dtype=torch.float32)
+    alpha = tensors["alpha"]
+    beta = tensors["beta"]
+    gate = tensors["gate"]
+    discount = tensors["discount"]
+    component_denominator = tensors["component_denominator"]
     lambda0 = torch.tensor(float(example.get("lambda_0", 0.2)), dtype=torch.float32)
 
-    raw_weights = gate * torch.exp(scores)
-    raw_weight_sum = raw_weights.sum()
-    lambda_i = torch.where(
-        raw_weight_sum > 0.0,
-        (1.0 - lambda0) * raw_weights / raw_weight_sum.clamp_min(1e-12),
-        torch.zeros_like(raw_weights),
-    )
+    positive_gate_mask = gate > 0.0
+    if positive_gate_mask.any().item():
+        candidate_budget = torch.clamp(1.0 - lambda0, min=0.0)
+        log_raw = scores + gate.clamp_min(1e-12).log()
+        masked_log_raw = torch.where(
+            positive_gate_mask,
+            log_raw,
+            torch.full_like(log_raw, -torch.inf),
+        )
+        lambda_i = candidate_budget * torch.softmax(masked_log_raw, dim=0)
+        lambda0_tensor = lambda0
+    else:
+        candidate_budget = torch.tensor(0.0, dtype=torch.float32)
+        lambda_i = torch.zeros_like(scores)
+        lambda0_tensor = torch.tensor(1.0, dtype=torch.float32)
 
     query = example.get("query", example)
     count = torch.tensor(float(query["count"]), dtype=torch.float32)
@@ -77,24 +121,25 @@ def predictive_loss_for_example(
 
     mixture_terms = torch.cat(
         [
-            (lambda0.clamp_min(1e-12).log() + weak_log_predictive).reshape(1),
+            (lambda0_tensor.clamp_min(1e-12).log() + weak_log_predictive).reshape(1),
             lambda_i.clamp_min(1e-12).log() + component_log_predictive,
         ]
     )
     loss = -torch.logsumexp(mixture_terms, dim=0)
 
-    lambda_rule_values = example.get("lambda_rule")
+    lambda_rule_values = tensors["lambda_rule_values"]
     if lambda_rule_values is not None:
         lambda_rule = torch.tensor(lambda_rule_values, dtype=torch.float32)
         rule_sum = lambda_rule.sum()
         if rule_sum.item() > 0.0:
+            lambda_rule = lambda_rule / rule_sum * candidate_budget
             kl = (
                 lambda_rule
                 * (lambda_rule.clamp_min(1e-12).log() - lambda_i.clamp_min(1e-12).log())
             ).sum()
             loss = loss + float(rho) * kl
 
-    ess = (lambda_i * (alpha + beta)).sum()
+    ess = (lambda_i * discount * component_denominator).sum()
     cap = torch.tensor(float(ess_cap), dtype=torch.float32)
     ess_penalty = 1e-4 * torch.relu(ess - cap).pow(2)
     return loss + ess_penalty
@@ -117,8 +162,13 @@ def train_model(
 ) -> dict[str, Any]:
     if not examples:
         raise ValueError("examples must not be empty")
+    if epochs <= 0:
+        raise ValueError("epochs must be greater than 0")
+    first_features = torch.tensor(examples[0]["features"], dtype=torch.float32)
+    if first_features.ndim != 2 or first_features.shape[0] == 0:
+        raise ValueError("examples must include non-empty 2D feature sets")
 
-    input_dim = len(examples[0]["features"][0])
+    input_dim = first_features.shape[1]
     model = LambdaScorer(input_dim=input_dim, hidden_dim=hidden_dim)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_history = []
@@ -158,6 +208,7 @@ def main() -> None:
         hidden_dim=args.hidden_dim,
     )
     output_path = Path(args.output_json)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2))
 
