@@ -660,6 +660,56 @@ def aspect_text(summary: dict[str, Any], aspect: str) -> str:
     return clean_text(summary)
 
 
+TRIAL2VEC_COLUMNS = (
+    "nct_id",
+    "description",
+    "title",
+    "intervention_name",
+    "disease",
+    "keyword",
+    "outcome_measure",
+    "criteria",
+    "reference",
+    "overall_status",
+)
+
+
+def summary_to_trial2vec_row(summary: dict[str, Any]) -> dict[str, str]:
+    endpoints = summary.get("endpoints", {}).get("primary", [])
+    endpoint_titles = [endpoint.get("title", "") for endpoint in endpoints]
+    population = summary.get("population", {})
+    criteria = clean_text(
+        {
+            "inclusion": population.get("key_inclusion", []),
+            "exclusion": population.get("key_exclusion", []),
+        }
+    )
+    row = {
+        "nct_id": clean_text(summary.get("nct_id", "")),
+        "description": clean_text(
+            [
+                summary.get("brief_summary", ""),
+                summary.get("one_paragraph_summary_for_embedding", ""),
+            ]
+        ),
+        "title": clean_text(summary.get("brief_title", summary.get("title", ""))),
+        "intervention_name": clean_text(summary.get("intervention", {})),
+        "disease": clean_text(summary.get("cancer_type", {})),
+        "keyword": clean_text(
+            [
+                summary.get("phase", ""),
+                summary.get("status", ""),
+                summary.get("design", {}),
+            ]
+        ),
+        "outcome_measure": clean_text(endpoint_titles),
+        "criteria": criteria,
+        "reference": "",
+        "overall_status": clean_text(summary.get("status", "")),
+    }
+    return {column: row[column] for column in TRIAL2VEC_COLUMNS}
+
+
 def hashing_embedding(text: str, dim: int = 2048) -> np.ndarray:
     vec = np.zeros(dim, dtype=np.float32)
     tokens = re.findall(r"[a-zA-Z0-9][a-zA-Z0-9+\-/_.]+", text.lower())
