@@ -122,5 +122,56 @@ class MixturePriorTest(unittest.TestCase):
             )
 
 
+class MixturePriorComponentTests(unittest.TestCase):
+    def test_components_from_reranked_rows_use_stage2_fields(self) -> None:
+        rows = [
+            {
+                "candidate_nct_id": "NCTHIST1",
+                "overall_similarity_score": 80.0,
+                "suggested_borrowing_discount": 0.75,
+                "dimension_scores": {
+                    "disease_biology_match": 5.0,
+                    "endpoint_estimand_match": 5.0,
+                    "result_usability": 5.0,
+                },
+                "red_flags": [],
+                "borrowable_quantities": [
+                    {
+                        "endpoint": "Objective Response Rate",
+                        "endpoint_family": "ORR/CR/PR",
+                        "arm_results": [{"arm": "Experimental", "count": 20, "denominator": 50}],
+                    }
+                ],
+            },
+            {
+                "candidate_nct_id": "NCTHIST2",
+                "overall_similarity_score": 65.0,
+                "suggested_borrowing_discount": 0.4,
+                "dimension_scores": {
+                    "disease_biology_match": 1.0,
+                    "endpoint_estimand_match": 5.0,
+                    "result_usability": 5.0,
+                },
+                "red_flags": ["Low disease biology match."],
+                "borrowable_quantities": [
+                    {
+                        "endpoint": "Objective Response Rate",
+                        "endpoint_family": "ORR/CR/PR",
+                        "arm_results": [{"arm": "Experimental", "count": 8, "denominator": 40}],
+                    }
+                ],
+            },
+        ]
+
+        components = mixture_prior.components_from_reranked_rows(rows, endpoint_key="ORR", lambda0=0.2)
+
+        self.assertEqual(len(components["components"]), 2)
+        self.assertAlmostEqual(components["lambda_0"], 0.2)
+        self.assertAlmostEqual(sum(row["lambda_rule"] for row in components["components"]), 0.8)
+        self.assertGreater(components["components"][0]["lambda_rule"], components["components"][1]["lambda_rule"])
+        self.assertEqual(components["components"][0]["alpha"], 16.0)
+        self.assertEqual(components["components"][0]["beta"], 23.5)
+
+
 if __name__ == "__main__":
     unittest.main()

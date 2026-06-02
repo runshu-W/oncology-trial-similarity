@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 
 def _validate_integer(name: str, value: int) -> None:
@@ -45,6 +46,79 @@ def _validate_component_lambda(component_lambda: float) -> float:
     if component_lambda < 0:
         raise ValueError("component lambda must be non-negative")
     return component_lambda
+
+
+def _optional_finite_number(value: Any) -> float | None:
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric_value):
+        return None
+    return numeric_value
+
+
+def _canonical_endpoint_key(
+    family: str | None,
+    title: str | None,
+    time_frame: str | None = "",
+) -> str | None:
+    combined = " ".join(str(value).lower() for value in (family, title, time_frame) if value)
+    if not combined:
+        return None
+
+    if "orr" in combined or "response" in combined or "complete response" in combined:
+        return "ORR"
+    if "pfs6" in combined or (
+        "progression" in combined and "6" in combined and "month" in combined
+    ):
+        return "PFS6"
+    return None
+
+
+def _selected_treatment_observation(rows: Any) -> tuple[float, float, float] | None:
+    if not isinstance(rows, list):
+        return None
+
+    excluded_arm_terms = ("placebo", "control", "comparator")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        arm = str(row.get("arm") or "").lower()
+        if any(term in arm for term in excluded_arm_terms):
+            continue
+
+        count = _optional_finite_number(row.get("count"))
+        denominator = _optional_finite_number(row.get("denominator"))
+        if count is None or denominator is None:
+            continue
+        if count < 0 or denominator <= 0 or count > denominator:
+            continue
+
+        return count, denominator, count / denominator
+
+    return None
+
+
+def conservative_gate(dimension_scores: dict[str, Any], red_flags: list[Any]) -> float:
+    endpoint = _optional_finite_number(dimension_scores.get("endpoint_estimand_match")) or 0.0
+    result = _optional_finite_number(dimension_scores.get("result_usability")) or 0.0
+    disease = _optional_finite_number(dimension_scores.get("disease_biology_match")) or 0.0
+
+    if endpoint < 1.5 or result <= 0:
+        return 0.0
+
+    gate = 1.0
+    if disease < 1.5:
+        gate *= 0.2
+    elif disease < 2.5:
+        gate *= 0.6
+
+    if any("Low " in str(flag) for flag in red_flags):
+        gate *= 0.5
+
+    return gate
 
 
 def _log_choose(n: int, y: int) -> float:
@@ -92,6 +166,85 @@ def normalize_lambdas(raw_weights: list[float], lambda0: float = 0.2) -> dict[st
     candidate_budget = 1.0 - lambda0
     lambdas = [candidate_budget * weight / total for weight in clipped_weights]
     return {"lambda_0": float(lambda0), "lambda_i": lambdas}
+
+
+def components_from_reranked_rows(
+    rows: list[dict[str, Any]],
+    endpoint_key: str,
+    lambda0: float = 0.2,
+) -> dict[str, Any]:
+    """Build rule-weighted beta components from Stage-2 reranked candidate rows."""
+    target_endpoint_key = str(endpoint_key).strip().upper()
+    components: list[dict[str, Any]] = []
+    raw_weights: list[float] = []
+
+    for row in rows[:10]:
+        if not isinstance(row, dict):
+            continue
+
+        discount = _optional_finite_number(row.get("suggested_borrowing_discount"))
+        if discount is None:
+            discount = 0.0
+        discount = max(0.0, min(1.0, discount))
+
+        selected_observation = None
+        quantities = row.get("borrowable_quantities")
+        if not isinstance(quantities, list):
+            quantities = []
+
+        for quantity in quantities:
+            if not isinstance(quantity, dict):
+                continue
+
+            candidate_key = _canonical_endpoint_key(
+                quantity.get("endpoint_family"),
+                quantity.get("endpoint"),
+                quantity.get("time_frame", ""),
+            )
+            if candidate_key != target_endpoint_key:
+                continue
+
+            selected_observation = _selected_treatment_observation(quantity.get("arm_results"))
+            if selected_observation is not None:
+                break
+
+        if selected_observation is None:
+            continue
+
+        y_i, n_i, rate = selected_observation
+        dimension_scores = row.get("dimension_scores")
+        if not isinstance(dimension_scores, dict):
+            dimension_scores = {}
+        red_flags = row.get("red_flags")
+        if not isinstance(red_flags, list):
+            red_flags = []
+
+        overall = _optional_finite_number(row.get("overall_similarity_score")) or 0.0
+        gate = conservative_gate(dimension_scores, red_flags)
+        raw_weight = gate * discount * max(0.0, overall) / 100.0 * math.log1p(n_i)
+
+        components.append(
+            {
+                "candidate_nct_id": row.get("candidate_nct_id"),
+                "endpoint_key": target_endpoint_key,
+                "count": y_i,
+                "denominator": n_i,
+                "rate": rate,
+                "discount": discount,
+                "gate": gate,
+                "raw_weight": raw_weight,
+                "alpha": 1.0 + discount * y_i,
+                "beta": 1.0 + discount * (n_i - y_i),
+            }
+        )
+        raw_weights.append(raw_weight)
+
+    normalized = normalize_lambdas(raw_weights, lambda0=lambda0)
+    lambdas = normalized["lambda_i"]
+    for component, lambda_rule in zip(components, lambdas):
+        component["lambda_rule"] = lambda_rule
+
+    return {"lambda_0": normalized["lambda_0"], "components": components}
 
 
 def mixture_predictive_probability(
