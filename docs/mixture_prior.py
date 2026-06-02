@@ -67,6 +67,8 @@ def _canonical_endpoint_key(
     if not combined:
         return None
 
+    if "duration of response" in combined or "dor" in combined:
+        return None
     if "orr" in combined or "response" in combined or "complete response" in combined:
         return "ORR"
     if "pfs6" in combined or (
@@ -80,12 +82,20 @@ def _selected_treatment_observation(rows: Any) -> tuple[float, float, float] | N
     if not isinstance(rows, list):
         return None
 
-    excluded_arm_terms = ("placebo", "control", "comparator")
+    excluded_arm_terms = (
+        "placebo",
+        "control",
+        "comparator",
+        "standard of care",
+        "standard care",
+        "best supportive",
+        "observation",
+    )
     for row in rows:
         if not isinstance(row, dict):
             continue
 
-        arm = str(row.get("arm") or "").lower()
+        arm = str(row.get("arm") or "").lower().replace("-", " ")
         if any(term in arm for term in excluded_arm_terms):
             continue
 
@@ -104,7 +114,9 @@ def _selected_treatment_observation(rows: Any) -> tuple[float, float, float] | N
 def conservative_gate(dimension_scores: dict[str, Any], red_flags: list[Any]) -> float:
     endpoint = _optional_finite_number(dimension_scores.get("endpoint_estimand_match")) or 0.0
     result = _optional_finite_number(dimension_scores.get("result_usability")) or 0.0
-    disease = _optional_finite_number(dimension_scores.get("disease_biology_match")) or 0.0
+    disease = _optional_finite_number(dimension_scores.get("disease_population_match"))
+    if disease is None:
+        disease = _optional_finite_number(dimension_scores.get("disease_biology_match")) or 0.0
 
     if endpoint < 1.5 or result <= 0:
         return 0.0
@@ -188,6 +200,7 @@ def components_from_reranked_rows(
         discount = max(0.0, min(1.0, discount))
 
         selected_observation = None
+        selected_quantity: dict[str, Any] | None = None
         quantities = row.get("borrowable_quantities")
         if not isinstance(quantities, list):
             quantities = []
@@ -206,9 +219,10 @@ def components_from_reranked_rows(
 
             selected_observation = _selected_treatment_observation(quantity.get("arm_results"))
             if selected_observation is not None:
+                selected_quantity = quantity
                 break
 
-        if selected_observation is None:
+        if selected_observation is None or selected_quantity is None:
             continue
 
         y_i, n_i, rate = selected_observation
@@ -221,23 +235,29 @@ def components_from_reranked_rows(
 
         overall = _optional_finite_number(row.get("overall_similarity_score")) or 0.0
         gate = conservative_gate(dimension_scores, red_flags)
-        raw_weight = gate * discount * max(0.0, overall) / 100.0 * math.log1p(n_i)
+        raw_rule_weight = gate * discount * max(0.0, overall) / 100.0 * math.log1p(n_i)
+        nct_id = row.get("candidate_nct_id") or row.get("nct_id")
+        endpoint = selected_quantity.get("endpoint")
 
         components.append(
             {
-                "candidate_nct_id": row.get("candidate_nct_id"),
+                "nct_id": nct_id,
+                "endpoint": endpoint,
+                "overall_similarity_score": overall,
                 "endpoint_key": target_endpoint_key,
                 "count": y_i,
                 "denominator": n_i,
                 "rate": rate,
                 "discount": discount,
                 "gate": gate,
-                "raw_weight": raw_weight,
+                "raw_rule_weight": raw_rule_weight,
                 "alpha": 1.0 + discount * y_i,
                 "beta": 1.0 + discount * (n_i - y_i),
+                "candidate_nct_id": row.get("candidate_nct_id"),
+                "raw_weight": raw_rule_weight,
             }
         )
-        raw_weights.append(raw_weight)
+        raw_weights.append(raw_rule_weight)
 
     normalized = normalize_lambdas(raw_weights, lambda0=lambda0)
     lambdas = normalized["lambda_i"]

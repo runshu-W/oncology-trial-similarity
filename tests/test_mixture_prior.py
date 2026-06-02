@@ -123,6 +123,28 @@ class MixturePriorTest(unittest.TestCase):
 
 
 class MixturePriorComponentTests(unittest.TestCase):
+    def _component_row(self, **overrides):
+        row = {
+            "candidate_nct_id": "NCTHIST",
+            "overall_similarity_score": 80.0,
+            "suggested_borrowing_discount": 0.5,
+            "dimension_scores": {
+                "disease_population_match": 5.0,
+                "endpoint_estimand_match": 5.0,
+                "result_usability": 5.0,
+            },
+            "red_flags": [],
+            "borrowable_quantities": [
+                {
+                    "endpoint": "Objective Response Rate",
+                    "endpoint_family": "ORR/CR/PR",
+                    "arm_results": [{"arm": "Experimental", "count": 10, "denominator": 40}],
+                }
+            ],
+        }
+        row.update(overrides)
+        return row
+
     def test_components_from_reranked_rows_use_stage2_fields(self) -> None:
         rows = [
             {
@@ -171,6 +193,91 @@ class MixturePriorComponentTests(unittest.TestCase):
         self.assertGreater(components["components"][0]["lambda_rule"], components["components"][1]["lambda_rule"])
         self.assertEqual(components["components"][0]["alpha"], 16.0)
         self.assertEqual(components["components"][0]["beta"], 23.5)
+
+    def test_components_include_planned_downstream_schema_fields(self) -> None:
+        row = self._component_row(
+            candidate_nct_id=None,
+            nct_id="NCTFALLBACK",
+            overall_similarity_score=77.0,
+        )
+
+        components = mixture_prior.components_from_reranked_rows([row], endpoint_key="ORR")
+        component = components["components"][0]
+
+        expected_fields = {
+            "nct_id",
+            "endpoint",
+            "count",
+            "denominator",
+            "rate",
+            "discount",
+            "gate",
+            "overall_similarity_score",
+            "alpha",
+            "beta",
+            "raw_rule_weight",
+            "lambda_rule",
+        }
+        self.assertTrue(expected_fields.issubset(component))
+        self.assertEqual(component["nct_id"], "NCTFALLBACK")
+        self.assertEqual(component["endpoint"], "Objective Response Rate")
+        self.assertEqual(component["overall_similarity_score"], 77.0)
+        self.assertIn("raw_rule_weight", component)
+
+    def test_conservative_gate_prefers_disease_population_match(self) -> None:
+        gate = mixture_prior.conservative_gate(
+            {
+                "disease_population_match": 5.0,
+                "disease_biology_match": 1.0,
+                "endpoint_estimand_match": 5.0,
+                "result_usability": 5.0,
+            },
+            [],
+        )
+
+        self.assertEqual(gate, 1.0)
+
+    def test_selected_treatment_observation_skips_standard_of_care(self) -> None:
+        observation = mixture_prior._selected_treatment_observation(
+            [
+                {"arm": "Standard of Care", "count": 1, "denominator": 20},
+                {"arm": "Experimental", "count": 12, "denominator": 30},
+            ]
+        )
+
+        self.assertEqual(observation, (12.0, 30.0, 0.4))
+
+    def test_dor_quantity_is_ignored_for_orr_endpoint(self) -> None:
+        row = self._component_row(
+            borrowable_quantities=[
+                {
+                    "endpoint": "Duration of Response",
+                    "endpoint_family": "DOR",
+                    "arm_results": [{"arm": "Experimental", "count": 10, "denominator": 40}],
+                }
+            ]
+        )
+
+        components = mixture_prior.components_from_reranked_rows([row], endpoint_key="ORR")
+
+        self.assertEqual(components, {"lambda_0": 1.0, "components": []})
+
+    def test_pfs6_canonicalization_matches_progression_six_month_endpoint(self) -> None:
+        row = self._component_row(
+            borrowable_quantities=[
+                {
+                    "endpoint": "Progression-free survival",
+                    "endpoint_family": "PFS",
+                    "time_frame": "6 months",
+                    "arm_results": [{"arm": "Experimental", "count": 18, "denominator": 50}],
+                }
+            ]
+        )
+
+        components = mixture_prior.components_from_reranked_rows([row], endpoint_key="PFS6")
+
+        self.assertEqual(len(components["components"]), 1)
+        self.assertEqual(components["components"][0]["endpoint"], "Progression-free survival")
 
 
 if __name__ == "__main__":
