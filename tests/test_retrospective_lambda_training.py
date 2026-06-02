@@ -223,6 +223,40 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
             summary = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(summary["epochs"], 1)
 
+    def test_main_rejects_both_example_sources(self):
+        module = load_training_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            examples_path = tmp_path / "examples.jsonl"
+            pipeline_path = tmp_path / "pipeline.jsonl"
+            output_path = tmp_path / "summary.json"
+            examples_path.write_text(json.dumps(self.base_example()) + "\n", encoding="utf-8")
+            pipeline_path.write_text(json.dumps(self.pipeline_result()) + "\n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit):
+                module.main(
+                    [
+                        "--examples-jsonl",
+                        str(examples_path),
+                        "--pipeline-results-jsonl",
+                        str(pipeline_path),
+                        "--output-json",
+                        str(output_path),
+                        "--epochs",
+                        "1",
+                        "--hidden-dim",
+                        "6",
+                    ]
+                )
+
+    def test_main_rejects_missing_example_source(self):
+        module = load_training_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "summary.json"
+
+            with self.assertRaises(SystemExit):
+                module.main(["--output-json", str(output_path)])
+
     def pipeline_result(self):
         return {
             "query_summary": {
@@ -275,7 +309,24 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
         self.assertEqual(example["query"], {"count": 12, "denominator": 40})
         self.assertEqual(len(example["features"]), 1)
         self.assertEqual(len(example["components"]), 1)
-        self.assertGreater(example["features"][0][0], 0.0)
+        self.assertEqual(len(example["features"][0]), 5)
+        self.assertAlmostEqual(example["features"][0][0], 0.82)
+        self.assertAlmostEqual(example["features"][0][1], 0.4)
+        self.assertAlmostEqual(example["features"][0][2], 0.75)
+        self.assertAlmostEqual(example["features"][0][3], math.log1p(50.0))
+        self.assertGreater(example["features"][0][4], 0.0)
+        self.assertAlmostEqual(example["components"][0]["alpha"], 16.0)
+        self.assertAlmostEqual(example["components"][0]["beta"], 23.5)
+        self.assertAlmostEqual(example["components"][0]["denominator"], 50.0)
+        self.assertAlmostEqual(example["components"][0]["discount"], 0.75)
+        self.assertAlmostEqual(sum(example["lambda_rule"]) + example["lambda_0"], 1.0)
+
+    def test_build_training_example_raises_for_missing_endpoint_key(self) -> None:
+        module = load_training_module()
+        result = self.pipeline_result()
+
+        with self.assertRaisesRegex(ValueError, "endpoint DCR"):
+            module.build_training_example_from_pipeline_result(result, endpoint_key="DCR")
 
     def test_main_builds_examples_from_pipeline_results_jsonl(self):
         module = load_training_module()

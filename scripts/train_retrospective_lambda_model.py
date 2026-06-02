@@ -278,16 +278,14 @@ def train_model(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--examples-jsonl", type=Path, default=None)
-    parser.add_argument("--pipeline-results-jsonl", type=Path, default=None)
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--examples-jsonl", type=Path, default=None)
+    source_group.add_argument("--pipeline-results-jsonl", type=Path, default=None)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--hidden-dim", type=int, default=16)
     args = parser.parse_args(argv)
-
-    if args.examples_jsonl is None and args.pipeline_results_jsonl is None:
-        parser.error("one of --examples-jsonl or --pipeline-results-jsonl is required")
 
     examples = []
     if args.examples_jsonl is not None:
