@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -867,6 +868,100 @@ def weighted_similarity(query: dict[str, np.ndarray], candidate: dict[str, np.nd
     return score, by_aspect
 
 
+def score_trial2vec_index(
+    query_vector: np.ndarray,
+    trial2vec_index_path: Path,
+    excluded_nct_id: str,
+    top_k: int,
+) -> list[dict[str, Any]]:
+    index = np.load(trial2vec_index_path, allow_pickle=False)
+    nct_ids = index["nct_ids"]
+    embeddings = index["embeddings"]
+    query = np.asarray(query_vector, dtype=np.float32).reshape(-1)
+    scored = []
+    for idx, nct_id_raw in enumerate(nct_ids):
+        nct_id = str(nct_id_raw)
+        if nct_id == excluded_nct_id:
+            continue
+        score = cosine(query, np.asarray(embeddings[idx], dtype=np.float32).reshape(-1))
+        scored.append(
+            {
+                "nct_id": nct_id,
+                "score": score,
+                "score_0_100": round(100 * max(0.0, score), 2),
+                "aspect_scores": {},
+                "retrieval_backend": "trial2vec",
+            }
+        )
+    scored.sort(key=lambda row: row["score"], reverse=True)
+    top_rows = scored[:top_k]
+    for rank, row in enumerate(top_rows, start=1):
+        row["retrieval_rank"] = rank
+    return top_rows
+
+
+def make_compatible_torch_load(original_torch_load: Any) -> Any:
+    try:
+        supports_weights_only = "weights_only" in inspect.signature(original_torch_load).parameters
+    except (TypeError, ValueError):
+        supports_weights_only = False
+
+    def compatible_torch_load(*args: Any, **kwargs: Any) -> Any:
+        if supports_weights_only and "weights_only" not in kwargs:
+            kwargs["weights_only"] = False
+        return original_torch_load(*args, **kwargs)
+
+    return compatible_torch_load
+
+
+def make_compatible_load_state_dict(original_load_state_dict: Any) -> Any:
+    def compatible_load_state_dict(
+        module: Any,
+        state_dict: dict[str, Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        if not args and "strict" not in kwargs:
+            kwargs["strict"] = False
+        return original_load_state_dict(module, state_dict, *args, **kwargs)
+
+    return compatible_load_state_dict
+
+
+def load_trial2vec_search_dependencies() -> tuple[Any, Any, Any]:
+    try:
+        import pandas as pd
+        import torch
+        from trial2vec import Trial2Vec
+    except ImportError as exc:
+        raise RuntimeError(
+            "Trial2Vec retrieval requires optional Trial2Vec search dependencies: "
+            "pandas, torch, and trial2vec."
+        ) from exc
+    return pd, torch, Trial2Vec
+
+
+def encode_trial2vec_query(query_row: dict[str, str], trial2vec_model_dir: Path) -> np.ndarray:
+    pd, torch, Trial2Vec = load_trial2vec_search_dependencies()
+    model = Trial2Vec(device="cpu")
+
+    original_torch_load = torch.load
+    original_load_state_dict = torch.nn.Module.load_state_dict
+    torch.load = make_compatible_torch_load(original_torch_load)
+    torch.nn.Module.load_state_dict = make_compatible_load_state_dict(original_load_state_dict)
+    try:
+        model.from_pretrained(str(trial2vec_model_dir))
+    finally:
+        torch.load = original_torch_load
+        torch.nn.Module.load_state_dict = original_load_state_dict
+
+    _, embeddings = model.encode({"x": pd.DataFrame([query_row])}, return_dict=False)
+    embeddings = np.asarray(embeddings, dtype=np.float32)
+    if embeddings.shape[0] < 1:
+        raise RuntimeError("Trial2Vec did not return a query embedding.")
+    return embeddings[0]
+
+
 def build_index(
     db_root: Path,
     output_dir: Path,
@@ -954,6 +1049,32 @@ def load_summaries(path: Path) -> dict[str, dict[str, Any]]:
                     "source_documents": item.get("source_documents", {}),
                 }
     return records
+
+
+def enrich_candidate_row(row: dict[str, Any], candidate_summary: dict[str, Any]) -> dict[str, Any]:
+    borrowing = candidate_summary.get("borrowing_relevance", {})
+    row.update(
+        {
+            "title": candidate_summary.get("brief_title", ""),
+            "phase": candidate_summary.get("phase", ""),
+            "status": candidate_summary.get("status", ""),
+            "cancer_type": candidate_summary.get("cancer_type", {}),
+            "population": candidate_summary.get("population", {}),
+            "intervention": candidate_summary.get("intervention", {}),
+            "design": candidate_summary.get("design", {}),
+            "endpoints": candidate_summary.get("endpoints", {}),
+            "results": candidate_summary.get("results", {}),
+            "result_usability": {
+                "has_posted_results": candidate_summary.get("results", {}).get("has_posted_results"),
+                "denominators_available": bool(candidate_summary.get("results", {}).get("denominators")),
+                "source_documents": candidate_summary.get("source_documents", {}),
+            },
+            "similarity_drivers": borrowing.get("major_similarity_drivers", []),
+            "nonborrowability_risks": borrowing.get("major_nonborrowability_risks", []),
+            "borrowable_quantities": borrowing.get("borrowable_quantities", []),
+        }
+    )
+    return row
 
 
 def normalized_values(value: Any) -> set[str]:
@@ -1653,16 +1774,34 @@ def search(
     embedding_model: str | None = None,
     embedding_batch_size: int = 16,
     embedding_max_length: int = 256,
+    retrieval_backend: str = DEFAULT_RETRIEVAL_BACKEND,
+    trial2vec_index_path: Path | None = None,
+    trial2vec_model_dir: Path | None = None,
 ) -> dict[str, Any]:
+    ensure_supported_retrieval_backend(retrieval_backend)
     if not query_json.exists():
         raise FileNotFoundError(f"Query JSON does not exist: {query_json}")
     embeddings_path = index_dir / "trial_embeddings.npz"
     summaries_path = index_dir / "trial_summaries.jsonl"
-    if not embeddings_path.exists() or not summaries_path.exists():
+    if retrieval_backend == "clinicalbert" and (not embeddings_path.exists() or not summaries_path.exists()):
         raise FileNotFoundError(
             "Index files were not found. Run build-index first, or pass the correct --index-dir. "
             f"Expected: {embeddings_path} and {summaries_path}"
         )
+    if retrieval_backend == "trial2vec":
+        if trial2vec_index_path is None:
+            raise ValueError("--trial2vec-index-path is required when --retrieval-backend=trial2vec.")
+        if trial2vec_model_dir is None:
+            raise ValueError("--trial2vec-model-dir is required when --retrieval-backend=trial2vec.")
+        if not summaries_path.exists():
+            raise FileNotFoundError(
+                "Trial summaries were not found. Run build-index first, or pass the correct --index-dir. "
+                f"Expected: {summaries_path}"
+            )
+        if not trial2vec_index_path.exists():
+            raise FileNotFoundError(f"Trial2Vec index file does not exist: {trial2vec_index_path}")
+        if not trial2vec_model_dir.exists():
+            raise FileNotFoundError(f"Trial2Vec model directory does not exist: {trial2vec_model_dir}")
 
     tmp_folder = query_json.parent
     raw = read_json(query_json)
@@ -1678,73 +1817,85 @@ def search(
     )
     query_summary = make_rule_based_summary(record.extracted)
 
-    embeddings_file = np.load(embeddings_path, allow_pickle=False)
-    stored_backend = str(embeddings_file["embedding_backend"][0]) if "embedding_backend" in embeddings_file else "hashing"
-    stored_model = str(embeddings_file["embedding_model"][0]) if "embedding_model" in embeddings_file else "signed-token-hashing-2048"
-    active_backend = embedding_backend or stored_backend
-    active_model = embedding_model or (stored_model if active_backend != "hashing" else DEFAULT_CLINICALBERT_MODEL)
-    if active_backend != stored_backend:
-        raise ValueError(
-            f"Query embedding backend ({active_backend}) does not match index backend ({stored_backend}). "
-            "Rebuild the index with the desired backend or pass the matching --embedding-backend."
-        )
-    query_embedder = make_embedder(
-        active_backend,
-        model_name=active_model,
-        batch_size=embedding_batch_size,
-        max_length=embedding_max_length,
-    )
-    query_emb = summary_embedding(query_summary, query_embedder)
-    embeddings = {
-        "nct_ids": embeddings_file["nct_ids"],
-        **{aspect: embeddings_file[aspect] for aspect in ASPECT_WEIGHTS},
-    }
     summaries = load_summaries(summaries_path)
-    nct_ids = embeddings["nct_ids"]
     scored = []
+    result_embedding_backend = ""
+    result_embedding_model = ""
 
-    for idx, nct_id_raw in enumerate(nct_ids):
-        nct_id = str(nct_id_raw)
-        if nct_id == query_summary.get("nct_id"):
-            continue
-        by_aspect = {}
-        score = 0.0
-        for aspect, weight in ASPECT_WEIGHTS.items():
-            sim = cosine(query_emb[aspect], embeddings[aspect][idx])
-            by_aspect[aspect] = sim
-            score += weight * sim
-        candidate_summary = summaries.get(nct_id, {})
-        borrowing = candidate_summary.get("borrowing_relevance", {})
-        scored.append(
-            {
-                "nct_id": nct_id,
-                "score": score,
-                "score_0_100": round(100 * max(0.0, score), 2),
-                "aspect_scores": {k: round(v, 4) for k, v in by_aspect.items()},
-                "title": candidate_summary.get("brief_title", ""),
-                "phase": candidate_summary.get("phase", ""),
-                "status": candidate_summary.get("status", ""),
-                "cancer_type": candidate_summary.get("cancer_type", {}),
-                "intervention": candidate_summary.get("intervention", {}),
-                "design": candidate_summary.get("design", {}),
-                "results": candidate_summary.get("results", {}),
-                "result_usability": {
-                    "has_posted_results": candidate_summary.get("results", {}).get("has_posted_results"),
-                    "denominators_available": bool(candidate_summary.get("results", {}).get("denominators")),
-                    "source_documents": candidate_summary.get("source_documents", {}),
-                },
-                "similarity_drivers": borrowing.get("major_similarity_drivers", []),
-                "nonborrowability_risks": borrowing.get("major_nonborrowability_risks", []),
-                "borrowable_quantities": borrowing.get("borrowable_quantities", []),
-            }
+    if retrieval_backend == "clinicalbert":
+        embeddings_file = np.load(embeddings_path, allow_pickle=False)
+        stored_backend = str(embeddings_file["embedding_backend"][0]) if "embedding_backend" in embeddings_file else "hashing"
+        stored_model = str(embeddings_file["embedding_model"][0]) if "embedding_model" in embeddings_file else "signed-token-hashing-2048"
+        active_backend = embedding_backend or stored_backend
+        active_model = embedding_model or (stored_model if active_backend != "hashing" else DEFAULT_CLINICALBERT_MODEL)
+        if active_backend != stored_backend:
+            raise ValueError(
+                f"Query embedding backend ({active_backend}) does not match index backend ({stored_backend}). "
+                "Rebuild the index with the desired backend or pass the matching --embedding-backend."
+            )
+        query_embedder = make_embedder(
+            active_backend,
+            model_name=active_model,
+            batch_size=embedding_batch_size,
+            max_length=embedding_max_length,
         )
+        query_emb = summary_embedding(query_summary, query_embedder)
+        embeddings = {
+            "nct_ids": embeddings_file["nct_ids"],
+            **{aspect: embeddings_file[aspect] for aspect in ASPECT_WEIGHTS},
+        }
+        nct_ids = embeddings["nct_ids"]
 
-    scored.sort(key=lambda x: x["score"], reverse=True)
+        for idx, nct_id_raw in enumerate(nct_ids):
+            nct_id = str(nct_id_raw)
+            if nct_id == query_summary.get("nct_id"):
+                continue
+            by_aspect = {}
+            score = 0.0
+            for aspect, weight in ASPECT_WEIGHTS.items():
+                sim = cosine(query_emb[aspect], embeddings[aspect][idx])
+                by_aspect[aspect] = sim
+                score += weight * sim
+            scored.append(
+                enrich_candidate_row(
+                    {
+                        "nct_id": nct_id,
+                        "score": score,
+                        "score_0_100": round(100 * max(0.0, score), 2),
+                        "aspect_scores": {k: round(v, 4) for k, v in by_aspect.items()},
+                        "retrieval_backend": "clinicalbert",
+                    },
+                    summaries.get(nct_id, {}),
+                )
+            )
+
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        result_embedding_backend = stored_backend
+        result_embedding_model = stored_model
+    elif retrieval_backend == "trial2vec":
+        assert trial2vec_index_path is not None
+        assert trial2vec_model_dir is not None
+        query_row = summary_to_trial2vec_row(query_summary)
+        query_vector = encode_trial2vec_query(query_row, trial2vec_model_dir)
+        scored = score_trial2vec_index(
+            query_vector,
+            trial2vec_index_path,
+            excluded_nct_id=query_summary.get("nct_id", ""),
+            top_k=max(rerank_top_n, top_k),
+        )
+        scored = [
+            enrich_candidate_row(row, summaries.get(row["nct_id"], {}))
+            for row in scored
+        ]
+        result_embedding_backend = "trial2vec"
+        result_embedding_model = str(trial2vec_model_dir)
+
     top_matches = scored[:top_k]
     result = {
         "query_summary": query_summary,
-        "embedding_backend": stored_backend,
-        "embedding_model": stored_model,
+        "retrieval_backend": retrieval_backend,
+        "embedding_backend": result_embedding_backend,
+        "embedding_model": result_embedding_model,
         "top_matches": top_matches,
         "top10": top_matches[: min(top_k, 10)],
     }
@@ -1821,6 +1972,13 @@ def main() -> None:
     query.add_argument("--embedding-batch-size", type=int, default=16)
     query.add_argument("--embedding-max-length", type=int, default=256)
     query.add_argument(
+        "--retrieval-backend",
+        choices=list(RETRIEVAL_BACKENDS),
+        default=DEFAULT_RETRIEVAL_BACKEND,
+    )
+    query.add_argument("--trial2vec-index-path", type=Path, default=None)
+    query.add_argument("--trial2vec-model-dir", type=Path, default=None)
+    query.add_argument(
         "--rerank",
         action="store_true",
         help="Run deterministic prior-borrowing rerank over the first-stage candidates.",
@@ -1873,6 +2031,9 @@ def main() -> None:
             embedding_model=args.embedding_model,
             embedding_batch_size=args.embedding_batch_size,
             embedding_max_length=args.embedding_max_length,
+            retrieval_backend=args.retrieval_backend,
+            trial2vec_index_path=args.trial2vec_index_path,
+            trial2vec_model_dir=args.trial2vec_model_dir,
         )
         text = json.dumps(result, indent=2, ensure_ascii=False)
         if args.output:

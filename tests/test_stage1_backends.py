@@ -106,6 +106,29 @@ class Stage1BackendTests(unittest.TestCase):
                 self.assertEqual(row["disease"], "")
                 self.assertEqual(row["intervention_name"], "")
 
+    def test_trial2vec_index_search_uses_cosine_scores(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        import numpy as np
+
+        query_vector = np.array([1.0, 0.0], dtype=np.float32)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "trial2vec_embeddings.npz"
+            np.savez_compressed(
+                path,
+                nct_ids=np.array(["NCT1", "NCT2"]),
+                embeddings=np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+                retrieval_backend=np.array(["trial2vec"]),
+            )
+
+            rows = pipeline.score_trial2vec_index(query_vector, path, excluded_nct_id="NCTQUERY", top_k=2)
+
+        self.assertEqual([row["nct_id"] for row in rows], ["NCT1", "NCT2"])
+        self.assertEqual(rows[0]["retrieval_backend"], "trial2vec")
+        self.assertEqual(rows[0]["score_0_100"], 100.0)
+        self.assertEqual(rows[1]["score_0_100"], 0.0)
+
 
 class Trial2VecIndexBuilderTests(unittest.TestCase):
     def test_builder_import_does_not_require_optional_ml_dependencies(self) -> None:
