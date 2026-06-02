@@ -16,6 +16,14 @@ from typing import Any
 
 import numpy as np
 
+try:
+    import mixture_prior
+except ImportError:
+    try:
+        from . import mixture_prior
+    except ImportError:
+        mixture_prior = None
+
 
 DEFAULT_DB_ROOT = Path(
     "/Users/wang/PHD/clinic.gov/Oncology_All_Trials/Oncology_All_Trials"
@@ -1665,6 +1673,11 @@ def add_bayesian_analysis(result: dict[str, Any]) -> dict[str, Any]:
             "historical_trial_count": len(historical),
             "effective_sample_size": observed_summary["effective_sample_size"],
             "weighted_historical_rate": observed_summary["weighted_rate"],
+            "mixture_prior": (
+                mixture_prior.components_from_reranked_rows(rows, endpoint_key, lambda0=0.2)
+                if mixture_prior is not None
+                else {"lambda_0": 1.0, "components": []}
+            ),
             "mixture_weight_pi": borrowing_pi_summaries(weights),
             "weight_sensitivity": sensitivity,
             "success_probability_grid": observed_summary["success_probability_grid"],

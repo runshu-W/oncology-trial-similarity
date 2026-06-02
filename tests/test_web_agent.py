@@ -144,6 +144,16 @@ class WebAgentTests(unittest.TestCase):
         self.assertEqual(endpoint["endpoint_family"], "ORR")
         self.assertEqual(endpoint["analysis_mode"], "posterior")
         self.assertGreater(endpoint["effective_sample_size"], 0)
+        mixture = endpoint["mixture_prior"]
+        self.assertIn("lambda_0", mixture)
+        self.assertIn("components", mixture)
+        self.assertGreaterEqual(mixture["lambda_0"], 0.0)
+        self.assertLessEqual(mixture["lambda_0"], 1.0)
+        self.assertAlmostEqual(
+            mixture["lambda_0"] + sum(component["lambda_rule"] for component in mixture["components"]),
+            1.0,
+            places=6,
+        )
         self.assertIn("observed_weights", {row["scenario"] for row in endpoint["weight_sensitivity"]})
         self.assertTrue(endpoint["success_probability_grid"])
         self.assertTrue(endpoint["tipping_points"])
