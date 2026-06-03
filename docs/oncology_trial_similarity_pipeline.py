@@ -64,6 +64,7 @@ ASPECT_WEIGHTS = {
 
 DEFAULT_CLINICALBERT_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
 DEFAULT_RETRIEVAL_BACKEND = "clinicalbert"
+DEFAULT_INDEX_EMBEDDING_BACKEND = "clinicalbert"
 RETRIEVAL_BACKENDS = ("clinicalbert", "trial2vec", "secret")
 
 
@@ -999,7 +1000,7 @@ def encode_trial2vec_query(query_row: dict[str, str], trial2vec_model_dir: Path)
 def build_index(
     db_root: Path,
     output_dir: Path,
-    embedding_backend: str = "hashing",
+    embedding_backend: str = DEFAULT_INDEX_EMBEDDING_BACKEND,
     embedding_model: str = DEFAULT_CLINICALBERT_MODEL,
     embedding_batch_size: int = 16,
     embedding_max_length: int = 256,
@@ -1860,6 +1861,7 @@ def search(
     scored = []
     result_embedding_backend = ""
     result_embedding_model = ""
+    result_retrieval_backend = retrieval_backend
 
     if retrieval_backend == "clinicalbert":
         embeddings_file = np.load(embeddings_path, allow_pickle=False)
@@ -1872,6 +1874,7 @@ def search(
                 f"Query embedding backend ({active_backend}) does not match index backend ({stored_backend}). "
                 "Rebuild the index with the desired backend or pass the matching --embedding-backend."
             )
+        result_retrieval_backend = active_backend
         query_embedder = make_embedder(
             active_backend,
             model_name=active_model,
@@ -1902,7 +1905,7 @@ def search(
                         "score": score,
                         "score_0_100": round(100 * max(0.0, score), 2),
                         "aspect_scores": {k: round(v, 4) for k, v in by_aspect.items()},
-                        "retrieval_backend": "clinicalbert",
+                        "retrieval_backend": active_backend,
                     },
                     summaries.get(nct_id, {}),
                 )
@@ -1932,7 +1935,7 @@ def search(
     top_matches = scored[:top_k]
     result = {
         "query_summary": query_summary,
-        "retrieval_backend": retrieval_backend,
+        "retrieval_backend": result_retrieval_backend,
         "embedding_backend": result_embedding_backend,
         "embedding_model": result_embedding_model,
         "top_matches": top_matches,
@@ -1990,7 +1993,7 @@ def main() -> None:
     build.add_argument(
         "--embedding-backend",
         choices=["hashing", "clinicalbert"],
-        default="hashing",
+        default=DEFAULT_INDEX_EMBEDDING_BACKEND,
         help="Embedding backend for index construction. clinicalbert uses cached Bio_ClinicalBERT via transformers.",
     )
     build.add_argument("--embedding-model", default=DEFAULT_CLINICALBERT_MODEL)

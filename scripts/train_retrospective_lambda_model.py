@@ -49,6 +49,13 @@ def beta_binomial_log_predictive(
     )
 
 
+def _finite_float(name: str, value: Any) -> float:
+    numeric_value = float(value)
+    if not math.isfinite(numeric_value):
+        raise ValueError(f"{name} must be finite")
+    return numeric_value
+
+
 def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
     features = torch.tensor(example["features"], dtype=torch.float32)
     if features.ndim != 2:
@@ -68,6 +75,20 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
     if lambda_rule_values is not None and len(lambda_rule_values) != len(components):
         raise ValueError("lambda_rule length must equal component count")
 
+    lambda0 = _finite_float("lambda_0", example.get("lambda_0", 0.2))
+    if lambda0 < 0.0 or lambda0 > 1.0:
+        raise ValueError("lambda_0 must be in [0, 1]")
+
+    query = example.get("query", example)
+    count = _finite_float("query count", query["count"])
+    denominator = _finite_float("query denominator", query["denominator"])
+    if denominator <= 0.0:
+        raise ValueError("query denominator must be greater than 0")
+    if count < 0.0:
+        raise ValueError("query count must be non-negative")
+    if count > denominator:
+        raise ValueError("query count must be less than or equal to denominator")
+
     return {
         "features": features,
         "components": components,
@@ -80,6 +101,9 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
             dtype=torch.float32,
         ),
         "lambda_rule_values": lambda_rule_values,
+        "lambda0": lambda0,
+        "query_count": count,
+        "query_denominator": denominator,
     }
 
 
@@ -100,7 +124,7 @@ def predictive_loss_for_example(
     gate = tensors["gate"]
     discount = tensors["discount"]
     component_denominator = tensors["component_denominator"]
-    lambda0 = torch.tensor(float(example.get("lambda_0", 0.2)), dtype=torch.float32)
+    lambda0 = torch.tensor(tensors["lambda0"], dtype=torch.float32)
 
     positive_gate_mask = gate > 0.0
     if positive_gate_mask.any().item():
@@ -118,9 +142,8 @@ def predictive_loss_for_example(
         lambda_i = torch.zeros_like(scores)
         lambda0_tensor = torch.tensor(1.0, dtype=torch.float32)
 
-    query = example.get("query", example)
-    count = torch.tensor(float(query["count"]), dtype=torch.float32)
-    denominator = torch.tensor(float(query["denominator"]), dtype=torch.float32)
+    count = torch.tensor(tensors["query_count"], dtype=torch.float32)
+    denominator = torch.tensor(tensors["query_denominator"], dtype=torch.float32)
     weak_log_predictive = beta_binomial_log_predictive(
         count,
         denominator,

@@ -183,6 +183,42 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "features must have at least one column"):
             module.predictive_loss_for_example(model, example)
 
+    def test_predictive_loss_rejects_invalid_lambda0(self):
+        module = load_training_module()
+        model = self.zero_model(module)
+
+        cases = [
+            (-0.1, "lambda_0 must be in \\[0, 1\\]"),
+            (1.1, "lambda_0 must be in \\[0, 1\\]"),
+            (float("nan"), "lambda_0 must be finite"),
+        ]
+        for lambda0, message in cases:
+            with self.subTest(lambda0=lambda0):
+                example = self.base_example()
+                example["lambda_0"] = lambda0
+                with self.assertRaisesRegex(ValueError, message):
+                    module.predictive_loss_for_example(model, example)
+
+    def test_predictive_loss_rejects_invalid_query_count_denominator(self):
+        module = load_training_module()
+        model = self.zero_model(module)
+
+        cases = [
+            ({"count": 2, "denominator": 0}, "query denominator must be greater than 0"),
+            ({"count": 5, "denominator": 4}, "query count must be less than or equal to denominator"),
+            ({"count": -1, "denominator": 4}, "query count must be non-negative"),
+            ({"count": float("nan"), "denominator": 4}, "query count must be finite"),
+            ({"count": float("inf"), "denominator": 4}, "query count must be finite"),
+            ({"count": 2, "denominator": float("nan")}, "query denominator must be finite"),
+            ({"count": 2, "denominator": float("inf")}, "query denominator must be finite"),
+        ]
+        for query, message in cases:
+            with self.subTest(query=query):
+                example = self.base_example()
+                example["query"] = query
+                with self.assertRaisesRegex(ValueError, message):
+                    module.predictive_loss_for_example(model, example)
+
     def test_train_model_rejects_empty_examples(self):
         module = load_training_module()
 

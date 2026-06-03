@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import importlib
+import json
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
+
+import numpy as np
 
 
 pipeline = importlib.import_module("docs.oncology_trial_similarity_pipeline")
@@ -22,9 +26,42 @@ def load_trial2vec_builder_module(module_name: str = "build_trial2vec_index"):
 class Stage1BackendTests(unittest.TestCase):
     def test_default_retrieval_backend_is_clinicalbert_compatible(self) -> None:
         self.assertEqual(pipeline.DEFAULT_RETRIEVAL_BACKEND, "clinicalbert")
+        self.assertEqual(pipeline.DEFAULT_INDEX_EMBEDDING_BACKEND, "clinicalbert")
         self.assertIn("clinicalbert", pipeline.RETRIEVAL_BACKENDS)
         self.assertIn("trial2vec", pipeline.RETRIEVAL_BACKENDS)
         self.assertIn("secret", pipeline.RETRIEVAL_BACKENDS)
+
+    def test_search_reports_hashing_when_index_uses_hashing_embeddings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            index_dir = tmp_path / "index"
+            index_dir.mkdir()
+            query_path = tmp_path / "query.json"
+            query_path.write_text(
+                json.dumps({"Study details": {"1. NCT number": "NCTQUERY"}}),
+                encoding="utf-8",
+            )
+            (index_dir / "trial_summaries.jsonl").write_text(
+                json.dumps({"nct_id": "NCTCANDIDATE", "brief_title": "Candidate"}) + "\n",
+                encoding="utf-8",
+            )
+            embeddings = {
+                aspect: np.zeros((1, 2048), dtype=np.float32)
+                for aspect in pipeline.ASPECT_WEIGHTS
+            }
+            np.savez_compressed(
+                index_dir / "trial_embeddings.npz",
+                nct_ids=np.array(["NCTCANDIDATE"]),
+                embedding_backend=np.array(["hashing"]),
+                embedding_model=np.array(["signed-token-hashing-2048"]),
+                **embeddings,
+            )
+
+            result = pipeline.search(query_path, index_dir, top_k=1)
+
+        self.assertEqual(result["retrieval_backend"], "hashing")
+        self.assertEqual(result["embedding_backend"], "hashing")
+        self.assertEqual(result["top_matches"][0]["retrieval_backend"], "hashing")
 
     def test_secret_backend_is_explicitly_not_implemented(self) -> None:
         with self.assertRaisesRegex(NotImplementedError, "SECRET retrieval"):
