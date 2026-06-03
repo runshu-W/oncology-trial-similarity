@@ -35,6 +35,16 @@ The pipeline has two major stages:
    - Optionally rerank candidates using deterministic prior-borrowing criteria.
    - Output JSON results and an optional Markdown report.
 
+### Optional Trial2Vec Retrieval and Mixture Prior
+
+By default, Stage 1 uses Bio_ClinicalBERT embeddings to retrieve clinically similar historical trials. The lightweight hashing backend remains available for local smoke tests, but ClinicalBERT is the intended default retrieval backend when the ML dependencies and model are available.
+
+The pipeline also supports an optional Trial2Vec-style retrieval path built from `trial_summaries.jsonl`. This index is used for high-recall candidate retrieval: it helps surface plausible historical trials for review, but it does not by itself decide how much information should be borrowed. A future SECRET-style interface can consume the same structured summaries and retrieval outputs to expose dimension-level explanations and reviewer controls without changing the statistical separation between retrieval and borrowing.
+
+For Bayesian analysis, the original weighted beta-binomial output remains the primary implemented approximation: each reviewed historical trial contributes with a borrowing discount such as `suggested_borrowing_discount`. The experimental mixture-prior output is a sensitivity-analysis extension that separates two roles: `a_i` controls how much effective sample size candidate `i` contributes inside its beta component, while `lambda_i` controls the mixture weight assigned to that component. This keeps per-trial information discounting distinct from model-level component weighting.
+
+Any retrospective or expert-only training of `lambda_i` should use completed historical trials as pseudo-queries with held-out query outcomes. At deployment, the new query trial outcome must not be used to train, tune, select, or calibrate retrieval or mixture weights. The intended workflow is retrieval for high recall, expert/statistical review for borrowing suitability, and leakage-controlled retrospective validation before making manuscript-level claims.
+
 ## Similarity Dimensions
 
 The retrieval and reranking logic emphasizes:

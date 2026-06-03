@@ -1332,7 +1332,25 @@ p ~ Beta(alpha0 + w*r, beta0 + w*(n-r))
 - `n` 是 denominator
 - `w` 是 `suggested_borrowing_discount`
 
-### 21.2 Time-to-event endpoint
+### 21.2 Mixture-prior extension
+
+The weighted beta-binomial approximation can be extended into an exploratory robust mixture prior. For each candidate historical trial `i`, the candidate-specific beta component is:
+
+```text
+Beta(1 + a_i y_i, 1 + a_i(n_i - y_i))
+```
+
+where `y_i` is the historical response count, `n_i` is the historical denominator, and `a_i` is the effective sample-size discount for that trial. The full prior can then be written as:
+
+```text
+p_prior(p) = lambda_0 Beta(1, 1) + sum_i lambda_i Beta(1 + a_i y_i, 1 + a_i(n_i - y_i))
+```
+
+Here `lambda_0` is the weak-prior component weight and `lambda_i` is the mixture weight for candidate trial `i`. This deliberately separates `a_i`, which controls how much information a candidate contributes inside its beta component, from `lambda_i`, which controls how much posterior mass is assigned to that candidate component in the mixture.
+
+The `lambda_i` values may be trained retrospectively by treating completed trials as pseudo-queries, retrieving candidate historical trials, and fitting weights to predict held-out query outcomes. The pseudo-query outcome must be held out from retrieval, feature construction, tuning, and model selection to avoid leakage. This retrospective training is a calibration and sensitivity-analysis tool; it does not replace clinical/statistical expert adjudication before borrowing historical evidence in a primary analysis.
+
+### 21.3 Time-to-event endpoint
 
 对于 PFS/OS，当前 JSON 中通常只有 count/percent 或 participant-level summaries，不一定足够构建严格 survival prior。
 
@@ -1348,7 +1366,7 @@ p ~ Beta(alpha0 + w*r, beta0 + w*(n-r))
 
 这些信息通常需要 protocol/SAP 或 publication 补充。
 
-### 21.3 Borrowing 策略
+### 21.4 Borrowing 策略
 
 pipeline 输出的 suitability 可以映射为：
 
@@ -1522,4 +1540,3 @@ python3 oncology_trial_similarity_pipeline.py search \
 ## 26. 一句话总结
 
 当前 pipeline 已经形成完整闭环：它能从本地 ClinicalTrials.gov oncology trial JSON/PDF 文件夹中构建 structured trial index，用 Trial2Vec-inspired multi-aspect embedding 做第一阶段候选召回，再用 prior-borrowing-oriented structured reranker 对 top100 candidates 进行可解释排序，最终输出 JSON 和 Markdown 报告，为 Bayesian historical prior selection 提供可审查、可追溯、可继续升级的技术基础。
-
