@@ -1262,6 +1262,65 @@ def score_phase_match(query_phase: str, candidate_phase: str) -> float:
     return 0.25
 
 
+ELIGIBILITY_STOPWORDS = {
+    "a",
+    "adequate",
+    "adult",
+    "adults",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "available",
+    "be",
+    "by",
+    "criteria",
+    "for",
+    "from",
+    "has",
+    "have",
+    "in",
+    "into",
+    "is",
+    "of",
+    "or",
+    "participant",
+    "participants",
+    "patient",
+    "patients",
+    "study",
+    "the",
+    "to",
+    "with",
+}
+
+
+def eligibility_tokens(population: Any) -> set[str]:
+    if not isinstance(population, dict):
+        return set()
+    text = clean_text(
+        [
+            population.get("key_inclusion", []),
+            population.get("key_exclusion", []),
+        ]
+    ).lower()
+    tokens = re.findall(r"[a-z0-9]+", text)
+    return {
+        token
+        for token in tokens
+        if len(token) > 2 and token not in ELIGIBILITY_STOPWORDS
+    }
+
+
+def score_eligibility_overlap(query_population: Any, candidate_population: Any) -> float:
+    query_tokens = eligibility_tokens(query_population)
+    candidate_tokens = eligibility_tokens(candidate_population)
+    if not query_tokens or not candidate_tokens:
+        return 0.0
+    return round(5 * len(query_tokens & candidate_tokens) / len(query_tokens | candidate_tokens), 2)
+
+
 def score_prior_borrowing_pair(
     query_summary: dict[str, Any],
     candidate: dict[str, Any],
@@ -1359,18 +1418,25 @@ def score_prior_borrowing_pair(
     safety_raw = 0.6 * float(has_safety) + 0.4 * float(followup_known)
     safety_score = round(5 * safety_raw, 2)
 
+    eligibility_score = score_eligibility_overlap(
+        query_summary.get("population", {}),
+        candidate.get("population", {}),
+    )
+
     dimension_scores = {
         "disease_population_match": disease_score,
         "treatment_regimen_match": treatment_score,
         "endpoint_estimand_match": endpoint_score,
+        "eligibility_criteria_overlap": eligibility_score,
         "design_phase_match": design_score,
         "result_usability": result_score,
         "safety_and_followup_relevance": safety_score,
     }
     weighted_dimension_score = (
-        0.30 * disease_score
-        + 0.25 * treatment_score
+        0.25 * disease_score
+        + 0.20 * treatment_score
         + 0.20 * endpoint_score
+        + 0.10 * eligibility_score
         + 0.10 * design_score
         + 0.10 * result_score
         + 0.05 * safety_score

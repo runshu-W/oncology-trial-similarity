@@ -15,6 +15,19 @@ import oncology_trial_similarity_pipeline as pipeline  # noqa: E402
 import torch
 
 
+LAMBDA_FEATURE_NAMES = [
+    "s_i",
+    "disease_match_i",
+    "regimen_match_i",
+    "endpoint_match_i",
+    "followup_match_i",
+    "eligibility_match_i",
+    "result_quality_i",
+    "negative_redflag_severity_i",
+    "log_n_i",
+]
+
+
 class LambdaScorer(torch.nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int) -> None:
         super().__init__()
@@ -64,6 +77,12 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("features must be non-empty")
     if features.shape[1] == 0:
         raise ValueError("features must have at least one column")
+    if features.shape[1] != len(LAMBDA_FEATURE_NAMES):
+        raise ValueError("features must have 9 columns")
+
+    feature_names = example.get("feature_names")
+    if feature_names != LAMBDA_FEATURE_NAMES:
+        raise ValueError("feature_names must match")
 
     components = example["components"]
     if not components:
@@ -100,6 +119,7 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
             [component.get("denominator", 0.0) for component in components],
             dtype=torch.float32,
         ),
+        "feature_names": feature_names,
         "lambda_rule_values": lambda_rule_values,
         "lambda0": lambda0,
         "query_count": count,
@@ -187,6 +207,44 @@ def load_examples(path: str | Path) -> list[dict[str, Any]]:
     return examples
 
 
+def redflag_severity(red_flags: list[Any]) -> float:
+    raw = 0.0
+    for flag in red_flags:
+        text = str(flag).lower()
+        if "low disease" in text or "low endpoint" in text:
+            raw += 1.0
+        elif "no primary endpoint-family overlap" in text:
+            raw += 1.0
+        elif "no normalized regimen-backbone overlap" in text:
+            raw += 0.8
+        elif "no posted results" in text or "no arm-level count/denominator" in text:
+            raw += 0.8
+        else:
+            raw += 0.25
+    return min(raw / 3.0, 1.0)
+
+
+def _component_source_row(component: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+    component_id = component.get("candidate_nct_id") or component.get("nct_id")
+    for row in rows:
+        row_id = row.get("candidate_nct_id") or row.get("nct_id")
+        if component_id and row_id == component_id:
+            return row
+    return {}
+
+
+def _dimension_score(dimension_scores: dict[str, Any], *keys: str) -> float:
+    for key in keys:
+        value = dimension_scores.get(key)
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric_value):
+            return numeric_value
+    return 0.0
+
+
 def build_training_example_from_pipeline_result(
     result: dict[str, Any],
     endpoint_key: str = "ORR",
@@ -213,16 +271,37 @@ def build_training_example_from_pipeline_result(
     lambda_rule = []
 
     for component in mixture["components"]:
+        source_row = _component_source_row(component, rows)
+        dimension_scores = source_row.get("dimension_scores")
+        if not isinstance(dimension_scores, dict):
+            dimension_scores = {}
+        red_flags = source_row.get("red_flags")
+        if not isinstance(red_flags, list):
+            red_flags = []
         denominator_i = float(component.get("denominator", 0.0))
         discount = float(component.get("discount", 0.0))
         gate = float(component.get("gate", 0.0))
         features.append(
             [
                 float(component.get("overall_similarity_score", 0.0)) / 100.0,
-                float(component.get("rate", 0.0)),
-                discount,
+                _dimension_score(
+                    dimension_scores,
+                    "disease_population_match",
+                    "disease_biology_match",
+                )
+                / 5.0,
+                _dimension_score(dimension_scores, "treatment_regimen_match") / 5.0,
+                _dimension_score(dimension_scores, "endpoint_estimand_match") / 5.0,
+                _dimension_score(
+                    dimension_scores,
+                    "safety_and_followup_relevance",
+                    "outcome_assessment_followup",
+                )
+                / 5.0,
+                _dimension_score(dimension_scores, "eligibility_criteria_overlap") / 5.0,
+                _dimension_score(dimension_scores, "result_usability") / 5.0,
+                -redflag_severity(red_flags),
                 math.log1p(denominator_i),
-                gate,
             ]
         )
         components.append(
@@ -239,6 +318,7 @@ def build_training_example_from_pipeline_result(
     return {
         "query": {"count": int(count), "denominator": int(denominator)},
         "lambda_0": float(mixture["lambda_0"]),
+        "feature_names": LAMBDA_FEATURE_NAMES,
         "features": features,
         "components": components,
         "lambda_rule": lambda_rule,

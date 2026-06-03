@@ -288,6 +288,88 @@ class WebAgentTests(unittest.TestCase):
 
         self.assertEqual(scored["dimension_scores"]["endpoint_estimand_match"], 0.0)
 
+    def test_prior_borrowing_pair_scores_eligibility_overlap(self) -> None:
+        query = {
+            "phase": "Phase 2",
+            "cancer_type": {"histology": ["NSCLC"], "primary_site": ["Lung"], "molecular_marker": ["EGFR"], "line_of_therapy": "Second line"},
+            "intervention": {"backbone_regimen": ["osimertinib"], "drug_classes": ["EGFR inhibitor"]},
+            "design": {"single_or_multi_arm": "Single-arm", "randomized": "No"},
+            "population": {
+                "key_inclusion": [
+                    "Adults with EGFR-mutated metastatic NSCLC",
+                    "ECOG performance status 0 or 1",
+                ],
+                "key_exclusion": ["Untreated active brain metastases"],
+            },
+            "endpoints": {"primary": [{"endpoint_family": "ORR/CR/PR"}]},
+        }
+        candidate = {
+            "nct_id": "NCTELIG",
+            "score_0_100": 50,
+            "phase": "Phase 2",
+            "cancer_type": {"histology": ["NSCLC"], "primary_site": ["Lung"], "molecular_marker": ["EGFR"], "line_of_therapy": "Second line"},
+            "intervention": {"backbone_regimen": ["osimertinib"], "drug_classes": ["EGFR inhibitor"]},
+            "design": {"single_or_multi_arm": "Single-arm", "randomized": "No"},
+            "population": {
+                "key_inclusion": [
+                    "Adults with EGFR-mutated metastatic NSCLC",
+                    "ECOG performance status 0 or 1",
+                    "Prior platinum chemotherapy",
+                ],
+                "key_exclusion": ["Active brain metastases requiring steroids"],
+            },
+            "result_usability": {"has_posted_results": True, "denominators_available": True},
+            "borrowable_quantities": [
+                {
+                    "endpoint": "Objective Response Rate",
+                    "endpoint_family": "ORR/CR/PR",
+                    "arm_results": [{"arm": "Experimental", "count": 10, "denominator": 20}],
+                }
+            ],
+        }
+
+        scored = app_module.pipeline.score_prior_borrowing_pair(query, candidate)
+
+        eligibility_score = scored["dimension_scores"]["eligibility_criteria_overlap"]
+        self.assertGreater(eligibility_score, 0.0)
+        self.assertLess(eligibility_score, 5.0)
+
+    def test_eligibility_overlap_ignores_schema_keys(self) -> None:
+        score = app_module.pipeline.score_eligibility_overlap(
+            {
+                "key_inclusion": ["EGFR mutation"],
+                "key_exclusion": ["brain metastases"],
+            },
+            {
+                "key_inclusion": ["ALK fusion"],
+                "key_exclusion": ["cardiac disease"],
+            },
+        )
+
+        self.assertEqual(score, 0.0)
+
+    def test_eligibility_overlap_ignores_stringified_schema_keys(self) -> None:
+        score = app_module.pipeline.score_eligibility_overlap(
+            '{"key_inclusion": ["EGFR mutation"], "key_exclusion": ["brain metastases"]}',
+            '{"key_inclusion": ["ALK fusion"], "key_exclusion": ["cardiac disease"]}',
+        )
+
+        self.assertEqual(score, 0.0)
+
+    def test_eligibility_overlap_ignores_generic_boilerplate_terms(self) -> None:
+        score = app_module.pipeline.score_eligibility_overlap(
+            {
+                "key_inclusion": ["Adult patients with adequate organ function available for study"],
+                "key_exclusion": [],
+            },
+            {
+                "key_inclusion": ["Adult patients with adequate archival tissue available for study"],
+                "key_exclusion": [],
+            },
+        )
+
+        self.assertEqual(score, 0.0)
+
     def test_root_serves_html(self) -> None:
         response = self.client.get("/")
 

@@ -10,6 +10,18 @@ import torch
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "train_retrospective_lambda_model.py"
 
+EXPECTED_FEATURE_NAMES = [
+    "s_i",
+    "disease_match_i",
+    "regimen_match_i",
+    "endpoint_match_i",
+    "followup_match_i",
+    "eligibility_match_i",
+    "result_quality_i",
+    "negative_redflag_severity_i",
+    "log_n_i",
+]
+
 
 def load_training_module():
     spec = importlib.util.spec_from_file_location("train_retrospective_lambda_model", SCRIPT_PATH)
@@ -20,7 +32,7 @@ def load_training_module():
 
 class RetrospectiveLambdaTrainingTests(unittest.TestCase):
     def zero_model(self, module):
-        model = module.LambdaScorer(input_dim=4, hidden_dim=6)
+        model = module.LambdaScorer(input_dim=len(EXPECTED_FEATURE_NAMES), hidden_dim=6)
         with torch.no_grad():
             for parameter in model.parameters():
                 parameter.zero_()
@@ -30,9 +42,10 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
         return {
             "query": {"count": 2, "denominator": 4},
             "lambda_0": 0.2,
+            "feature_names": EXPECTED_FEATURE_NAMES,
             "features": [
-                [0.9, 0.8, 1.0, 3.9],
-                [0.1, 0.2, 0.5, 2.0],
+                [0.9, 0.8, 1.0, 0.7, 0.6, 0.5, 1.0, 0.0, 3.9],
+                [0.1, 0.2, 0.5, 0.3, 0.4, 0.2, 0.5, -0.25, 2.0],
             ],
             "components": [
                 {"alpha": 4.0, "beta": 2.0, "gate": 1.0, "discount": 0.5, "denominator": 10.0},
@@ -43,12 +56,12 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
 
     def test_lambda_scorer_outputs_one_score_per_candidate(self):
         module = load_training_module()
-        model = module.LambdaScorer(input_dim=4, hidden_dim=6)
+        model = module.LambdaScorer(input_dim=len(EXPECTED_FEATURE_NAMES), hidden_dim=6)
         features = torch.tensor(
             [
-                [0.9, 0.8, 1.0, 3.9],
-                [0.1, 0.2, 0.5, 2.0],
-                [0.4, 0.3, 0.7, 3.0],
+                [0.9, 0.8, 1.0, 0.7, 0.6, 0.5, 1.0, 0.0, 3.9],
+                [0.1, 0.2, 0.5, 0.3, 0.4, 0.2, 0.5, -0.25, 2.0],
+                [0.4, 0.3, 0.7, 0.2, 0.5, 0.1, 0.8, -0.1, 3.0],
             ],
             dtype=torch.float32,
         )
@@ -57,9 +70,32 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
 
         self.assertEqual(scores.shape, (3,))
 
+    def test_full_feature_names_match_design_vector(self):
+        module = load_training_module()
+
+        self.assertEqual(module.LAMBDA_FEATURE_NAMES, EXPECTED_FEATURE_NAMES)
+
+    def test_redflag_severity_is_normalized(self):
+        module = load_training_module()
+
+        severity = module.redflag_severity(
+            [
+                "Low disease/population match.",
+                "Low endpoint/estimand match.",
+                "No primary endpoint-family overlap.",
+                "No normalized regimen-backbone overlap.",
+                "Candidate has no posted results in indexed JSON.",
+                "No arm-level count/denominator pair found for primary borrowable quantities.",
+                "Treatment line mismatch: query=1L candidate=2L.",
+            ]
+        )
+
+        self.assertEqual(severity, 1.0)
+        self.assertAlmostEqual(module.redflag_severity(["Treatment line mismatch."]), 0.25 / 3.0)
+
     def test_predictive_loss_for_example_returns_finite_positive_loss(self):
         module = load_training_module()
-        model = module.LambdaScorer(input_dim=4, hidden_dim=6)
+        model = module.LambdaScorer(input_dim=len(EXPECTED_FEATURE_NAMES), hidden_dim=6)
         example = self.base_example()
 
         loss = module.predictive_loss_for_example(model, example, rho=0.1, ess_cap=100.0)
@@ -163,9 +199,11 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
         model = self.zero_model(module)
 
         cases = [
-            ("feature rows", {"features": [[1.0, 2.0, 3.0, 4.0]]}),
+            ("feature rows", {"features": [[1.0] * len(EXPECTED_FEATURE_NAMES)]}),
             ("lambda_rule", {"lambda_rule": [0.8]}),
-            ("features must be 2D", {"features": [1.0, 2.0, 3.0, 4.0]}),
+            ("features must be 2D", {"features": [1.0] * len(EXPECTED_FEATURE_NAMES)}),
+            ("features must have 9 columns", {"features": [[1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0]]}),
+            ("feature_names must match", {"feature_names": EXPECTED_FEATURE_NAMES[:-1]}),
         ]
         for message, overrides in cases:
             with self.subTest(message=message):
@@ -343,19 +381,41 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
         example = module.build_training_example_from_pipeline_result(result, endpoint_key="ORR")
 
         self.assertEqual(example["query"], {"count": 12, "denominator": 40})
+        self.assertEqual(example["feature_names"], EXPECTED_FEATURE_NAMES)
         self.assertEqual(len(example["features"]), 1)
         self.assertEqual(len(example["components"]), 1)
-        self.assertEqual(len(example["features"][0]), 5)
-        self.assertAlmostEqual(example["features"][0][0], 0.82)
-        self.assertAlmostEqual(example["features"][0][1], 0.4)
-        self.assertAlmostEqual(example["features"][0][2], 0.75)
-        self.assertAlmostEqual(example["features"][0][3], math.log1p(50.0))
-        self.assertGreater(example["features"][0][4], 0.0)
+        self.assertEqual(len(example["features"][0]), 9)
+        self.assertEqual(
+            example["features"][0],
+            [
+                0.82,
+                1.0,
+                0.8,
+                1.0,
+                0.4,
+                0.2,
+                1.0,
+                -0.0,
+                math.log1p(50.0),
+            ],
+        )
         self.assertAlmostEqual(example["components"][0]["alpha"], 16.0)
         self.assertAlmostEqual(example["components"][0]["beta"], 23.5)
         self.assertAlmostEqual(example["components"][0]["denominator"], 50.0)
         self.assertAlmostEqual(example["components"][0]["discount"], 0.75)
         self.assertAlmostEqual(sum(example["lambda_rule"]) + example["lambda_0"], 1.0)
+
+    def test_build_training_example_uses_negative_redflag_feature(self) -> None:
+        module = load_training_module()
+        result = self.pipeline_result()
+        result["reranked_top_matches"][0]["red_flags"] = [
+            "Low disease/population match.",
+            "No normalized regimen-backbone overlap.",
+        ]
+
+        example = module.build_training_example_from_pipeline_result(result, endpoint_key="ORR")
+
+        self.assertAlmostEqual(example["features"][0][7], -(1.8 / 3.0))
 
     def test_build_training_example_raises_for_missing_endpoint_key(self) -> None:
         module = load_training_module()
@@ -391,7 +451,7 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
             self.assertTrue(output_path.exists())
             summary = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(summary["epochs"], 1)
-            self.assertEqual(summary["input_dim"], 5)
+            self.assertEqual(summary["input_dim"], 9)
 
 
 if __name__ == "__main__":
