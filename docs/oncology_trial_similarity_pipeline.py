@@ -45,6 +45,30 @@ def _load_mixture_prior() -> Any:
 mixture_prior = _load_mixture_prior()
 
 
+def _load_secret_retrieval() -> Any:
+    if __package__:
+        try:
+            from . import secret_retrieval as package_secret_retrieval
+
+            return package_secret_retrieval
+        except ImportError:
+            pass
+
+    sibling_path = Path(__file__).with_name("secret_retrieval.py")
+    spec = importlib.util.spec_from_file_location(
+        "_oncology_trial_similarity_secret_retrieval",
+        sibling_path,
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load SECRET retrieval module from {sibling_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+secret_retrieval = _load_secret_retrieval()
+
+
 DEFAULT_DB_ROOT = Path(
     "/Users/wang/PHD/clinic.gov/Oncology_All_Trials/Oncology_All_Trials"
 )
@@ -73,10 +97,6 @@ def ensure_supported_retrieval_backend(backend: str) -> None:
         raise ValueError(
             f"Unsupported retrieval backend: {backend}. "
             f"Supported backends: {', '.join(RETRIEVAL_BACKENDS)}"
-        )
-    if backend == "secret":
-        raise NotImplementedError(
-            "SECRET retrieval is reserved for the protocol-summary backend and is not implemented in this revision."
         )
 
 
@@ -1059,6 +1079,50 @@ def build_index(
     print(f"Wrote {embeddings_path}")
 
 
+def build_secret_index(
+    summaries_path: Path,
+    output_path: Path,
+    embedding_backend: str = DEFAULT_INDEX_EMBEDDING_BACKEND,
+    embedding_model: str = DEFAULT_CLINICALBERT_MODEL,
+    embedding_batch_size: int = 16,
+    embedding_max_length: int = 256,
+) -> None:
+    summaries = load_summaries(summaries_path)
+    embedder = make_embedder(
+        embedding_backend,
+        model_name=embedding_model,
+        batch_size=embedding_batch_size,
+        max_length=embedding_max_length,
+    )
+    nct_ids = list(summaries)
+    section_texts = {section: [] for section in secret_retrieval.SECRET_SECTIONS}
+    for nct_id in nct_ids:
+        sections = secret_retrieval.secret_sections_from_summary(
+            secret_ready_summary(summaries[nct_id])
+        )
+        for section in secret_retrieval.SECRET_SECTIONS:
+            section_texts[section].append(sections[section])
+    arrays = {
+        section: embedder.encode(section_texts[section]).astype(np.float32)
+        for section in secret_retrieval.SECRET_SECTIONS
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        output_path,
+        nct_ids=np.array(nct_ids),
+        retrieval_backend=np.array(["secret"]),
+        embedding_backend=np.array([embedding_backend]),
+        embedding_model=np.array(
+            [
+                embedding_model
+                if embedding_backend != "hashing"
+                else "signed-token-hashing-2048"
+            ]
+        ),
+        **arrays,
+    )
+
+
 def load_summaries(path: Path) -> dict[str, dict[str, Any]]:
     records = {}
     with path.open("r", encoding="utf-8") as f:
@@ -1110,6 +1174,10 @@ def enrich_candidate_row(row: dict[str, Any], candidate_summary: dict[str, Any])
         }
     )
     return row
+
+
+def secret_ready_summary(candidate_summary: dict[str, Any]) -> dict[str, Any]:
+    return enrich_candidate_row({}, candidate_summary)
 
 
 def normalized_values(value: Any) -> set[str]:
@@ -1817,6 +1885,7 @@ def search(
     retrieval_backend: str = DEFAULT_RETRIEVAL_BACKEND,
     trial2vec_index_path: Path | None = None,
     trial2vec_model_dir: Path | None = None,
+    secret_index_path: Path | None = None,
 ) -> dict[str, Any]:
     ensure_supported_retrieval_backend(retrieval_backend)
     if not query_json.exists():
@@ -1842,6 +1911,16 @@ def search(
             raise FileNotFoundError(f"Trial2Vec index file does not exist: {trial2vec_index_path}")
         if not trial2vec_model_dir.exists():
             raise FileNotFoundError(f"Trial2Vec model directory does not exist: {trial2vec_model_dir}")
+    if retrieval_backend == "secret":
+        if secret_index_path is None:
+            raise ValueError("--secret-index-path is required when --retrieval-backend=secret.")
+        if not summaries_path.exists():
+            raise FileNotFoundError(
+                "Trial summaries were not found. Run build-index first, or pass the correct --index-dir. "
+                f"Expected: {summaries_path}"
+            )
+        if not secret_index_path.exists():
+            raise FileNotFoundError(f"SECRET-style index file does not exist: {secret_index_path}")
 
     tmp_folder = query_json.parent
     raw = read_json(query_json)
@@ -1931,6 +2010,43 @@ def search(
         ]
         result_embedding_backend = "trial2vec"
         result_embedding_model = str(trial2vec_model_dir)
+    elif retrieval_backend == "secret":
+        assert secret_index_path is not None
+        secret_file = np.load(secret_index_path, allow_pickle=False)
+        stored_backend = (
+            str(secret_file["embedding_backend"][0])
+            if "embedding_backend" in secret_file
+            else "hashing"
+        )
+        stored_model = (
+            str(secret_file["embedding_model"][0])
+            if "embedding_model" in secret_file
+            else "signed-token-hashing-2048"
+        )
+        query_embedder = make_embedder(
+            stored_backend,
+            model_name=stored_model if stored_backend != "hashing" else DEFAULT_CLINICALBERT_MODEL,
+            batch_size=embedding_batch_size,
+            max_length=embedding_max_length,
+        )
+        query_sections = secret_retrieval.secret_sections_from_summary(query_summary)
+        query_vectors = {
+            section: query_embedder.encode([query_sections[section]])[0]
+            for section in secret_retrieval.SECRET_SECTIONS
+        }
+        scored = secret_retrieval.score_secret_index(
+            query_vectors,
+            secret_index_path,
+            {nct_id: secret_ready_summary(summary) for nct_id, summary in summaries.items()},
+            excluded_nct_id=query_summary.get("nct_id", ""),
+            top_k=max(rerank_top_n, top_k),
+        )
+        scored = [
+            enrich_candidate_row(row, summaries.get(row["nct_id"], {}))
+            for row in scored
+        ]
+        result_embedding_backend = stored_backend
+        result_embedding_model = stored_model
 
     top_matches = scored[:top_k]
     result = {
@@ -2000,6 +2116,23 @@ def main() -> None:
     build.add_argument("--embedding-batch-size", type=int, default=16)
     build.add_argument("--embedding-max-length", type=int, default=256)
 
+    secret_build = sub.add_parser("build-secret-index")
+    secret_build.add_argument(
+        "--index-dir",
+        type=Path,
+        default=Path("artifacts/oncology_trial_similarity"),
+    )
+    secret_build.add_argument("--summaries-path", type=Path, default=None)
+    secret_build.add_argument("--output-path", type=Path, default=None)
+    secret_build.add_argument(
+        "--embedding-backend",
+        choices=["hashing", "clinicalbert"],
+        default=DEFAULT_INDEX_EMBEDDING_BACKEND,
+    )
+    secret_build.add_argument("--embedding-model", default=DEFAULT_CLINICALBERT_MODEL)
+    secret_build.add_argument("--embedding-batch-size", type=int, default=16)
+    secret_build.add_argument("--embedding-max-length", type=int, default=256)
+
     query = sub.add_parser("search")
     query.add_argument("--query-json", type=Path, required=True)
     query.add_argument("--index-dir", type=Path, default=Path("artifacts/oncology_trial_similarity"))
@@ -2020,6 +2153,7 @@ def main() -> None:
     )
     query.add_argument("--trial2vec-index-path", type=Path, default=None)
     query.add_argument("--trial2vec-model-dir", type=Path, default=None)
+    query.add_argument("--secret-index-path", type=Path, default=None)
     query.add_argument(
         "--rerank",
         action="store_true",
@@ -2062,6 +2196,17 @@ def main() -> None:
             embedding_batch_size=args.embedding_batch_size,
             embedding_max_length=args.embedding_max_length,
         )
+    elif args.command == "build-secret-index":
+        summaries_path = args.summaries_path or args.index_dir / "trial_summaries.jsonl"
+        output_path = args.output_path or args.index_dir / "secret_embeddings.npz"
+        build_secret_index(
+            summaries_path=summaries_path,
+            output_path=output_path,
+            embedding_backend=args.embedding_backend,
+            embedding_model=args.embedding_model,
+            embedding_batch_size=args.embedding_batch_size,
+            embedding_max_length=args.embedding_max_length,
+        )
     elif args.command == "search":
         rerank_top_n = args.rerank_top_n if args.rerank else 0
         result = search(
@@ -2076,6 +2221,7 @@ def main() -> None:
             retrieval_backend=args.retrieval_backend,
             trial2vec_index_path=args.trial2vec_index_path,
             trial2vec_model_dir=args.trial2vec_model_dir,
+            secret_index_path=args.secret_index_path,
         )
         text = json.dumps(result, indent=2, ensure_ascii=False)
         if args.output:

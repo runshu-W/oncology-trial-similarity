@@ -63,9 +63,8 @@ class Stage1BackendTests(unittest.TestCase):
         self.assertEqual(result["embedding_backend"], "hashing")
         self.assertEqual(result["top_matches"][0]["retrieval_backend"], "hashing")
 
-    def test_secret_backend_is_explicitly_not_implemented(self) -> None:
-        with self.assertRaisesRegex(NotImplementedError, "SECRET retrieval"):
-            pipeline.ensure_supported_retrieval_backend("secret")
+    def test_secret_backend_is_supported_by_backend_guardrail(self) -> None:
+        pipeline.ensure_supported_retrieval_backend("secret")
 
     def test_unknown_backend_has_clear_error(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported retrieval backend"):
@@ -259,6 +258,112 @@ class SecretRetrievalTests(unittest.TestCase):
         self.assertEqual(rows[0]["score_0_100"], 100.0)
         self.assertIn("disease_population", rows[0]["secret_section_scores"])
         self.assertIn("disease_population", rows[0]["secret_evidence"])
+
+    def test_build_secret_index_from_summaries_writes_section_arrays(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            summaries_path = tmp_path / "trial_summaries.jsonl"
+            output_path = tmp_path / "secret_embeddings.npz"
+            summaries_path.write_text(
+                json.dumps(
+                    {
+                        "nct_id": "NCT1",
+                        "cancer_type": {"primary_site": ["Breast"]},
+                        "intervention": {"experimental_regimen": "Drug A"},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            pipeline.build_secret_index(
+                summaries_path=summaries_path,
+                output_path=output_path,
+                embedding_backend="hashing",
+            )
+
+            data = np.load(output_path, allow_pickle=False)
+
+        self.assertEqual(list(data["nct_ids"]), ["NCT1"])
+        self.assertEqual(str(data["retrieval_backend"][0]), "secret")
+        self.assertIn("eligibility", data.files)
+        self.assertEqual(data["eligibility"].shape[0], 1)
+
+    def test_secret_summary_uses_borrowing_relevance_result_quantities(self) -> None:
+        secret = importlib.import_module("docs.secret_retrieval")
+        loaded_summary = {
+            "nct_id": "NCT1",
+            "results": {"has_posted_results": True, "denominators": [{"arm": "Experimental"}]},
+            "borrowing_relevance": {
+                "borrowable_quantities": [
+                    {
+                        "endpoint": "Pathologic complete response",
+                        "endpoint_family": "ORR/CR/PR",
+                        "arm_results": [
+                            {"arm": "Experimental", "count": 12, "denominator": 40}
+                        ],
+                    }
+                ]
+            },
+            "source_documents": {"json": "NCT1_data.json"},
+        }
+
+        sections = secret.secret_sections_from_summary(
+            pipeline.secret_ready_summary(loaded_summary)
+        )
+
+        self.assertIn("Pathologic complete response", sections["results"])
+        self.assertIn("denominator", sections["results"])
+        self.assertIn("has_posted_results", sections["results"])
+
+    def test_pipeline_search_uses_secret_backend_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            index_dir = tmp_path / "index"
+            index_dir.mkdir()
+            query_path = tmp_path / "query.json"
+            query_path.write_text(
+                json.dumps({"Study details": {"1. NCT number": "NCTQUERY"}}),
+                encoding="utf-8",
+            )
+            (index_dir / "trial_summaries.jsonl").write_text(
+                json.dumps(
+                    {
+                        "nct_id": "NCT1",
+                        "brief_title": "Candidate",
+                        "cancer_type": {"primary_site": ["Breast"]},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            secret_path = index_dir / "secret_embeddings.npz"
+            secret = importlib.import_module("docs.secret_retrieval")
+            arrays = {
+                section: np.zeros((1, 2048), dtype=np.float32)
+                for section in secret.SECRET_SECTIONS
+            }
+            np.savez_compressed(
+                secret_path,
+                nct_ids=np.array(["NCT1"]),
+                retrieval_backend=np.array(["secret"]),
+                embedding_backend=np.array(["hashing"]),
+                embedding_model=np.array(["signed-token-hashing-2048"]),
+                **arrays,
+            )
+
+            result = pipeline.search(
+                query_path,
+                index_dir,
+                top_k=1,
+                retrieval_backend="secret",
+                secret_index_path=secret_path,
+            )
+
+        self.assertEqual(result["retrieval_backend"], "secret")
+        self.assertEqual(result["embedding_backend"], "hashing")
+        self.assertEqual(result["top_matches"][0]["retrieval_backend"], "secret")
+        self.assertIn("secret_section_scores", result["top_matches"][0])
 
 
 class Trial2VecIndexBuilderTests(unittest.TestCase):
