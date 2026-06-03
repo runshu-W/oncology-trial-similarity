@@ -54,6 +54,11 @@ def make_compatible_load_state_dict(original_load_state_dict: Callable[..., Any]
     return compatible_load_state_dict
 
 
+def ensure_pandas_applymap_compat(pd: Any) -> None:
+    if not hasattr(pd.DataFrame, "applymap") and hasattr(pd.DataFrame, "map"):
+        pd.DataFrame.applymap = pd.DataFrame.map
+
+
 def load_trial2vec_index_dependencies() -> tuple[Any, Any, Any]:
     try:
         import pandas as pd
@@ -74,6 +79,7 @@ def encode_trial2vec_index(
     device: str = "cpu",
 ) -> dict[str, Any]:
     pd, torch, Trial2Vec = load_trial2vec_index_dependencies()
+    ensure_pandas_applymap_compat(pd)
 
     summaries = load_summary_rows(summaries_path)
     frame = pd.DataFrame([pipeline.summary_to_trial2vec_row(summary) for summary in summaries])

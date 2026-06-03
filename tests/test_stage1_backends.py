@@ -129,6 +129,18 @@ class Stage1BackendTests(unittest.TestCase):
         self.assertEqual(rows[0]["score_0_100"], 100.0)
         self.assertEqual(rows[1]["score_0_100"], 0.0)
 
+    def test_pipeline_adds_applymap_alias_when_pandas_dataframe_only_has_map(self) -> None:
+        class FakeDataFrame:
+            def map(self):
+                return None
+
+        class FakePandas:
+            DataFrame = FakeDataFrame
+
+        pipeline.ensure_pandas_applymap_compat(FakePandas)
+
+        self.assertIs(FakeDataFrame.applymap, FakeDataFrame.map)
+
 
 class Trial2VecIndexBuilderTests(unittest.TestCase):
     def test_builder_import_does_not_require_optional_ml_dependencies(self) -> None:
@@ -156,6 +168,20 @@ class Trial2VecIndexBuilderTests(unittest.TestCase):
         with mock.patch("builtins.__import__", guarded_import):
             with self.assertRaisesRegex(RuntimeError, "optional Trial2Vec index dependencies"):
                 module.load_trial2vec_index_dependencies()
+
+    def test_builder_adds_applymap_alias_when_pandas_dataframe_only_has_map(self) -> None:
+        module = load_trial2vec_builder_module("build_trial2vec_index_pandas_compat")
+
+        class FakeDataFrame:
+            def map(self):
+                return None
+
+        class FakePandas:
+            DataFrame = FakeDataFrame
+
+        module.ensure_pandas_applymap_compat(FakePandas)
+
+        self.assertIs(FakeDataFrame.applymap, FakeDataFrame.map)
 
     def test_compatible_torch_load_only_adds_supported_weights_only_default(self) -> None:
         module = load_trial2vec_builder_module("build_trial2vec_index_torch_load")

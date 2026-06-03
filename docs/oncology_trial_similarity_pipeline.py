@@ -956,6 +956,11 @@ def make_compatible_load_state_dict(original_load_state_dict: Any) -> Any:
     return compatible_load_state_dict
 
 
+def ensure_pandas_applymap_compat(pd: Any) -> None:
+    if not hasattr(pd.DataFrame, "applymap") and hasattr(pd.DataFrame, "map"):
+        pd.DataFrame.applymap = pd.DataFrame.map
+
+
 def load_trial2vec_search_dependencies() -> tuple[Any, Any, Any]:
     try:
         import pandas as pd
@@ -971,6 +976,7 @@ def load_trial2vec_search_dependencies() -> tuple[Any, Any, Any]:
 
 def encode_trial2vec_query(query_row: dict[str, str], trial2vec_model_dir: Path) -> np.ndarray:
     pd, torch, Trial2Vec = load_trial2vec_search_dependencies()
+    ensure_pandas_applymap_compat(pd)
     model = Trial2Vec(device="cpu")
 
     original_torch_load = torch.load
