@@ -90,6 +90,7 @@ DEFAULT_CLINICALBERT_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
 DEFAULT_RETRIEVAL_BACKEND = "clinicalbert"
 DEFAULT_INDEX_EMBEDDING_BACKEND = "clinicalbert"
 RETRIEVAL_BACKENDS = ("clinicalbert", "trial2vec", "secret")
+MIXTURE_PRIOR_MODES = ("rule", "retrospective_calibrated")
 
 
 def ensure_supported_retrieval_backend(backend: str) -> None:
@@ -97,6 +98,14 @@ def ensure_supported_retrieval_backend(backend: str) -> None:
         raise ValueError(
             f"Unsupported retrieval backend: {backend}. "
             f"Supported backends: {', '.join(RETRIEVAL_BACKENDS)}"
+        )
+
+
+def ensure_supported_mixture_prior_mode(mode: str) -> None:
+    if mode not in MIXTURE_PRIOR_MODES:
+        raise ValueError(
+            f"Unsupported mixture prior mode: {mode}. "
+            f"Supported modes: {', '.join(MIXTURE_PRIOR_MODES)}"
         )
 
 
@@ -1795,7 +1804,65 @@ def two_arm_orr_support(endpoint_analysis: dict[str, Any], query: dict[str, Any]
     }
 
 
-def add_bayesian_analysis(result: dict[str, Any]) -> dict[str, Any]:
+def _load_lambda_training_module() -> Any:
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "train_retrospective_lambda_model.py"
+    spec = importlib.util.spec_from_file_location(
+        "_oncology_trial_similarity_lambda_training",
+        script_path,
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load retrospective lambda training module from {script_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def predict_lambda_model_weights(mixture: dict[str, Any], lambda_model_path: Path) -> list[float]:
+    lambda_training = _load_lambda_training_module()
+    import torch
+
+    artifact = lambda_training.load_model_artifact(lambda_model_path)
+    model = lambda_training.LambdaScorer(
+        input_dim=int(artifact["input_dim"]),
+        hidden_dim=int(artifact["hidden_dim"]),
+    )
+    model.load_state_dict(artifact["state_dict"])
+    model.eval()
+
+    components = mixture.get("components") or []
+    if not components:
+        return []
+    features = lambda_training.features_from_mixture_components(components)
+    feature_tensor = torch.tensor(features, dtype=torch.float32)
+    gates = torch.tensor(
+        [max(0.0, float(component.get("gate", 1.0))) for component in components],
+        dtype=torch.float32,
+    )
+    positive_gate_mask = gates > 0.0
+    if not positive_gate_mask.any().item():
+        return [0.0 for _ in components]
+
+    with torch.no_grad():
+        scores = model(feature_tensor)
+        log_raw = scores + gates.clamp_min(1e-12).log()
+        stable_log_raw = torch.where(
+            positive_gate_mask,
+            log_raw - log_raw[positive_gate_mask].max(),
+            torch.full_like(log_raw, -torch.inf),
+        )
+        return torch.exp(stable_log_raw).tolist()
+
+
+def add_bayesian_analysis(
+    result: dict[str, Any],
+    mixture_prior_mode: str = "rule",
+    lambda_model_path: Path | None = None,
+) -> dict[str, Any]:
+    ensure_supported_mixture_prior_mode(mixture_prior_mode)
+    if mixture_prior_mode == "retrospective_calibrated" and lambda_model_path is None:
+        raise ValueError(
+            "--lambda-model-path is required when --mixture-prior-mode=retrospective_calibrated"
+        )
     query_summary = result.get("query_summary", result.get("query", {}))
     rows = result.get("reranked_top_matches") or result.get("reranked_top10") or result.get("top10") or []
     query_observations = query_endpoint_observations(query_summary)
@@ -1826,6 +1893,17 @@ def add_bayesian_analysis(result: dict[str, Any]) -> dict[str, Any]:
         if observed_summary is None:
             continue
         has_query_result = to_float(query.get("treatment_count")) is not None and to_float(query.get("treatment_denominator")) is not None
+        mixture = (
+            mixture_prior.components_from_reranked_rows(rows, endpoint_key, lambda0=0.2)
+            if mixture_prior is not None
+            else {"mode": "rule", "lambda_0": 1.0, "components": []}
+        )
+        if mixture_prior_mode == "retrospective_calibrated":
+            if mixture_prior is None:
+                raise ValueError("mixture prior module is required for retrospective_calibrated mode")
+            assert lambda_model_path is not None
+            model_weights = predict_lambda_model_weights(mixture, lambda_model_path)
+            mixture = mixture_prior.apply_model_lambdas(mixture, model_weights)
         analysis = {
             "endpoint_family": endpoint_key,
             "analysis_mode": "posterior" if has_query_result else "prior_only",
@@ -1834,11 +1912,7 @@ def add_bayesian_analysis(result: dict[str, Any]) -> dict[str, Any]:
             "historical_trial_count": len(historical),
             "effective_sample_size": observed_summary["effective_sample_size"],
             "weighted_historical_rate": observed_summary["weighted_rate"],
-            "mixture_prior": (
-                mixture_prior.components_from_reranked_rows(rows, endpoint_key, lambda0=0.2)
-                if mixture_prior is not None
-                else {"lambda_0": 1.0, "components": []}
-            ),
+            "mixture_prior": mixture,
             "mixture_weight_pi": borrowing_pi_summaries(weights),
             "weight_sensitivity": sensitivity,
             "success_probability_grid": observed_summary["success_probability_grid"],
@@ -1952,8 +2026,11 @@ def search(
     trial2vec_index_path: Path | None = None,
     trial2vec_model_dir: Path | None = None,
     secret_index_path: Path | None = None,
+    mixture_prior_mode: str = "rule",
+    lambda_model_path: Path | None = None,
 ) -> dict[str, Any]:
     ensure_supported_retrieval_backend(retrieval_backend)
+    ensure_supported_mixture_prior_mode(mixture_prior_mode)
     if not query_json.exists():
         raise FileNotFoundError(f"Query JSON does not exist: {query_json}")
     embeddings_path = index_dir / "trial_embeddings.npz"
@@ -2128,7 +2205,11 @@ def search(
         reranked = rerank_candidates(query_summary, rerank_input, rerank_top_n)
         result["reranked_top_matches"] = reranked
         result["reranked_top10"] = reranked[:10]
-    return add_bayesian_analysis(result)
+    return add_bayesian_analysis(
+        result,
+        mixture_prior_mode=mixture_prior_mode,
+        lambda_model_path=lambda_model_path,
+    )
 
 
 def extract_trial_record_like(raw: dict[str, Any], fallback_nct_id: str, json_path: Path) -> dict[str, Any]:
@@ -2221,6 +2302,12 @@ def main() -> None:
     query.add_argument("--trial2vec-model-dir", type=Path, default=None)
     query.add_argument("--secret-index-path", type=Path, default=None)
     query.add_argument(
+        "--mixture-prior-mode",
+        choices=list(MIXTURE_PRIOR_MODES),
+        default="rule",
+    )
+    query.add_argument("--lambda-model-path", type=Path, default=None)
+    query.add_argument(
         "--rerank",
         action="store_true",
         help="Run deterministic prior-borrowing rerank over the first-stage candidates.",
@@ -2288,6 +2375,8 @@ def main() -> None:
             trial2vec_index_path=args.trial2vec_index_path,
             trial2vec_model_dir=args.trial2vec_model_dir,
             secret_index_path=args.secret_index_path,
+            mixture_prior_mode=args.mixture_prior_mode,
+            lambda_model_path=args.lambda_model_path,
         )
         text = json.dumps(result, indent=2, ensure_ascii=False)
         if args.output:

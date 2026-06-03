@@ -58,6 +58,31 @@ def _optional_finite_number(value: Any) -> float | None:
     return numeric_value
 
 
+def _dimension_score(dimension_scores: dict[str, Any], *keys: str) -> float:
+    for key in keys:
+        value = _optional_finite_number(dimension_scores.get(key))
+        if value is not None:
+            return value
+    return 0.0
+
+
+def _redflag_severity(red_flags: list[Any]) -> float:
+    raw = 0.0
+    for flag in red_flags:
+        text = str(flag).lower()
+        if "low disease" in text or "low endpoint" in text:
+            raw += 1.0
+        elif "no primary endpoint-family overlap" in text:
+            raw += 1.0
+        elif "no normalized regimen-backbone overlap" in text:
+            raw += 0.8
+        elif "no posted results" in text or "no arm-level count/denominator" in text:
+            raw += 0.8
+        else:
+            raw += 0.25
+    return min(raw / 3.0, 1.0)
+
+
 def _canonical_endpoint_key(
     family: str | None,
     title: str | None,
@@ -238,6 +263,27 @@ def components_from_reranked_rows(
         raw_rule_weight = gate * discount * max(0.0, overall) / 100.0 * math.log1p(n_i)
         nct_id = row.get("candidate_nct_id") or row.get("nct_id")
         endpoint = selected_quantity.get("endpoint")
+        lambda_features = [
+            overall / 100.0,
+            _dimension_score(
+                dimension_scores,
+                "disease_population_match",
+                "disease_biology_match",
+            )
+            / 5.0,
+            _dimension_score(dimension_scores, "treatment_regimen_match") / 5.0,
+            _dimension_score(dimension_scores, "endpoint_estimand_match") / 5.0,
+            _dimension_score(
+                dimension_scores,
+                "safety_and_followup_relevance",
+                "outcome_assessment_followup",
+            )
+            / 5.0,
+            _dimension_score(dimension_scores, "eligibility_criteria_overlap") / 5.0,
+            _dimension_score(dimension_scores, "result_usability") / 5.0,
+            -_redflag_severity(red_flags),
+            math.log1p(n_i),
+        ]
 
         components.append(
             {
@@ -255,6 +301,7 @@ def components_from_reranked_rows(
                 "beta": 1.0 + discount * (n_i - y_i),
                 "candidate_nct_id": row.get("candidate_nct_id"),
                 "raw_weight": raw_rule_weight,
+                "lambda_features": lambda_features,
             }
         )
         raw_weights.append(raw_rule_weight)
@@ -264,7 +311,34 @@ def components_from_reranked_rows(
     for component, lambda_rule in zip(components, lambdas):
         component["lambda_rule"] = lambda_rule
 
-    return {"lambda_0": normalized["lambda_0"], "components": components}
+    return {"mode": "rule", "lambda_0": normalized["lambda_0"], "components": components}
+
+
+def apply_model_lambdas(mixture: dict[str, Any], model_lambdas: list[float]) -> dict[str, Any]:
+    components = list(mixture.get("components") or [])
+    if len(model_lambdas) != len(components):
+        raise ValueError("model lambda count must equal component count")
+
+    lambda0 = _validate_lambda0(float(mixture.get("lambda_0", 0.2)))
+    normalized = normalize_lambdas(model_lambdas, lambda0=lambda0)
+    output = {
+        **mixture,
+        "mode": "retrospective_calibrated",
+        "lambda_0": normalized["lambda_0"],
+        "components": [],
+        "calibration_note": (
+            "No expert labels were used; lambda_model was trained by retrospective predictive loss."
+        ),
+    }
+    for component, lambda_model in zip(components, normalized["lambda_i"]):
+        output["components"].append(
+            {
+                **component,
+                "lambda_model": lambda_model,
+                "lambda_active": lambda_model,
+            }
+        )
+    return output
 
 
 def mixture_predictive_probability(

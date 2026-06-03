@@ -41,6 +41,36 @@ class LambdaScorer(torch.nn.Module):
         return self.network(features).squeeze(-1)
 
 
+def save_model_artifact(
+    path: str | Path,
+    model: LambdaScorer,
+    input_dim: int,
+    hidden_dim: int,
+    lambda0: float,
+) -> None:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "state_dict": model.state_dict(),
+            "input_dim": int(input_dim),
+            "hidden_dim": int(hidden_dim),
+            "feature_names": list(LAMBDA_FEATURE_NAMES),
+            "lambda0": float(lambda0),
+        },
+        output,
+    )
+
+
+def load_model_artifact(path: str | Path) -> dict[str, Any]:
+    artifact = torch.load(Path(path), map_location="cpu", weights_only=False)
+    if artifact.get("feature_names") != LAMBDA_FEATURE_NAMES:
+        raise ValueError("lambda model feature_names do not match current feature order")
+    if int(artifact.get("input_dim", -1)) != len(LAMBDA_FEATURE_NAMES):
+        raise ValueError("lambda model input_dim does not match current feature order")
+    return artifact
+
+
 def _log_choose(n: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
     return torch.lgamma(n + 1.0) - torch.lgamma(k + 1.0) - torch.lgamma(n - k + 1.0)
 
@@ -325,6 +355,42 @@ def build_training_example_from_pipeline_result(
     }
 
 
+def features_from_mixture_components(components: list[dict[str, Any]]) -> list[list[float]]:
+    features = []
+    for component in components:
+        explicit = component.get("lambda_features")
+        if explicit is not None:
+            if len(explicit) != len(LAMBDA_FEATURE_NAMES):
+                raise ValueError("lambda_features must have 9 values")
+            features.append([_finite_float("lambda feature", value) for value in explicit])
+            continue
+
+        denominator = _finite_float("component denominator", component.get("denominator", 0.0))
+        features.append(
+            [
+                _finite_float(
+                    "s_i",
+                    component.get(
+                        "s_i",
+                        float(component.get("overall_similarity_score", 0.0)) / 100.0,
+                    ),
+                ),
+                _finite_float("disease_match_i", component.get("disease_match_i", 0.0)),
+                _finite_float("regimen_match_i", component.get("regimen_match_i", 0.0)),
+                _finite_float("endpoint_match_i", component.get("endpoint_match_i", 0.0)),
+                _finite_float("followup_match_i", component.get("followup_match_i", 0.0)),
+                _finite_float("eligibility_match_i", component.get("eligibility_match_i", 0.0)),
+                _finite_float("result_quality_i", component.get("result_quality_i", 0.0)),
+                _finite_float(
+                    "negative_redflag_severity_i",
+                    component.get("negative_redflag_severity_i", 0.0),
+                ),
+                _finite_float("log_n_i", component.get("log_n_i", math.log1p(denominator))),
+            ]
+        )
+    return features
+
+
 def load_examples_from_pipeline_results(
     path: str | Path,
     endpoint_key: str = "ORR",
@@ -349,6 +415,7 @@ def train_model(
     epochs: int,
     learning_rate: float,
     hidden_dim: int,
+    model_output: str | Path | None = None,
 ) -> dict[str, Any]:
     if not examples:
         raise ValueError("examples must not be empty")
@@ -370,13 +437,30 @@ def train_model(
         loss_history.append(float(mean_loss.detach().item()))
 
     final_loss = loss_history[-1] if loss_history else math.nan
-    return {
+    if model_output is not None:
+        save_model_artifact(
+            model_output,
+            model,
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            lambda0=first_tensors["lambda0"],
+        )
+
+    summary = {
         "epochs": epochs,
         "final_loss": final_loss,
         "loss_history": loss_history,
         "input_dim": input_dim,
         "hidden_dim": hidden_dim,
+        "model": model,
     }
+    if model_output is not None:
+        summary["model_output"] = str(model_output)
+    return summary
+
+
+def serializable_training_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in summary.items() if key != "model"}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -388,6 +472,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--hidden-dim", type=int, default=16)
+    parser.add_argument("--model-output", type=Path, default=None)
     args = parser.parse_args(argv)
 
     examples = []
@@ -401,11 +486,13 @@ def main(argv: list[str] | None = None) -> None:
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         hidden_dim=args.hidden_dim,
+        model_output=args.model_output,
     )
+    serializable_summary = serializable_training_summary(summary)
     output_path = Path(args.output_json)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(summary, indent=2))
+    output_path.write_text(json.dumps(serializable_summary, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(serializable_summary, indent=2))
 
 
 if __name__ == "__main__":

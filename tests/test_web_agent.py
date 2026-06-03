@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import unittest
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
@@ -175,6 +177,129 @@ class WebAgentTests(unittest.TestCase):
         self.assertTrue(endpoint["success_probability_grid"])
         self.assertTrue(endpoint["tipping_points"])
         self.assertGreater(analysis["two_arm_decision_support"]["orr"]["posterior_or_mean"], 1.0)
+
+    def test_bayesian_analysis_applies_calibrated_lambda_model(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 12, "denominator": 40},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST1",
+                    "overall_similarity_score": 82.0,
+                    "suggested_borrowing_discount": 0.4,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 10, "denominator": 50},
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "candidate_nct_id": "NCTHIST2",
+                    "overall_similarity_score": 76.0,
+                    "suggested_borrowing_discount": 0.75,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Treatment Arm", "count": 18, "denominator": 60},
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+
+        with mock.patch.object(
+            app_module.pipeline,
+            "predict_lambda_model_weights",
+            return_value=[10.0, 1.0],
+            create=True,
+        ) as predict:
+            enriched = app_module.pipeline.add_bayesian_analysis(
+                result,
+                mixture_prior_mode="retrospective_calibrated",
+                lambda_model_path=Path("fake.pt"),
+            )
+
+        mixture = enriched["bayesian_analysis"]["endpoint_analyses"][0]["mixture_prior"]
+        self.assertEqual(mixture["mode"], "retrospective_calibrated")
+        self.assertIn("lambda_model", mixture["components"][0])
+        self.assertIn("lambda_active", mixture["components"][0])
+        self.assertIn("lambda_rule", mixture["components"][0])
+        self.assertIn("No expert labels", mixture["calibration_note"])
+        predict.assert_called_once()
+
+    def test_bayesian_analysis_requires_lambda_model_path_for_calibrated_mode(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 12, "denominator": 40},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "overall_similarity_score": 82.0,
+                    "suggested_borrowing_discount": 0.4,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 10, "denominator": 50},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(ValueError, "--lambda-model-path is required"):
+            app_module.pipeline.add_bayesian_analysis(
+                result,
+                mixture_prior_mode="retrospective_calibrated",
+            )
 
     def test_bayesian_analysis_excludes_duration_of_response(self) -> None:
         result = {

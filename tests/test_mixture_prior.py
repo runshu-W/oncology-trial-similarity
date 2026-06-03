@@ -187,6 +187,7 @@ class MixturePriorComponentTests(unittest.TestCase):
 
         components = mixture_prior.components_from_reranked_rows(rows, endpoint_key="ORR", lambda0=0.2)
 
+        self.assertEqual(components["mode"], "rule")
         self.assertEqual(len(components["components"]), 2)
         self.assertAlmostEqual(components["lambda_0"], 0.2)
         self.assertAlmostEqual(sum(row["lambda_rule"] for row in components["components"]), 0.8)
@@ -260,7 +261,7 @@ class MixturePriorComponentTests(unittest.TestCase):
 
         components = mixture_prior.components_from_reranked_rows([row], endpoint_key="ORR")
 
-        self.assertEqual(components, {"lambda_0": 1.0, "components": []})
+        self.assertEqual(components, {"mode": "rule", "lambda_0": 1.0, "components": []})
 
     def test_pfs6_canonicalization_matches_progression_six_month_endpoint(self) -> None:
         row = self._component_row(
@@ -278,6 +279,42 @@ class MixturePriorComponentTests(unittest.TestCase):
 
         self.assertEqual(len(components["components"]), 1)
         self.assertEqual(components["components"][0]["endpoint"], "Progression-free survival")
+
+    def test_apply_model_lambdas_sets_active_weights_and_preserves_rule_weights(self):
+        mixture = {
+            "mode": "rule",
+            "lambda_0": 0.2,
+            "components": [
+                {"lambda_rule": 0.6, "nct_id": "NCT1"},
+                {"lambda_rule": 0.2, "nct_id": "NCT2"},
+            ],
+        }
+
+        updated = mixture_prior.apply_model_lambdas(mixture, [0.5, 0.3])
+
+        self.assertEqual(updated["mode"], "retrospective_calibrated")
+        self.assertAlmostEqual(
+            sum(component["lambda_active"] for component in updated["components"]) + updated["lambda_0"],
+            1.0,
+        )
+        self.assertEqual(updated["components"][0]["lambda_rule"], 0.6)
+        self.assertEqual(updated["components"][1]["lambda_rule"], 0.2)
+        self.assertIn("lambda_model", updated["components"][0])
+        self.assertIn("lambda_active", updated["components"][0])
+        self.assertIn("retrospective predictive loss", updated["calibration_note"])
+        self.assertIn("No expert labels", updated["calibration_note"])
+
+    def test_apply_model_lambdas_rejects_length_mismatch(self):
+        mixture = {
+            "lambda_0": 0.2,
+            "components": [
+                {"lambda_rule": 0.6},
+                {"lambda_rule": 0.2},
+            ],
+        }
+
+        with self.assertRaisesRegex(ValueError, "model lambda count"):
+            mixture_prior.apply_model_lambdas(mixture, [0.5])
 
 
 if __name__ == "__main__":

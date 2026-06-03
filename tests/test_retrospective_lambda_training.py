@@ -271,6 +271,61 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "epochs"):
                     module.train_model([self.base_example()], epochs=epochs, learning_rate=0.01, hidden_dim=6)
 
+    def test_train_model_can_save_and_load_artifact(self):
+        module = load_training_module()
+        example = self.base_example()
+        example["features"] = [[0.1] * 9, [0.2] * 9]
+        example["feature_names"] = module.LAMBDA_FEATURE_NAMES
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "lambda_model.pt"
+            summary = module.train_model(
+                [example],
+                epochs=1,
+                learning_rate=0.01,
+                hidden_dim=6,
+                model_output=path,
+            )
+            loaded = module.load_model_artifact(path)
+
+            self.assertTrue(path.exists())
+
+        self.assertEqual(summary["model_output"], str(path))
+        self.assertEqual(loaded["feature_names"], module.LAMBDA_FEATURE_NAMES)
+        self.assertEqual(loaded["input_dim"], 9)
+        self.assertEqual(loaded["hidden_dim"], 6)
+
+    def test_load_model_artifact_rejects_feature_metadata_mismatch(self):
+        module = load_training_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "lambda_model.pt"
+            torch.save(
+                {
+                    "state_dict": {},
+                    "input_dim": 9,
+                    "hidden_dim": 6,
+                    "feature_names": ["wrong"],
+                    "lambda0": 0.2,
+                },
+                path,
+            )
+
+            with self.assertRaisesRegex(ValueError, "feature_names"):
+                module.load_model_artifact(path)
+
+            torch.save(
+                {
+                    "state_dict": {},
+                    "input_dim": 8,
+                    "hidden_dim": 6,
+                    "feature_names": module.LAMBDA_FEATURE_NAMES,
+                    "lambda0": 0.2,
+                },
+                path,
+            )
+
+            with self.assertRaisesRegex(ValueError, "input_dim"):
+                module.load_model_artifact(path)
+
     def test_main_creates_output_parent_directories(self):
         module = load_training_module()
         example = self.base_example()
