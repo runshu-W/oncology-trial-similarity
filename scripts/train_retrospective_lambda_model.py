@@ -385,12 +385,39 @@ def _dimension_score(dimension_scores: dict[str, Any], *keys: str) -> float:
     return 0.0
 
 
+def validate_pipeline_result_leakage_control(result: dict[str, Any]) -> None:
+    metadata = result.get("retrospective_leakage_control")
+    if not isinstance(metadata, dict) or metadata.get("query_outcomes_hidden_from_retrieval") is not True:
+        raise ValueError(
+            "pipeline result must include retrospective_leakage_control."
+            "query_outcomes_hidden_from_retrieval=true"
+        )
+    if "heldout_query_outcomes" not in result:
+        raise ValueError("pipeline result must include heldout_query_outcomes for retrospective loss")
+    if not isinstance(result.get("heldout_query_outcomes"), dict):
+        raise ValueError("pipeline result must include heldout_query_outcomes object for retrospective loss")
+
+
+def query_outcome_summary_from_pipeline_result(result: dict[str, Any]) -> dict[str, Any]:
+    if "heldout_query_outcomes" in result:
+        heldout = result["heldout_query_outcomes"]
+        if not isinstance(heldout, dict):
+            raise ValueError("pipeline result heldout_query_outcomes must be an object")
+        return heldout
+    return result["query_summary"]
+
+
 def build_training_example_from_pipeline_result(
     result: dict[str, Any],
     endpoint_key: str = "ORR",
     lambda0: float = 0.2,
+    require_leakage_safe: bool = False,
 ) -> dict[str, Any]:
-    query_observations = pipeline.query_endpoint_observations(result["query_summary"])
+    if require_leakage_safe:
+        validate_pipeline_result_leakage_control(result)
+    query_observations = pipeline.query_endpoint_observations(
+        query_outcome_summary_from_pipeline_result(result)
+    )
     query = query_observations.get(endpoint_key)
     if query is None:
         raise ValueError(f"query_summary does not contain endpoint {endpoint_key}")
@@ -505,6 +532,7 @@ def load_examples_from_pipeline_results(
     path: str | Path,
     endpoint_key: str = "ORR",
     lambda0: float = 0.2,
+    require_leakage_safe: bool = True,
 ) -> list[dict[str, Any]]:
     examples = []
     with Path(path).open(encoding="utf-8") as handle:
@@ -515,6 +543,7 @@ def load_examples_from_pipeline_results(
                         json.loads(line),
                         endpoint_key=endpoint_key,
                         lambda0=lambda0,
+                        require_leakage_safe=require_leakage_safe,
                     )
                 )
     return examples

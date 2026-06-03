@@ -514,12 +514,26 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
                         {
                             "title": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                        }
+                    ]
+                }
+            },
+            "heldout_query_outcomes": {
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
                             "arm_results": [
                                 {"arm": "Experimental", "count": 12, "denominator": 40}
                             ],
                         }
                     ]
                 }
+            },
+            "retrospective_leakage_control": {
+                "query_outcomes_hidden_from_retrieval": True,
+                "heldout_query_outcomes_for_post_retrieval_analysis": True,
             },
             "reranked_top_matches": [
                 {
@@ -598,6 +612,28 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "endpoint DCR"):
             module.build_training_example_from_pipeline_result(result, endpoint_key="DCR")
+
+    def test_load_examples_from_pipeline_results_rejects_missing_leakage_control(self) -> None:
+        module = load_training_module()
+        result = self.pipeline_result()
+        result.pop("retrospective_leakage_control")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "pipeline.jsonl"
+            path.write_text(json.dumps(result) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "query_outcomes_hidden_from_retrieval"):
+                module.load_examples_from_pipeline_results(path)
+
+    def test_load_examples_from_pipeline_results_rejects_null_heldout_outcomes(self) -> None:
+        module = load_training_module()
+        result = self.pipeline_result()
+        result["heldout_query_outcomes"] = None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "pipeline.jsonl"
+            path.write_text(json.dumps(result) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "heldout_query_outcomes"):
+                module.load_examples_from_pipeline_results(path)
 
     def test_main_builds_examples_from_pipeline_results_jsonl(self):
         module = load_training_module()

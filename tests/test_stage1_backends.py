@@ -63,6 +63,149 @@ class Stage1BackendTests(unittest.TestCase):
         self.assertEqual(result["embedding_backend"], "hashing")
         self.assertEqual(result["top_matches"][0]["retrieval_backend"], "hashing")
 
+    def test_redact_query_outcomes_for_retrieval_removes_counts_but_keeps_endpoint_labels(self) -> None:
+        summary = {
+            "nct_id": "NCTQUERY",
+            "endpoints": {
+                "primary": [
+                    {
+                        "title": "Objective Response Rate",
+                        "endpoint_family": "ORR/CR/PR",
+                        "time_frame": "24 weeks",
+                        "arm_results": [
+                            {"arm": "Experimental", "count": 12, "denominator": 40}
+                        ],
+                        "denominators": [{"arm": "Experimental", "denominator": 40}],
+                        "measurements": [{"arm": "Experimental", "count": 12}],
+                    }
+                ],
+                "secondary_or_other": [],
+            },
+            "results": {
+                "has_posted_results": True,
+                "primary_results": [{"title": "Objective Response Rate"}],
+                "safety_results": [{"title": "Adverse Events"}],
+                "denominators": [{"denominator": 40}],
+                "follow_up_duration": "24 weeks",
+            },
+            "borrowing_relevance": {
+                "borrowable_quantities": [
+                    {"endpoint": "Objective Response Rate", "arm_results": []}
+                ]
+            },
+        }
+
+        redacted = pipeline.redact_query_outcomes_for_retrieval(summary)
+
+        endpoint = redacted["endpoints"]["primary"][0]
+        self.assertEqual(endpoint["title"], "Objective Response Rate")
+        self.assertEqual(endpoint["endpoint_family"], "ORR/CR/PR")
+        self.assertNotIn("arm_results", endpoint)
+        self.assertNotIn("denominators", endpoint)
+        self.assertNotIn("measurements", endpoint)
+        self.assertFalse(redacted["results"]["has_posted_results"])
+        self.assertEqual(redacted["results"]["primary_results"], [])
+        self.assertEqual(redacted["borrowing_relevance"]["borrowable_quantities"], [])
+        self.assertNotIn("12", redacted.get("one_paragraph_summary_for_embedding", ""))
+        self.assertNotIn("40", redacted.get("one_paragraph_summary_for_embedding", ""))
+        self.assertIn("arm_results", summary["endpoints"]["primary"][0])
+
+    def test_trial2vec_row_uses_redacted_summary_text_when_query_outcomes_are_hidden(self) -> None:
+        summary = {
+            "nct_id": "NCTQUERY",
+            "brief_title": "Query Trial",
+            "brief_summary": "Tests treatment in lung cancer.",
+            "one_paragraph_summary_for_embedding": (
+                "Objective Response Rate arm_results count 12 denominator 40 proportion 0.3"
+            ),
+            "endpoints": {
+                "primary": [
+                    {
+                        "title": "Objective Response Rate",
+                        "endpoint_family": "ORR/CR/PR",
+                        "arm_results": [
+                            {
+                                "arm": "Experimental",
+                                "count": 12,
+                                "denominator": 40,
+                                "proportion": 0.3,
+                            }
+                        ],
+                    }
+                ]
+            },
+            "results": {"has_posted_results": True},
+            "borrowing_relevance": {"borrowable_quantities": []},
+        }
+
+        row = pipeline.summary_to_trial2vec_row(
+            pipeline.redact_query_outcomes_for_retrieval(summary)
+        )
+
+        self.assertIn("Objective Response Rate", row["outcome_measure"])
+        self.assertNotIn("12", row["description"])
+        self.assertNotIn("40", row["description"])
+        self.assertNotIn("0.3", row["description"])
+
+    def test_search_can_hide_query_outcomes_from_retrieval_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            index_dir = tmp_path / "index"
+            index_dir.mkdir()
+            query_path = tmp_path / "query.json"
+            query_path.write_text(
+                json.dumps(
+                    {
+                        "Study details": {
+                            "1. NCT number": "NCTQUERY",
+                            "5. Study Overview": {"Brief Title": "Query"},
+                        },
+                        "Results Posted": {
+                            "5. Outcome measures": [
+                                {
+                                    "Type": "PRIMARY",
+                                    "Title": "Objective Response Rate",
+                                    "Time Frame": "24 weeks",
+                                    "Data Table": [
+                                        {"Category": "Measurement", "Experimental Arm": "12"},
+                                        {"Category": "Denominator", "Experimental Arm": "40"},
+                                    ],
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (index_dir / "trial_summaries.jsonl").write_text(
+                json.dumps({"nct_id": "NCTCANDIDATE", "brief_title": "Candidate"}) + "\n",
+                encoding="utf-8",
+            )
+            embeddings = {
+                aspect: np.zeros((1, 2048), dtype=np.float32)
+                for aspect in pipeline.ASPECT_WEIGHTS
+            }
+            np.savez_compressed(
+                index_dir / "trial_embeddings.npz",
+                nct_ids=np.array(["NCTCANDIDATE"]),
+                embedding_backend=np.array(["hashing"]),
+                embedding_model=np.array(["signed-token-hashing-2048"]),
+                **embeddings,
+            )
+
+            result = pipeline.search(
+                query_path,
+                index_dir,
+                top_k=1,
+                hide_query_outcomes_for_retrieval=True,
+            )
+
+        self.assertTrue(
+            result["retrospective_leakage_control"]["query_outcomes_hidden_from_retrieval"]
+        )
+        self.assertNotIn("arm_results", result["query_summary"]["endpoints"]["primary"][0])
+        self.assertIn("arm_results", result["heldout_query_outcomes"]["endpoints"]["primary"][0])
+
     def test_secret_backend_is_supported_by_backend_guardrail(self) -> None:
         pipeline.ensure_supported_retrieval_backend("secret")
 

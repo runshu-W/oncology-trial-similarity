@@ -334,7 +334,7 @@ It should also support:
 The script must write this assumption into the output JSON:
 
 ```text
-Input examples must have been generated with query outcomes hidden from retrieval, reranking, feature construction, lambda selection, and model selection. The held-out outcome is used only for predictive loss and evaluation.
+Input examples must have been generated with query outcomes hidden from retrieval, reranking, feature construction, lambda selection, and model selection. The held-out outcome is reserved for post-retrieval predictive loss, evaluation, and analysis.
 ```
 
 The evaluation script cannot prove upstream leakage is absent, but it can:

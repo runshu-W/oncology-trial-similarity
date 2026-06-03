@@ -16,7 +16,7 @@ import train_retrospective_lambda_model as lambda_training  # noqa: E402
 
 LEAKAGE_CONTROL_ASSUMPTION = (
     "Query outcomes must be hidden from retrieval/reranking/feature construction/model selection "
-    "and used only for predictive loss/evaluation."
+    "and reserved for post-retrieval predictive loss/evaluation/analysis."
 )
 
 
@@ -102,7 +102,7 @@ def evaluate_examples(
         "seed": seed,
         "train_fraction": train_fraction,
         "evaluation_target": "retrospective_predictive_negative_log_likelihood",
-        "outcome_usage": "held_out_query_outcomes_for_predictive_loss_only",
+        "outcome_usage": "held_out_query_outcomes_for_post_retrieval_predictive_evaluation_and_analysis",
         "metrics": {
             "weak_only_mean_nll": mean_nll(weak_losses),
             "rule_lambda_mean_nll": rule,

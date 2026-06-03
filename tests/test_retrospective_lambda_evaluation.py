@@ -83,7 +83,7 @@ class RetrospectiveEvaluationTests(unittest.TestCase):
         self.assertIn("reranking", assumption)
         self.assertIn("feature construction", assumption)
         self.assertIn("model selection", assumption)
-        self.assertIn("only for predictive loss/evaluation", assumption)
+        self.assertIn("post-retrieval predictive loss/evaluation/analysis", assumption)
 
     def test_evaluate_examples_uses_pure_learned_predictive_nll(self):
         module = load_eval_module()
@@ -136,6 +136,40 @@ class RetrospectiveEvaluationTests(unittest.TestCase):
 
         self.assertEqual(report["example_count"], 4)
         self.assertNotIn("model", report)
+
+    def test_main_rejects_pipeline_results_without_leakage_metadata(self):
+        module = load_eval_module()
+        result = {
+            "query_summary": {
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental", "count": 12, "denominator": 40}
+                            ],
+                        }
+                    ]
+                }
+            },
+            "reranked_top_matches": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            pipeline_path = tmp_path / "pipeline.jsonl"
+            output_path = tmp_path / "evaluation.json"
+            pipeline_path.write_text(json.dumps(result) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "query_outcomes_hidden_from_retrieval"):
+                module.main(
+                    [
+                        "--pipeline-results-jsonl",
+                        str(pipeline_path),
+                        "--output-json",
+                        str(output_path),
+                    ]
+                )
 
 
 if __name__ == "__main__":

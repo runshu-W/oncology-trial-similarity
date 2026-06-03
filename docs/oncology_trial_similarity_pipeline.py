@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import inspect
 import importlib.util
@@ -702,6 +703,68 @@ def make_rule_based_summary(extracted: dict[str, Any]) -> dict[str, Any]:
             "sap_text_available": bool(extracted.get("supporting_documents", {}).get("sap_excerpt")),
         },
         "one_paragraph_summary_for_embedding": full_text[:4000],
+    }
+
+
+def _redact_endpoint_outcome_values(endpoint: Any) -> Any:
+    if not isinstance(endpoint, dict):
+        return endpoint
+    allowed_keys = {
+        "type",
+        "title",
+        "description",
+        "time_frame",
+        "endpoint_family",
+    }
+    return {
+        key: copy.deepcopy(value)
+        for key, value in endpoint.items()
+        if key in allowed_keys
+    }
+
+
+def redact_query_outcomes_for_retrieval(summary: dict[str, Any]) -> dict[str, Any]:
+    """Return a query summary with held-out outcome values removed for pseudo-query retrieval."""
+    redacted = copy.deepcopy(summary)
+    endpoints = redacted.get("endpoints")
+    if isinstance(endpoints, dict):
+        for key in ("primary", "secondary_or_other"):
+            values = endpoints.get(key)
+            if isinstance(values, list):
+                endpoints[key] = [_redact_endpoint_outcome_values(value) for value in values]
+            elif isinstance(values, dict):
+                endpoints[key] = _redact_endpoint_outcome_values(values)
+
+    redacted["results"] = {
+        "has_posted_results": False,
+        "primary_results": [],
+        "safety_results": [],
+        "denominators": [],
+        "follow_up_duration": "Hidden for retrospective pseudo-query evaluation.",
+    }
+    borrowing = redacted.get("borrowing_relevance")
+    if isinstance(borrowing, dict):
+        borrowing["borrowable_quantities"] = []
+    redacted["one_paragraph_summary_for_embedding"] = clean_text(
+        [
+            redacted.get("brief_title", ""),
+            redacted.get("official_title", ""),
+            redacted.get("brief_summary", ""),
+            redacted.get("detailed_description", ""),
+            clean_text(redacted.get("intervention", "")),
+            clean_text(redacted.get("cancer_type", "")),
+            clean_text(redacted.get("population", "")),
+            clean_text(redacted.get("endpoints", {})),
+            clean_text(redacted.get("design", {})),
+        ]
+    )[:4000]
+    return redacted
+
+
+def heldout_query_outcomes_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "nct_id": summary.get("nct_id", ""),
+        "endpoints": copy.deepcopy(summary.get("endpoints", {})),
     }
 
 
@@ -1863,7 +1926,10 @@ def add_bayesian_analysis(
         raise ValueError(
             "--lambda-model-path is required when --mixture-prior-mode=retrospective_calibrated"
         )
-    query_summary = result.get("query_summary", result.get("query", {}))
+    query_summary = result.get(
+        "heldout_query_outcomes",
+        result.get("query_summary", result.get("query", {})),
+    )
     rows = result.get("reranked_top_matches") or result.get("reranked_top10") or result.get("top10") or []
     query_observations = query_endpoint_observations(query_summary)
     endpoint_analyses = []
@@ -2028,6 +2094,7 @@ def search(
     secret_index_path: Path | None = None,
     mixture_prior_mode: str = "rule",
     lambda_model_path: Path | None = None,
+    hide_query_outcomes_for_retrieval: bool = False,
 ) -> dict[str, Any]:
     ensure_supported_retrieval_backend(retrieval_backend)
     ensure_supported_mixture_prior_mode(mixture_prior_mode)
@@ -2077,7 +2144,12 @@ def search(
         raw_json=raw,
         extracted=extract_trial_record_like(raw, folder_name, query_json),
     )
-    query_summary = make_rule_based_summary(record.extracted)
+    full_query_summary = make_rule_based_summary(record.extracted)
+    query_summary = (
+        redact_query_outcomes_for_retrieval(full_query_summary)
+        if hide_query_outcomes_for_retrieval
+        else full_query_summary
+    )
 
     summaries = load_summaries(summaries_path)
     scored = []
@@ -2200,6 +2272,12 @@ def search(
         "top_matches": top_matches,
         "top10": top_matches[: min(top_k, 10)],
     }
+    if hide_query_outcomes_for_retrieval:
+        result["heldout_query_outcomes"] = heldout_query_outcomes_from_summary(full_query_summary)
+        result["retrospective_leakage_control"] = {
+            "query_outcomes_hidden_from_retrieval": True,
+            "heldout_query_outcomes_for_post_retrieval_analysis": True,
+        }
     if rerank_top_n > 0:
         rerank_input = scored[: max(rerank_top_n, top_k)]
         reranked = rerank_candidates(query_summary, rerank_input, rerank_top_n)
@@ -2308,6 +2386,14 @@ def main() -> None:
     )
     query.add_argument("--lambda-model-path", type=Path, default=None)
     query.add_argument(
+        "--hide-query-outcomes-for-retrieval",
+        action="store_true",
+        help=(
+            "For retrospective pseudo-query evaluation, hide posted query outcomes from "
+            "retrieval/reranking and store a held-out copy for post-retrieval loss/analysis."
+        ),
+    )
+    query.add_argument(
         "--rerank",
         action="store_true",
         help="Run deterministic prior-borrowing rerank over the first-stage candidates.",
@@ -2377,6 +2463,7 @@ def main() -> None:
             secret_index_path=args.secret_index_path,
             mixture_prior_mode=args.mixture_prior_mode,
             lambda_model_path=args.lambda_model_path,
+            hide_query_outcomes_for_retrieval=args.hide_query_outcomes_for_retrieval,
         )
         text = json.dumps(result, indent=2, ensure_ascii=False)
         if args.output:
