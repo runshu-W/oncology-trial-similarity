@@ -179,6 +179,88 @@ class Stage1BackendTests(unittest.TestCase):
         self.assertIs(FakeDataFrame.applymap, FakeDataFrame.map)
 
 
+class SecretRetrievalTests(unittest.TestCase):
+    def test_secret_sections_include_required_qa_fields_and_bounded_excerpts(self) -> None:
+        secret = importlib.import_module("docs.secret_retrieval")
+        summary = {
+            "nct_id": "NCTSECRET",
+            "brief_title": "Neoadjuvant HER2 breast cancer trial",
+            "brief_summary": "Tests a targeted regimen.",
+            "cancer_type": {"primary_site": ["Breast"], "histology": ["HER2-positive"]},
+            "intervention": {
+                "experimental_regimen": "Trastuzumab plus pertuzumab and docetaxel",
+                "drug_classes": ["HER2 therapy", "taxane"],
+            },
+            "population": {
+                "key_inclusion": ["Stage II-III HER2-positive breast cancer"],
+                "key_exclusion": ["Active brain metastases"],
+            },
+            "endpoints": {
+                "primary": [
+                    {
+                        "title": "Pathologic complete response",
+                        "endpoint_family": "ORR/CR/PR",
+                        "time_frame": "20 weeks",
+                    }
+                ]
+            },
+            "design": {"single_or_multi_arm": "Multi Arm", "randomized": "Randomized"},
+            "result_usability": {"has_posted_results": True},
+            "supporting_documents": {
+                "protocol_excerpt": "Eligibility details " * 200,
+                "sap_excerpt": "Analysis population details " * 200,
+            },
+        }
+
+        sections = secret.secret_sections_from_summary(summary, excerpt_char_limit=120)
+
+        self.assertEqual(set(sections), set(secret.SECRET_SECTIONS))
+        self.assertIn("Q:", sections["disease_population"])
+        self.assertIn("Breast", sections["disease_population"])
+        self.assertIn("HER2-positive breast cancer", sections["eligibility"])
+        self.assertIn("Active brain metastases", sections["eligibility"])
+        self.assertLessEqual(len(sections["eligibility"]), 700)
+        self.assertIn("protocol excerpt", sections["eligibility"].lower())
+
+    def test_secret_index_search_uses_section_weights_and_returns_evidence(self) -> None:
+        secret = importlib.import_module("docs.secret_retrieval")
+        query_vectors = {
+            section: np.array([1.0, 0.0], dtype=np.float32)
+            for section in secret.SECRET_SECTIONS
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "secret_embeddings.npz"
+            arrays = {
+                section: np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+                for section in secret.SECRET_SECTIONS
+            }
+            np.savez_compressed(
+                path,
+                nct_ids=np.array(["NCTGOOD", "NCTBAD"]),
+                retrieval_backend=np.array(["secret"]),
+                embedding_backend=np.array(["hashing"]),
+                embedding_model=np.array(["signed-token-hashing-2048"]),
+                **arrays,
+            )
+            summaries = {
+                "NCTGOOD": {
+                    "nct_id": "NCTGOOD",
+                    "cancer_type": {"primary_site": ["Breast"]},
+                    "intervention": {"experimental_regimen": "Drug A"},
+                }
+            }
+
+            rows = secret.score_secret_index(
+                query_vectors, path, summaries, excluded_nct_id="NCTQUERY", top_k=2
+            )
+
+        self.assertEqual([row["nct_id"] for row in rows], ["NCTGOOD", "NCTBAD"])
+        self.assertEqual(rows[0]["retrieval_backend"], "secret")
+        self.assertEqual(rows[0]["score_0_100"], 100.0)
+        self.assertIn("disease_population", rows[0]["secret_section_scores"])
+        self.assertIn("disease_population", rows[0]["secret_evidence"])
+
+
 class Trial2VecIndexBuilderTests(unittest.TestCase):
     def test_builder_import_does_not_require_optional_ml_dependencies(self) -> None:
         original_import = __import__
