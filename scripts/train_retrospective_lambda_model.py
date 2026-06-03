@@ -138,11 +138,23 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
     if count > denominator:
         raise ValueError("query count must be less than or equal to denominator")
 
+    alpha_values = []
+    beta_values = []
+    for component in components:
+        alpha = _finite_float("component alpha", component["alpha"])
+        if alpha <= 0.0:
+            raise ValueError("component alpha must be positive")
+        beta = _finite_float("component beta", component["beta"])
+        if beta <= 0.0:
+            raise ValueError("component beta must be positive")
+        alpha_values.append(alpha)
+        beta_values.append(beta)
+
     return {
         "features": features,
         "components": components,
-        "alpha": torch.tensor([component["alpha"] for component in components], dtype=torch.float32),
-        "beta": torch.tensor([component["beta"] for component in components], dtype=torch.float32),
+        "alpha": torch.tensor(alpha_values, dtype=torch.float32),
+        "beta": torch.tensor(beta_values, dtype=torch.float32),
         "gate": torch.tensor([component.get("gate", 1.0) for component in components], dtype=torch.float32),
         "discount": torch.tensor([component.get("discount", 0.0) for component in components], dtype=torch.float32),
         "component_denominator": torch.tensor(
@@ -226,6 +238,104 @@ def predictive_loss_for_example(
     cap = torch.tensor(float(ess_cap), dtype=torch.float32)
     ess_penalty = 1e-4 * torch.relu(ess - cap).pow(2)
     return loss + ess_penalty
+
+
+def weak_only_loss_for_example(example: dict[str, Any]) -> torch.Tensor:
+    tensors = _validated_example_tensors(example)
+    count = torch.tensor(tensors["query_count"], dtype=torch.float32)
+    denominator = torch.tensor(tensors["query_denominator"], dtype=torch.float32)
+    weak_log_predictive = beta_binomial_log_predictive(
+        count,
+        denominator,
+        torch.tensor(1.0, dtype=torch.float32),
+        torch.tensor(1.0, dtype=torch.float32),
+    )
+    return -weak_log_predictive
+
+
+def learned_lambda_loss_for_example(model: LambdaScorer, example: dict[str, Any]) -> torch.Tensor:
+    tensors = _validated_example_tensors(example)
+    features = tensors["features"]
+    scores = model(features)
+    if scores.ndim != 1 or scores.shape[0] != features.shape[0]:
+        raise ValueError("model scores must have one value per component")
+
+    lambda0 = torch.tensor(tensors["lambda0"], dtype=torch.float32)
+    gate = tensors["gate"]
+    positive_gate_mask = gate > 0.0
+    if positive_gate_mask.any().item():
+        candidate_budget = torch.clamp(1.0 - lambda0, min=0.0)
+        log_raw = scores + gate.clamp_min(1e-12).log()
+        masked_log_raw = torch.where(
+            positive_gate_mask,
+            log_raw,
+            torch.full_like(log_raw, -torch.inf),
+        )
+        lambda_i = candidate_budget * torch.softmax(masked_log_raw, dim=0)
+        lambda0_tensor = lambda0
+    else:
+        lambda_i = torch.zeros_like(scores)
+        lambda0_tensor = torch.tensor(1.0, dtype=torch.float32)
+
+    count = torch.tensor(tensors["query_count"], dtype=torch.float32)
+    denominator = torch.tensor(tensors["query_denominator"], dtype=torch.float32)
+    weak_log_predictive = beta_binomial_log_predictive(
+        count,
+        denominator,
+        torch.tensor(1.0, dtype=torch.float32),
+        torch.tensor(1.0, dtype=torch.float32),
+    )
+    component_log_predictive = beta_binomial_log_predictive(
+        count,
+        denominator,
+        tensors["alpha"],
+        tensors["beta"],
+    )
+    mixture_terms = torch.cat(
+        [
+            (lambda0_tensor.clamp_min(1e-12).log() + weak_log_predictive).reshape(1),
+            lambda_i.clamp_min(1e-12).log() + component_log_predictive,
+        ]
+    )
+    return -torch.logsumexp(mixture_terms, dim=0)
+
+
+def rule_lambda_loss_for_example(example: dict[str, Any]) -> torch.Tensor:
+    tensors = _validated_example_tensors(example)
+    lambda_rule_values = tensors["lambda_rule_values"]
+    if lambda_rule_values is None:
+        return weak_only_loss_for_example(example)
+
+    lambda_rule = torch.tensor(lambda_rule_values, dtype=torch.float32)
+    rule_sum = lambda_rule.sum()
+    if rule_sum.item() <= 0.0:
+        return weak_only_loss_for_example(example)
+
+    lambda0 = torch.tensor(tensors["lambda0"], dtype=torch.float32)
+    candidate_budget = torch.clamp(1.0 - lambda0, min=0.0)
+    lambda_rule = lambda_rule / rule_sum * candidate_budget
+
+    count = torch.tensor(tensors["query_count"], dtype=torch.float32)
+    denominator = torch.tensor(tensors["query_denominator"], dtype=torch.float32)
+    weak_log_predictive = beta_binomial_log_predictive(
+        count,
+        denominator,
+        torch.tensor(1.0, dtype=torch.float32),
+        torch.tensor(1.0, dtype=torch.float32),
+    )
+    component_log_predictive = beta_binomial_log_predictive(
+        count,
+        denominator,
+        tensors["alpha"],
+        tensors["beta"],
+    )
+    mixture_terms = torch.cat(
+        [
+            (lambda0.clamp_min(1e-12).log() + weak_log_predictive).reshape(1),
+            lambda_rule.clamp_min(1e-12).log() + component_log_predictive,
+        ]
+    )
+    return -torch.logsumexp(mixture_terms, dim=0)
 
 
 def load_examples(path: str | Path) -> list[dict[str, Any]]:
@@ -491,8 +601,11 @@ def main(argv: list[str] | None = None) -> None:
     serializable_summary = serializable_training_summary(summary)
     output_path = Path(args.output_json)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(serializable_summary, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(serializable_summary, indent=2))
+    output_path.write_text(
+        json.dumps(serializable_summary, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps(serializable_summary, indent=2, allow_nan=False))
 
 
 if __name__ == "__main__":

@@ -105,6 +105,126 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
         self.assertGreater(loss.item(), 0.0)
         self.assertTrue(math.isfinite(loss.item()))
 
+    def test_weak_only_loss_uses_beta_binomial_prior_predictive(self):
+        module = load_training_module()
+        example = self.base_example()
+
+        loss = module.weak_only_loss_for_example(example)
+
+        expected = -module.beta_binomial_log_predictive(
+            torch.tensor(2.0),
+            torch.tensor(4.0),
+            torch.tensor(1.0),
+            torch.tensor(1.0),
+        )
+        self.assertEqual(loss.shape, ())
+        self.assertAlmostEqual(loss.item(), expected.item(), places=6)
+
+    def test_rule_lambda_loss_normalizes_rule_weights_and_falls_back_to_weak_only(self):
+        module = load_training_module()
+        example = self.base_example()
+        example["lambda_rule"] = [0.9, 0.1]
+
+        loss = module.rule_lambda_loss_for_example(example)
+
+        count = torch.tensor(2.0)
+        denominator = torch.tensor(4.0)
+        weak_log_predictive = module.beta_binomial_log_predictive(
+            count,
+            denominator,
+            torch.tensor(1.0),
+            torch.tensor(1.0),
+        )
+        component_log_predictive = module.beta_binomial_log_predictive(
+            count,
+            denominator,
+            torch.tensor([4.0, 1.5]),
+            torch.tensor([2.0, 3.5]),
+        )
+        lambda_rule = torch.tensor([0.72, 0.08])
+        expected = -torch.logsumexp(
+            torch.cat(
+                [
+                    (torch.tensor(0.2).log() + weak_log_predictive).reshape(1),
+                    lambda_rule.log() + component_log_predictive,
+                ]
+            ),
+            dim=0,
+        )
+
+        self.assertAlmostEqual(loss.item(), expected.item(), places=6)
+
+        for missing_or_zero_rule in (None, [0.0, 0.0]):
+            with self.subTest(lambda_rule=missing_or_zero_rule):
+                fallback = self.base_example()
+                if missing_or_zero_rule is None:
+                    fallback.pop("lambda_rule")
+                else:
+                    fallback["lambda_rule"] = missing_or_zero_rule
+                self.assertAlmostEqual(
+                    module.rule_lambda_loss_for_example(fallback).item(),
+                    module.weak_only_loss_for_example(fallback).item(),
+                    places=6,
+                )
+
+    def test_learned_lambda_loss_excludes_ess_penalty(self):
+        module = load_training_module()
+        model = self.zero_model(module)
+        example = self.base_example()
+        for component in example["components"]:
+            component["discount"] = 1.0
+            component["denominator"] = 10000.0
+
+        pure_loss = module.learned_lambda_loss_for_example(model, example)
+        penalized_loss = module.predictive_loss_for_example(
+            model,
+            example,
+            rho=0.0,
+            ess_cap=1.0,
+        )
+
+        self.assertLess(pure_loss.item(), penalized_loss.item())
+        self.assertAlmostEqual(
+            pure_loss.item(),
+            module.predictive_loss_for_example(
+                model,
+                example,
+                rho=0.0,
+                ess_cap=float("inf"),
+            ).item(),
+            places=6,
+        )
+
+    def test_learned_lambda_loss_ignores_ess_only_fields(self):
+        module = load_training_module()
+        model = self.zero_model(module)
+        example = self.base_example()
+        for component in example["components"]:
+            component["denominator"] = float("inf")
+            component["discount"] = float("inf")
+
+        loss = module.learned_lambda_loss_for_example(model, example)
+
+        self.assertTrue(torch.isfinite(loss).item())
+
+    def test_component_alpha_beta_must_be_finite_positive(self):
+        module = load_training_module()
+        model = self.zero_model(module)
+
+        cases = [
+            ("alpha", 0.0, 2.0, "component alpha must be positive"),
+            ("alpha", float("nan"), 2.0, "component alpha must be finite"),
+            ("beta", 2.0, 0.0, "component beta must be positive"),
+            ("beta", 2.0, float("inf"), "component beta must be finite"),
+        ]
+        for name, alpha, beta, message in cases:
+            with self.subTest(name=name, alpha=alpha, beta=beta):
+                example = self.base_example()
+                example["components"][0]["alpha"] = alpha
+                example["components"][0]["beta"] = beta
+                with self.assertRaisesRegex(ValueError, message):
+                    module.predictive_loss_for_example(model, example)
+
     def test_lambda_rule_is_normalized_to_candidate_budget_for_kl(self):
         module = load_training_module()
         model = self.zero_model(module)
