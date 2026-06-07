@@ -70,6 +70,90 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
 
         self.assertEqual(scores.shape, (3,))
 
+    def test_create_lambda_scorer_supports_registered_model_types(self):
+        module = load_training_module()
+        features = torch.tensor(
+            [
+                [0.9, 0.8, 1.0, 0.7, 0.6, 0.5, 1.0, 0.0, 3.9],
+                [0.1, 0.2, 0.5, 0.3, 0.4, 0.2, 0.5, -0.25, 2.0],
+            ],
+            dtype=torch.float32,
+        )
+
+        for model_type in module.LAMBDA_MODEL_TYPES:
+            with self.subTest(model_type=model_type):
+                model = module.create_lambda_scorer(
+                    model_type=model_type,
+                    input_dim=len(EXPECTED_FEATURE_NAMES),
+                    hidden_dim=6,
+                )
+                scores = model(features)
+                if isinstance(scores, tuple):
+                    scores = scores[0]
+                self.assertEqual(scores.shape, (2,))
+
+    def test_monotonic_softmax_scorer_has_non_negative_feature_effects(self):
+        module = load_training_module()
+        model = module.create_lambda_scorer(
+            model_type="monotonic_softmax",
+            input_dim=len(EXPECTED_FEATURE_NAMES),
+            hidden_dim=6,
+        )
+        low = torch.zeros((1, len(EXPECTED_FEATURE_NAMES)), dtype=torch.float32)
+        high = low.clone()
+        high[0, 0] = 1.0
+        less_redflagged = low.clone()
+        less_redflagged[0, 7] = 0.0
+        more_redflagged = low.clone()
+        more_redflagged[0, 7] = -1.0
+
+        self.assertGreaterEqual(model(high).item(), model(low).item())
+        self.assertGreaterEqual(model(less_redflagged).item(), model(more_redflagged).item())
+
+    def test_deepsets_scorer_is_permutation_equivariant(self):
+        module = load_training_module()
+        torch.manual_seed(123)
+        model = module.create_lambda_scorer(
+            model_type="deepsets",
+            input_dim=len(EXPECTED_FEATURE_NAMES),
+            hidden_dim=6,
+        )
+        features = torch.tensor(
+            [
+                [0.9, 0.8, 1.0, 0.7, 0.6, 0.5, 1.0, 0.0, 3.9],
+                [0.1, 0.2, 0.5, 0.3, 0.4, 0.2, 0.5, -0.25, 2.0],
+                [0.4, 0.3, 0.7, 0.2, 0.5, 0.1, 0.8, -0.1, 3.0],
+            ],
+            dtype=torch.float32,
+        )
+        order = torch.tensor([2, 0, 1])
+
+        original = model(features)
+        permuted = model(features[order])
+
+        self.assertTrue(torch.allclose(original[order], permuted, atol=1e-6))
+
+    def test_two_head_deepsets_predicts_bounded_discounts(self):
+        module = load_training_module()
+        model = module.create_lambda_scorer(
+            model_type="two_head_deepsets",
+            input_dim=len(EXPECTED_FEATURE_NAMES),
+            hidden_dim=6,
+        )
+        features = torch.tensor(self.base_example()["features"], dtype=torch.float32)
+
+        discounts = model.predict_discount(features)
+
+        self.assertEqual(discounts.shape, (2,))
+        self.assertTrue(torch.all(discounts > 0.0).item())
+        self.assertTrue(torch.all(discounts < 1.0).item())
+
+    def test_create_lambda_scorer_rejects_unknown_model_type(self):
+        module = load_training_module()
+
+        with self.assertRaisesRegex(ValueError, "Unsupported lambda model_type"):
+            module.create_lambda_scorer("unknown", input_dim=len(EXPECTED_FEATURE_NAMES), hidden_dim=6)
+
     def test_full_feature_names_match_design_vector(self):
         module = load_training_module()
 
@@ -104,6 +188,83 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(loss).item())
         self.assertGreater(loss.item(), 0.0)
         self.assertTrue(math.isfinite(loss.item()))
+
+    def test_listwise_allocation_loss_prefers_candidate_with_better_predictive_fit(self):
+        module = load_training_module()
+
+        class FixedScoreModel(torch.nn.Module):
+            def __init__(self, scores):
+                super().__init__()
+                self.scores = torch.tensor(scores, dtype=torch.float32)
+
+            def forward(self, features):
+                return self.scores
+
+        example = self.base_example()
+        example["query"] = {"count": 4, "denominator": 4}
+        example["components"] = [
+            {
+                "alpha": 10.0,
+                "beta": 1.0,
+                "count": 9.0,
+                "gate": 1.0,
+                "discount": 0.5,
+                "denominator": 10.0,
+            },
+            {
+                "alpha": 1.0,
+                "beta": 10.0,
+                "count": 0.0,
+                "gate": 1.0,
+                "discount": 0.5,
+                "denominator": 10.0,
+            },
+        ]
+
+        aligned = module.listwise_allocation_loss_for_example(
+            FixedScoreModel([3.0, -3.0]),
+            example,
+        )
+        reversed_ = module.listwise_allocation_loss_for_example(
+            FixedScoreModel([-3.0, 3.0]),
+            example,
+        )
+
+        self.assertLess(aligned.item(), reversed_.item())
+
+    def test_predictive_loss_can_add_listwise_auxiliary_term(self):
+        module = load_training_module()
+        model = self.zero_model(module)
+        example = self.base_example()
+
+        base_loss = module.predictive_loss_for_example(
+            model,
+            example,
+            rho=0.0,
+            ess_cap=float("inf"),
+            listwise_eta=0.0,
+        )
+        listwise_loss = module.listwise_allocation_loss_for_example(model, example)
+        combined_loss = module.predictive_loss_for_example(
+            model,
+            example,
+            rho=0.0,
+            ess_cap=float("inf"),
+            listwise_eta=0.25,
+        )
+
+        self.assertAlmostEqual(
+            combined_loss.item(),
+            (base_loss + 0.25 * listwise_loss).item(),
+            places=6,
+        )
+
+    def test_listwise_allocation_rejects_non_positive_temperature(self):
+        module = load_training_module()
+        model = self.zero_model(module)
+
+        with self.assertRaisesRegex(ValueError, "listwise temperature"):
+            module.listwise_allocation_loss_for_example(model, self.base_example(), temperature=0.0)
 
     def test_weak_only_loss_uses_beta_binomial_prior_predictive(self):
         module = load_training_module()
@@ -391,6 +552,26 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "epochs"):
                     module.train_model([self.base_example()], epochs=epochs, learning_rate=0.01, hidden_dim=6)
 
+    def test_train_model_rejects_invalid_listwise_settings(self):
+        module = load_training_module()
+
+        with self.assertRaisesRegex(ValueError, "listwise_eta"):
+            module.train_model(
+                [self.base_example()],
+                epochs=1,
+                learning_rate=0.01,
+                hidden_dim=6,
+                listwise_eta=-0.1,
+            )
+        with self.assertRaisesRegex(ValueError, "listwise_temperature"):
+            module.train_model(
+                [self.base_example()],
+                epochs=1,
+                learning_rate=0.01,
+                hidden_dim=6,
+                listwise_temperature=0.0,
+            )
+
     def test_train_model_can_save_and_load_artifact(self):
         module = load_training_module()
         example = self.base_example()
@@ -403,6 +584,8 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
                 epochs=1,
                 learning_rate=0.01,
                 hidden_dim=6,
+                listwise_eta=0.25,
+                listwise_temperature=2.0,
                 model_output=path,
             )
             loaded = module.load_model_artifact(path)
@@ -410,9 +593,43 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
             self.assertTrue(path.exists())
 
         self.assertEqual(summary["model_output"], str(path))
+        self.assertEqual(summary["model_type"], "mlp")
+        self.assertEqual(summary["listwise_eta"], 0.25)
+        self.assertEqual(summary["listwise_temperature"], 2.0)
         self.assertEqual(loaded["feature_names"], module.LAMBDA_FEATURE_NAMES)
         self.assertEqual(loaded["input_dim"], 9)
         self.assertEqual(loaded["hidden_dim"], 6)
+        self.assertEqual(loaded["model_type"], "mlp")
+
+    def test_train_model_can_save_non_default_model_artifact(self):
+        module = load_training_module()
+        example = self.base_example()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "lambda_deepsets.pt"
+            summary = module.train_model(
+                [example],
+                epochs=1,
+                learning_rate=0.01,
+                hidden_dim=6,
+                model_type="deepsets",
+                model_output=path,
+            )
+            loaded = module.load_model_artifact(path)
+
+        self.assertEqual(summary["model_type"], "deepsets")
+        self.assertEqual(loaded["model_type"], "deepsets")
+
+    def test_two_head_loss_can_train_with_model_discounts(self):
+        module = load_training_module()
+        model = module.create_lambda_scorer(
+            model_type="two_head_deepsets",
+            input_dim=len(EXPECTED_FEATURE_NAMES),
+            hidden_dim=6,
+        )
+
+        loss = module.predictive_loss_for_example(model, self.base_example(), rho=0.0)
+
+        self.assertTrue(torch.isfinite(loss).item())
 
     def test_load_model_artifact_rejects_feature_metadata_mismatch(self):
         module = load_training_module()
@@ -465,12 +682,18 @@ class RetrospectiveLambdaTrainingTests(unittest.TestCase):
                     "1",
                     "--hidden-dim",
                     "6",
+                    "--listwise-eta",
+                    "0.25",
+                    "--listwise-temperature",
+                    "2.0",
                 ]
             )
 
             self.assertTrue(output_path.exists())
             summary = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(summary["epochs"], 1)
+            self.assertEqual(summary["listwise_eta"], 0.25)
+            self.assertEqual(summary["listwise_temperature"], 2.0)
 
     def test_main_rejects_both_example_sources(self):
         module = load_training_module()

@@ -314,10 +314,40 @@ def components_from_reranked_rows(
     return {"mode": "rule", "lambda_0": normalized["lambda_0"], "components": components}
 
 
-def apply_model_lambdas(mixture: dict[str, Any], model_lambdas: list[float]) -> dict[str, Any]:
+def _active_component_with_model_discount(
+    component: dict[str, Any],
+    model_discount: float,
+) -> dict[str, Any]:
+    active_discount = max(0.0, min(1.0, _validate_finite_number("model discount", model_discount)))
+    count = _optional_finite_number(component.get("count"))
+    denominator = _optional_finite_number(component.get("denominator"))
+    if count is None or denominator is None or denominator <= 0 or count < 0 or count > denominator:
+        raise ValueError("model discounts require finite component count and denominator")
+    alpha_rule = _validate_finite_number("component alpha", component.get("alpha"))
+    beta_rule = _validate_finite_number("component beta", component.get("beta"))
+    return {
+        **component,
+        "alpha_rule": alpha_rule,
+        "beta_rule": beta_rule,
+        "discount_rule": _optional_finite_number(component.get("discount")),
+        "discount_model": active_discount,
+        "discount_active": active_discount,
+        "alpha": 1.0 + active_discount * count,
+        "beta": 1.0 + active_discount * (denominator - count),
+    }
+
+
+def apply_model_lambdas(
+    mixture: dict[str, Any],
+    model_lambdas: list[float],
+    model_discounts: list[float] | None = None,
+    model_type: str | None = None,
+) -> dict[str, Any]:
     components = list(mixture.get("components") or [])
     if len(model_lambdas) != len(components):
         raise ValueError("model lambda count must equal component count")
+    if model_discounts is not None and len(model_discounts) != len(components):
+        raise ValueError("model discount count must equal component count")
 
     lambda0 = _validate_lambda0(float(mixture.get("lambda_0", 0.2)))
     normalized = normalize_lambdas(model_lambdas, lambda0=lambda0)
@@ -330,15 +360,144 @@ def apply_model_lambdas(mixture: dict[str, Any], model_lambdas: list[float]) -> 
             "No expert labels were used; lambda_model was trained by retrospective predictive loss."
         ),
     }
-    for component, lambda_model in zip(components, normalized["lambda_i"]):
+    if model_type is not None:
+        output["lambda_model_type"] = str(model_type)
+    if model_discounts is not None:
+        output["discount_calibration_note"] = (
+            "discount_model was produced by the lambda model discount head and replaces rule discount "
+            "for active alpha/beta construction; rule discount is preserved as discount_rule."
+        )
+    for index, (component, lambda_model) in enumerate(zip(components, normalized["lambda_i"])):
+        active_component = dict(component)
+        if model_discounts is not None:
+            active_component = _active_component_with_model_discount(
+                active_component,
+                model_discounts[index],
+            )
         output["components"].append(
             {
-                **component,
+                **active_component,
                 "lambda_model": lambda_model,
                 "lambda_active": lambda_model,
             }
         )
     return output
+
+
+def _active_component_lambda(component: dict[str, Any]) -> float:
+    for key in ("lambda_active", "lambda_model", "lambda_rule", "lambda"):
+        if key in component:
+            return _validate_component_lambda(float(component[key]))
+    return 0.0
+
+
+def _candidate_mixture_predictive_probability(
+    y: int,
+    n: int,
+    components: list[dict[str, Any]],
+    lambdas: list[float],
+) -> float:
+    total = sum(lambdas)
+    if total <= 0.0:
+        return 0.0
+    probability = 0.0
+    for component, component_lambda in zip(components, lambdas):
+        if component_lambda <= 0.0:
+            continue
+        probability += (component_lambda / total) * beta_binomial_predictive_probability(
+            y,
+            n,
+            _validate_finite_number("component alpha", component["alpha"]),
+            _validate_finite_number("component beta", component["beta"]),
+        )
+    return probability
+
+
+def apply_sam_conflict_adapter(
+    mixture: dict[str, Any],
+    y: int,
+    n: int,
+    weak_alpha: float = 1.0,
+    weak_beta: float = 1.0,
+    temperature: float = 1.0,
+) -> dict[str, Any]:
+    """Downweight historical borrowing when current data conflict with the informative mixture."""
+    _validate_observation(y, n)
+    weak_alpha = _validate_finite_number("weak_alpha", weak_alpha)
+    weak_beta = _validate_finite_number("weak_beta", weak_beta)
+    if weak_alpha <= 0.0 or weak_beta <= 0.0:
+        raise ValueError("weak_alpha and weak_beta must be positive")
+    temperature = _validate_finite_number("temperature", temperature)
+    if temperature <= 0.0:
+        raise ValueError("temperature must be positive")
+
+    components = list(mixture.get("components") or [])
+    active_lambdas = [_active_component_lambda(component) for component in components]
+    candidate_mass = sum(active_lambdas)
+    if candidate_mass <= 0.0:
+        return {
+            **mixture,
+            "mode": "sam_robust",
+            "lambda_0_pre_sam": _validate_lambda0(float(mixture.get("lambda_0", 1.0))),
+            "lambda_0": 1.0,
+            "components": [{**component, "lambda_pre_sam": 0.0, "lambda_sam": 0.0, "lambda_active": 0.0} for component in components],
+            "sam_prior_data_conflict": {
+                "status": "weak_only",
+                "borrowing_multiplier": 0.0,
+                "historical_predictive_probability": 0.0,
+                "weak_predictive_probability": beta_binomial_predictive_probability(y, n, weak_alpha, weak_beta),
+                "predictive_probability_ratio": 0.0,
+            },
+        }
+
+    weak_probability = beta_binomial_predictive_probability(y, n, weak_alpha, weak_beta)
+    historical_probability = _candidate_mixture_predictive_probability(
+        y,
+        n,
+        components,
+        active_lambdas,
+    )
+    if weak_probability <= 0.0:
+        ratio = math.inf if historical_probability > 0.0 else 0.0
+    else:
+        ratio = historical_probability / weak_probability
+    borrowing_multiplier = 1.0 if ratio >= 1.0 else max(0.0, ratio) ** temperature
+    sam_candidate_mass = candidate_mass * borrowing_multiplier
+    lambda0_pre_sam = _validate_lambda0(float(mixture.get("lambda_0", max(0.0, 1.0 - candidate_mass))))
+    lambda0_sam = max(0.0, min(1.0, 1.0 - sam_candidate_mass))
+    output_components = []
+    for component, active_lambda in zip(components, active_lambdas):
+        lambda_sam = active_lambda * borrowing_multiplier
+        output_components.append(
+            {
+                **component,
+                "lambda_pre_sam": active_lambda,
+                "lambda_sam": lambda_sam,
+                "lambda_active": lambda_sam,
+            }
+        )
+    return {
+        **mixture,
+        "mode": f"{mixture.get('mode', 'rule')}_sam_robust",
+        "lambda_0_pre_sam": lambda0_pre_sam,
+        "lambda_0": lambda0_sam,
+        "components": output_components,
+        "sam_prior_data_conflict": {
+            "status": "no_conflict" if borrowing_multiplier >= 1.0 else "conflict_downweighted",
+            "borrowing_multiplier": borrowing_multiplier,
+            "historical_predictive_probability": historical_probability,
+            "weak_predictive_probability": weak_probability,
+            "predictive_probability_ratio": ratio,
+            "temperature": temperature,
+            "query_count": y,
+            "query_denominator": n,
+            "note": (
+                "Historical candidate borrowing is preserved when its predictive probability is at least "
+                "as high as the weak prior; otherwise candidate mass is multiplied by the predictive "
+                "probability ratio."
+            ),
+        },
+    }
 
 
 def mixture_predictive_probability(

@@ -209,6 +209,10 @@ class Stage1BackendTests(unittest.TestCase):
     def test_secret_backend_is_supported_by_backend_guardrail(self) -> None:
         pipeline.ensure_supported_retrieval_backend("secret")
 
+    def test_sam_mixture_prior_modes_are_supported_by_guardrail(self) -> None:
+        pipeline.ensure_supported_mixture_prior_mode("sam")
+        pipeline.ensure_supported_mixture_prior_mode("retrospective_calibrated_sam")
+
     def test_unknown_backend_has_clear_error(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported retrieval backend"):
             pipeline.ensure_supported_retrieval_backend("not_a_backend")
@@ -458,6 +462,33 @@ class SecretRetrievalTests(unittest.TestCase):
         self.assertIn("Pathologic complete response", sections["results"])
         self.assertIn("denominator", sections["results"])
         self.assertIn("has_posted_results", sections["results"])
+
+    def test_rule_based_summary_preserves_true_temporal_dates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            raw = {
+                "protocolSection": {
+                    "statusModule": {
+                        "primaryCompletionDateStruct": {"date": "July 2021"},
+                        "completionDateStruct": {"date": "2022-03-01"},
+                        "startDateStruct": {"date": "2020"},
+                    }
+                }
+            }
+            extracted = pipeline.extract_trial_record_like(
+                raw,
+                fallback_nct_id="NCTDATE",
+                json_path=Path(tmpdir) / "NCTDATE_data.json",
+            )
+
+        summary = pipeline.make_rule_based_summary(extracted)
+
+        self.assertEqual(summary["primary_completion_date"], "2021-07-15")
+        self.assertEqual(summary["primary_completion_date_precision"], "month")
+        self.assertEqual(summary["completion_date"], "2022-03-01")
+        self.assertEqual(summary["completion_date_precision"], "day")
+        self.assertEqual(summary["start_date"], "2020-06-30")
+        self.assertEqual(summary["temporal_sort_date"], "2021-07-15")
+        self.assertEqual(summary["temporal_sort_source"], "primary_completion_date")
 
     def test_pipeline_search_uses_secret_backend_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

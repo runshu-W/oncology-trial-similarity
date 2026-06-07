@@ -27,6 +27,13 @@ LAMBDA_FEATURE_NAMES = [
     "log_n_i",
 ]
 
+LAMBDA_MODEL_TYPES = (
+    "mlp",
+    "monotonic_softmax",
+    "deepsets",
+    "two_head_deepsets",
+)
+
 
 class LambdaScorer(torch.nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int) -> None:
@@ -41,12 +48,86 @@ class LambdaScorer(torch.nn.Module):
         return self.network(features).squeeze(-1)
 
 
+class MonotonicSoftmaxScorer(torch.nn.Module):
+    """Explainable additive scorer with non-negative feature effects."""
+
+    def __init__(self, input_dim: int, hidden_dim: int | None = None) -> None:
+        super().__init__()
+        self.raw_weight = torch.nn.Parameter(torch.zeros(input_dim))
+        self.bias = torch.nn.Parameter(torch.zeros(()))
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        weights = torch.nn.functional.softplus(self.raw_weight)
+        return features.matmul(weights) + self.bias
+
+
+class DeepSetsLambdaScorer(torch.nn.Module):
+    """Permutation-equivariant scorer that sees the full candidate set."""
+
+    def __init__(self, input_dim: int, hidden_dim: int) -> None:
+        super().__init__()
+        self.phi = torch.nn.Sequential(
+            torch.nn.Linear(input_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.ReLU(),
+        )
+        self.rho = torch.nn.Sequential(
+            torch.nn.Linear(hidden_dim * 2, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, 1),
+        )
+
+    def _contextual_features(self, features: torch.Tensor) -> torch.Tensor:
+        candidate_embeddings = self.phi(features)
+        set_context = candidate_embeddings.mean(dim=0, keepdim=True)
+        repeated_context = set_context.expand(candidate_embeddings.shape[0], -1)
+        return torch.cat([candidate_embeddings, repeated_context], dim=1)
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        return self.rho(self._contextual_features(features)).squeeze(-1)
+
+
+class TwoHeadDeepSetsLambdaScorer(DeepSetsLambdaScorer):
+    """DeepSets scorer with an additional model-learned borrowing discount head."""
+
+    def __init__(self, input_dim: int, hidden_dim: int) -> None:
+        super().__init__(input_dim=input_dim, hidden_dim=hidden_dim)
+        self.discount_head = torch.nn.Sequential(
+            torch.nn.Linear(hidden_dim * 2, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, 1),
+        )
+
+    def predict_discount(self, features: torch.Tensor) -> torch.Tensor:
+        logits = self.discount_head(self._contextual_features(features)).squeeze(-1)
+        return torch.sigmoid(logits)
+
+
+def create_lambda_scorer(
+    model_type: str,
+    input_dim: int,
+    hidden_dim: int,
+) -> torch.nn.Module:
+    model_type = str(model_type or "mlp")
+    if model_type == "mlp":
+        return LambdaScorer(input_dim=input_dim, hidden_dim=hidden_dim)
+    if model_type == "monotonic_softmax":
+        return MonotonicSoftmaxScorer(input_dim=input_dim, hidden_dim=hidden_dim)
+    if model_type == "deepsets":
+        return DeepSetsLambdaScorer(input_dim=input_dim, hidden_dim=hidden_dim)
+    if model_type == "two_head_deepsets":
+        return TwoHeadDeepSetsLambdaScorer(input_dim=input_dim, hidden_dim=hidden_dim)
+    raise ValueError(f"Unsupported lambda model_type: {model_type}")
+
+
 def save_model_artifact(
     path: str | Path,
-    model: LambdaScorer,
+    model: torch.nn.Module,
     input_dim: int,
     hidden_dim: int,
     lambda0: float,
+    model_type: str = "mlp",
 ) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +136,7 @@ def save_model_artifact(
             "state_dict": model.state_dict(),
             "input_dim": int(input_dim),
             "hidden_dim": int(hidden_dim),
+            "model_type": str(model_type),
             "feature_names": list(LAMBDA_FEATURE_NAMES),
             "lambda0": float(lambda0),
         },
@@ -64,10 +146,13 @@ def save_model_artifact(
 
 def load_model_artifact(path: str | Path) -> dict[str, Any]:
     artifact = torch.load(Path(path), map_location="cpu", weights_only=False)
+    artifact.setdefault("model_type", "mlp")
     if artifact.get("feature_names") != LAMBDA_FEATURE_NAMES:
         raise ValueError("lambda model feature_names do not match current feature order")
     if int(artifact.get("input_dim", -1)) != len(LAMBDA_FEATURE_NAMES):
         raise ValueError("lambda model input_dim does not match current feature order")
+    if artifact.get("model_type") not in LAMBDA_MODEL_TYPES:
+        raise ValueError("lambda model model_type is unsupported")
     return artifact
 
 
@@ -129,17 +214,18 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("lambda_0 must be in [0, 1]")
 
     query = example.get("query", example)
-    count = _finite_float("query count", query["count"])
-    denominator = _finite_float("query denominator", query["denominator"])
-    if denominator <= 0.0:
+    query_count = _finite_float("query count", query["count"])
+    query_denominator = _finite_float("query denominator", query["denominator"])
+    if query_denominator <= 0.0:
         raise ValueError("query denominator must be greater than 0")
-    if count < 0.0:
+    if query_count < 0.0:
         raise ValueError("query count must be non-negative")
-    if count > denominator:
+    if query_count > query_denominator:
         raise ValueError("query count must be less than or equal to denominator")
 
     alpha_values = []
     beta_values = []
+    count_values = []
     for component in components:
         alpha = _finite_float("component alpha", component["alpha"])
         if alpha <= 0.0:
@@ -147,14 +233,24 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
         beta = _finite_float("component beta", component["beta"])
         if beta <= 0.0:
             raise ValueError("component beta must be positive")
+        component_denominator = float(component.get("denominator", 0.0))
+        component_count = component.get("count")
+        if component_count is None:
+            component_discount = float(component.get("discount", 0.0))
+            component_count = (alpha - 1.0) / component_discount if math.isfinite(component_discount) and component_discount > 0.0 else 0.0
+        component_count = _finite_float("component count", component_count)
+        if component_count < 0.0 or (math.isfinite(component_denominator) and component_count > component_denominator):
+            raise ValueError("component count must satisfy 0 <= count <= denominator")
         alpha_values.append(alpha)
         beta_values.append(beta)
+        count_values.append(component_count)
 
     return {
         "features": features,
         "components": components,
         "alpha": torch.tensor(alpha_values, dtype=torch.float32),
         "beta": torch.tensor(beta_values, dtype=torch.float32),
+        "component_count": torch.tensor(count_values, dtype=torch.float32),
         "gate": torch.tensor([component.get("gate", 1.0) for component in components], dtype=torch.float32),
         "discount": torch.tensor([component.get("discount", 0.0) for component in components], dtype=torch.float32),
         "component_denominator": torch.tensor(
@@ -164,30 +260,45 @@ def _validated_example_tensors(example: dict[str, Any]) -> dict[str, Any]:
         "feature_names": feature_names,
         "lambda_rule_values": lambda_rule_values,
         "lambda0": lambda0,
-        "query_count": count,
-        "query_denominator": denominator,
+        "query_count": query_count,
+        "query_denominator": query_denominator,
     }
 
 
-def predictive_loss_for_example(
-    model: LambdaScorer,
-    example: dict[str, Any],
-    rho: float = 0.1,
-    ess_cap: float = 100.0,
-) -> torch.Tensor:
-    tensors = _validated_example_tensors(example)
-    features = tensors["features"]
+def _model_scores(model: torch.nn.Module, features: torch.Tensor) -> torch.Tensor:
     scores = model(features)
+    if isinstance(scores, tuple):
+        scores = scores[0]
     if scores.ndim != 1 or scores.shape[0] != features.shape[0]:
         raise ValueError("model scores must have one value per component")
+    return scores
 
-    alpha = tensors["alpha"]
-    beta = tensors["beta"]
-    gate = tensors["gate"]
-    discount = tensors["discount"]
-    component_denominator = tensors["component_denominator"]
-    lambda0 = torch.tensor(tensors["lambda0"], dtype=torch.float32)
 
+def _component_alpha_beta_for_model(
+    model: torch.nn.Module,
+    features: torch.Tensor,
+    tensors: dict[str, Any],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    if not hasattr(model, "predict_discount"):
+        return tensors["alpha"], tensors["beta"], tensors["discount"]
+
+    model_discount = model.predict_discount(features)
+    if model_discount.ndim != 1 or model_discount.shape[0] != features.shape[0]:
+        raise ValueError("model discounts must have one value per component")
+    count = tensors["component_count"]
+    denominator = tensors["component_denominator"]
+    if not torch.isfinite(denominator).all().item():
+        raise ValueError("component denominator must be finite for two-head discount models")
+    alpha = 1.0 + model_discount * count
+    beta = 1.0 + model_discount * (denominator - count)
+    return alpha, beta, model_discount
+
+
+def _lambda_weights_from_scores(
+    scores: torch.Tensor,
+    gate: torch.Tensor,
+    lambda0: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     positive_gate_mask = gate > 0.0
     if positive_gate_mask.any().item():
         candidate_budget = torch.clamp(1.0 - lambda0, min=0.0)
@@ -198,11 +309,82 @@ def predictive_loss_for_example(
             torch.full_like(log_raw, -torch.inf),
         )
         lambda_i = candidate_budget * torch.softmax(masked_log_raw, dim=0)
-        lambda0_tensor = lambda0
-    else:
-        candidate_budget = torch.tensor(0.0, dtype=torch.float32)
-        lambda_i = torch.zeros_like(scores)
-        lambda0_tensor = torch.tensor(1.0, dtype=torch.float32)
+        return lambda_i, lambda0, candidate_budget
+
+    return (
+        torch.zeros_like(scores),
+        torch.tensor(1.0, dtype=torch.float32),
+        torch.tensor(0.0, dtype=torch.float32),
+    )
+
+
+def listwise_allocation_loss_for_example(
+    model: torch.nn.Module,
+    example: dict[str, Any],
+    temperature: float = 1.0,
+) -> torch.Tensor:
+    if temperature <= 0.0:
+        raise ValueError("listwise temperature must be greater than 0")
+
+    tensors = _validated_example_tensors(example)
+    features = tensors["features"]
+    scores = _model_scores(model, features)
+    gate = tensors["gate"]
+    positive_gate_mask = gate > 0.0
+    if not positive_gate_mask.any().item():
+        return torch.tensor(0.0, dtype=torch.float32)
+
+    masked_scores = torch.where(
+        positive_gate_mask,
+        scores + gate.clamp_min(1e-12).log(),
+        torch.full_like(scores, -torch.inf),
+    )
+    predicted_distribution = torch.softmax(masked_scores, dim=0)
+
+    count = torch.tensor(tensors["query_count"], dtype=torch.float32)
+    denominator = torch.tensor(tensors["query_denominator"], dtype=torch.float32)
+    weak_log_predictive = beta_binomial_log_predictive(
+        count,
+        denominator,
+        torch.tensor(1.0, dtype=torch.float32),
+        torch.tensor(1.0, dtype=torch.float32),
+    )
+    component_log_predictive = beta_binomial_log_predictive(
+        count,
+        denominator,
+        tensors["alpha"],
+        tensors["beta"],
+    )
+    target_logits = (component_log_predictive - weak_log_predictive) / float(temperature)
+    target_logits = torch.where(
+        positive_gate_mask,
+        target_logits,
+        torch.full_like(target_logits, -torch.inf),
+    )
+    target_distribution = torch.softmax(target_logits.detach(), dim=0)
+    return -(
+        target_distribution * predicted_distribution.clamp_min(1e-12).log()
+    ).sum()
+
+
+def predictive_loss_for_example(
+    model: torch.nn.Module,
+    example: dict[str, Any],
+    rho: float = 0.1,
+    ess_cap: float = 100.0,
+    listwise_eta: float = 0.0,
+    listwise_temperature: float = 1.0,
+) -> torch.Tensor:
+    tensors = _validated_example_tensors(example)
+    features = tensors["features"]
+    scores = _model_scores(model, features)
+
+    alpha, beta, active_discount = _component_alpha_beta_for_model(model, features, tensors)
+    gate = tensors["gate"]
+    component_denominator = tensors["component_denominator"]
+    lambda0 = torch.tensor(tensors["lambda0"], dtype=torch.float32)
+
+    lambda_i, lambda0_tensor, candidate_budget = _lambda_weights_from_scores(scores, gate, lambda0)
 
     count = torch.tensor(tensors["query_count"], dtype=torch.float32)
     denominator = torch.tensor(tensors["query_denominator"], dtype=torch.float32)
@@ -234,9 +416,15 @@ def predictive_loss_for_example(
             ).sum()
             loss = loss + float(rho) * kl
 
-    ess = (lambda_i * discount * component_denominator).sum()
+    ess = (lambda_i * active_discount * component_denominator).sum()
     cap = torch.tensor(float(ess_cap), dtype=torch.float32)
     ess_penalty = 1e-4 * torch.relu(ess - cap).pow(2)
+    if listwise_eta > 0.0:
+        loss = loss + float(listwise_eta) * listwise_allocation_loss_for_example(
+            model,
+            example,
+            temperature=listwise_temperature,
+        )
     return loss + ess_penalty
 
 
@@ -253,12 +441,10 @@ def weak_only_loss_for_example(example: dict[str, Any]) -> torch.Tensor:
     return -weak_log_predictive
 
 
-def learned_lambda_loss_for_example(model: LambdaScorer, example: dict[str, Any]) -> torch.Tensor:
+def learned_lambda_loss_for_example(model: torch.nn.Module, example: dict[str, Any]) -> torch.Tensor:
     tensors = _validated_example_tensors(example)
     features = tensors["features"]
-    scores = model(features)
-    if scores.ndim != 1 or scores.shape[0] != features.shape[0]:
-        raise ValueError("model scores must have one value per component")
+    scores = _model_scores(model, features)
 
     lambda0 = torch.tensor(tensors["lambda0"], dtype=torch.float32)
     gate = tensors["gate"]
@@ -288,8 +474,7 @@ def learned_lambda_loss_for_example(model: LambdaScorer, example: dict[str, Any]
     component_log_predictive = beta_binomial_log_predictive(
         count,
         denominator,
-        tensors["alpha"],
-        tensors["beta"],
+        *_component_alpha_beta_for_model(model, features, tensors)[:2],
     )
     mixture_terms = torch.cat(
         [
@@ -475,6 +660,7 @@ def build_training_example_from_pipeline_result(
             {
                 "alpha": float(component["alpha"]),
                 "beta": float(component["beta"]),
+                "count": float(component.get("count", 0.0)),
                 "gate": gate,
                 "denominator": denominator_i,
                 "discount": discount,
@@ -554,22 +740,37 @@ def train_model(
     epochs: int,
     learning_rate: float,
     hidden_dim: int,
+    model_type: str = "mlp",
     model_output: str | Path | None = None,
+    listwise_eta: float = 0.0,
+    listwise_temperature: float = 1.0,
 ) -> dict[str, Any]:
     if not examples:
         raise ValueError("examples must not be empty")
     if epochs <= 0:
         raise ValueError("epochs must be greater than 0")
+    if listwise_eta < 0.0:
+        raise ValueError("listwise_eta must be non-negative")
+    if listwise_temperature <= 0.0:
+        raise ValueError("listwise_temperature must be greater than 0")
     first_tensors = _validated_example_tensors(examples[0])
 
     input_dim = first_tensors["features"].shape[1]
-    model = LambdaScorer(input_dim=input_dim, hidden_dim=hidden_dim)
+    model = create_lambda_scorer(model_type=model_type, input_dim=input_dim, hidden_dim=hidden_dim)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_history = []
 
     for _ in range(epochs):
         optimizer.zero_grad()
-        losses = [predictive_loss_for_example(model, example) for example in examples]
+        losses = [
+            predictive_loss_for_example(
+                model,
+                example,
+                listwise_eta=listwise_eta,
+                listwise_temperature=listwise_temperature,
+            )
+            for example in examples
+        ]
         mean_loss = torch.stack(losses).mean()
         mean_loss.backward()
         optimizer.step()
@@ -583,6 +784,7 @@ def train_model(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             lambda0=first_tensors["lambda0"],
+            model_type=model_type,
         )
 
     summary = {
@@ -591,6 +793,9 @@ def train_model(
         "loss_history": loss_history,
         "input_dim": input_dim,
         "hidden_dim": hidden_dim,
+        "model_type": model_type,
+        "listwise_eta": float(listwise_eta),
+        "listwise_temperature": float(listwise_temperature),
         "model": model,
     }
     if model_output is not None:
@@ -611,6 +816,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--hidden-dim", type=int, default=16)
+    parser.add_argument("--model-type", choices=LAMBDA_MODEL_TYPES, default="mlp")
+    parser.add_argument("--listwise-eta", type=float, default=0.0)
+    parser.add_argument("--listwise-temperature", type=float, default=1.0)
     parser.add_argument("--model-output", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -625,7 +833,10 @@ def main(argv: list[str] | None = None) -> None:
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         hidden_dim=args.hidden_dim,
+        model_type=args.model_type,
         model_output=args.model_output,
+        listwise_eta=args.listwise_eta,
+        listwise_temperature=args.listwise_temperature,
     )
     serializable_summary = serializable_training_summary(summary)
     output_path = Path(args.output_json)

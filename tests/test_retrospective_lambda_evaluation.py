@@ -67,11 +67,16 @@ class RetrospectiveEvaluationTests(unittest.TestCase):
             epochs=1,
             learning_rate=0.01,
             hidden_dim=6,
+            listwise_eta=0.1,
+            listwise_temperature=2.0,
         )
 
         self.assertEqual(report["example_count"], 4)
         self.assertEqual(report["train_count"], 2)
         self.assertEqual(report["eval_count"], 2)
+        self.assertEqual(report["model_type"], "mlp")
+        self.assertEqual(report["listwise_eta"], 0.1)
+        self.assertEqual(report["listwise_temperature"], 2.0)
         self.assertIn("weak_only_mean_nll", report["metrics"])
         self.assertIn("rule_lambda_mean_nll", report["metrics"])
         self.assertIn("learned_lambda_mean_nll", report["metrics"])
@@ -129,12 +134,18 @@ class RetrospectiveEvaluationTests(unittest.TestCase):
                     "1",
                     "--hidden-dim",
                     "6",
+                    "--model-type",
+                    "deepsets",
+                    "--listwise-eta",
+                    "0.2",
                 ]
             )
 
             report = json.loads(output_path.read_text(encoding="utf-8"))
 
         self.assertEqual(report["example_count"], 4)
+        self.assertEqual(report["model_type"], "deepsets")
+        self.assertEqual(report["listwise_eta"], 0.2)
         self.assertNotIn("model", report)
 
     def test_main_rejects_pipeline_results_without_leakage_metadata(self):

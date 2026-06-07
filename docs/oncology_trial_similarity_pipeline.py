@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -91,7 +92,7 @@ DEFAULT_CLINICALBERT_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
 DEFAULT_RETRIEVAL_BACKEND = "clinicalbert"
 DEFAULT_INDEX_EMBEDDING_BACKEND = "clinicalbert"
 RETRIEVAL_BACKENDS = ("clinicalbert", "trial2vec", "secret")
-MIXTURE_PRIOR_MODES = ("rule", "retrospective_calibrated")
+MIXTURE_PRIOR_MODES = ("rule", "retrospective_calibrated", "sam", "retrospective_calibrated_sam")
 
 
 def ensure_supported_retrieval_backend(backend: str) -> None:
@@ -532,6 +533,82 @@ def summarize_borrowable_quantities(primary: list[dict[str, Any]]) -> list[dict[
     return quantities
 
 
+def _date_text(value: Any) -> str | None:
+    if isinstance(value, dict):
+        value = value.get("date")
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def normalize_trial_date(value: Any) -> tuple[str | None, str]:
+    text = _date_text(value)
+    if text is None:
+        return None, "missing"
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(text, fmt).date().isoformat(), "day"
+        except ValueError:
+            pass
+    for fmt in ("%B %Y", "%b %Y", "%Y-%m", "%Y/%m"):
+        try:
+            parsed = datetime.strptime(text, fmt)
+            return date(parsed.year, parsed.month, 15).isoformat(), "month"
+        except ValueError:
+            pass
+    year_match = re.search(r"\b(19|20|21)\d{2}\b", text)
+    if year_match:
+        return date(int(year_match.group(0)), 6, 30).isoformat(), "year"
+    return None, "unparseable"
+
+
+def extract_temporal_date_metadata(raw: dict[str, Any], legacy_dates: dict[str, Any] | None = None) -> dict[str, Any]:
+    status = get_nested(raw, "protocolSection", "statusModule", default={})
+    if not isinstance(status, dict):
+        status = {}
+    legacy_dates = legacy_dates if isinstance(legacy_dates, dict) else {}
+    raw_values = {
+        "primary_completion_date": (
+            status.get("primaryCompletionDateStruct")
+            or status.get("primaryCompletionDate")
+            or legacy_dates.get("Primary Completion Date")
+        ),
+        "completion_date": (
+            status.get("completionDateStruct")
+            or status.get("completionDate")
+            or legacy_dates.get("Completion Date")
+        ),
+        "results_first_posted_date": (
+            status.get("resultsFirstPostDateStruct")
+            or status.get("resultsFirstSubmitDate")
+            or status.get("resultsFirstPostDate")
+            or legacy_dates.get("Results First Posted")
+        ),
+        "start_date": (
+            status.get("startDateStruct")
+            or status.get("startDate")
+            or legacy_dates.get("Start Date")
+        ),
+    }
+    output: dict[str, Any] = {}
+    for field, raw_value in raw_values.items():
+        normalized, precision = normalize_trial_date(raw_value)
+        output[field] = normalized
+        output[f"{field}_precision"] = precision
+        output[f"{field}_raw"] = _date_text(raw_value)
+    temporal_sort_source = "missing"
+    temporal_sort_date = None
+    for field in ("primary_completion_date", "completion_date", "results_first_posted_date", "start_date"):
+        if output.get(field):
+            temporal_sort_source = field
+            temporal_sort_date = output[field]
+            break
+    output["temporal_sort_date"] = temporal_sort_date
+    output["temporal_sort_source"] = temporal_sort_source
+    return output
+
+
 def extract_trial_record(folder: Path) -> TrialRecord | None:
     json_path = find_trial_json(folder)
     if json_path is None:
@@ -562,6 +639,7 @@ def extract_trial_record(folder: Path) -> TrialRecord | None:
         "design": design if isinstance(design, dict) else {},
         "enrollment": clean_text(results.get("3. Enrollment (Actual)") if isinstance(results, dict) else ""),
         "dates": dates if isinstance(dates, dict) else {},
+        "date_metadata": extract_temporal_date_metadata(raw, dates if isinstance(dates, dict) else {}),
         "supporting_documents": {
             "protocol_pdf": str(pdfs["protocol"]) if pdfs["protocol"] else "",
             "sap_pdf": str(pdfs["sap"]) if pdfs["sap"] else "",
@@ -636,6 +714,7 @@ def make_rule_based_summary(extracted: dict[str, Any]) -> dict[str, Any]:
         "brief_title": extracted.get("brief_title", ""),
         "phase": extracted.get("phase", ""),
         "status": extracted.get("status", ""),
+        **(extracted.get("date_metadata") or {}),
         "cancer_type": {
             "primary_site": oncology["primary_site"],
             "histology": oncology["histology"],
@@ -1880,12 +1959,13 @@ def _load_lambda_training_module() -> Any:
     return module
 
 
-def predict_lambda_model_weights(mixture: dict[str, Any], lambda_model_path: Path) -> list[float]:
+def predict_lambda_model_outputs(mixture: dict[str, Any], lambda_model_path: Path) -> dict[str, Any]:
     lambda_training = _load_lambda_training_module()
     import torch
 
     artifact = lambda_training.load_model_artifact(lambda_model_path)
-    model = lambda_training.LambdaScorer(
+    model = lambda_training.create_lambda_scorer(
+        model_type=artifact.get("model_type", "mlp"),
         input_dim=int(artifact["input_dim"]),
         hidden_dim=int(artifact["hidden_dim"]),
     )
@@ -1894,7 +1974,11 @@ def predict_lambda_model_weights(mixture: dict[str, Any], lambda_model_path: Pat
 
     components = mixture.get("components") or []
     if not components:
-        return []
+        return {
+            "model_type": artifact.get("model_type", "mlp"),
+            "raw_lambda_weights": [],
+            "model_discounts": None,
+        }
     features = lambda_training.features_from_mixture_components(components)
     feature_tensor = torch.tensor(features, dtype=torch.float32)
     gates = torch.tensor(
@@ -1903,17 +1987,34 @@ def predict_lambda_model_weights(mixture: dict[str, Any], lambda_model_path: Pat
     )
     positive_gate_mask = gates > 0.0
     if not positive_gate_mask.any().item():
-        return [0.0 for _ in components]
+        return {
+            "model_type": artifact.get("model_type", "mlp"),
+            "raw_lambda_weights": [0.0 for _ in components],
+            "model_discounts": (
+                [0.0 for _ in components] if hasattr(model, "predict_discount") else None
+            ),
+        }
 
     with torch.no_grad():
-        scores = model(feature_tensor)
+        scores = lambda_training._model_scores(model, feature_tensor)
         log_raw = scores + gates.clamp_min(1e-12).log()
         stable_log_raw = torch.where(
             positive_gate_mask,
             log_raw - log_raw[positive_gate_mask].max(),
             torch.full_like(log_raw, -torch.inf),
         )
-        return torch.exp(stable_log_raw).tolist()
+        model_discounts = None
+        if hasattr(model, "predict_discount"):
+            model_discounts = model.predict_discount(feature_tensor).tolist()
+        return {
+            "model_type": artifact.get("model_type", "mlp"),
+            "raw_lambda_weights": torch.exp(stable_log_raw).tolist(),
+            "model_discounts": model_discounts,
+        }
+
+
+def predict_lambda_model_weights(mixture: dict[str, Any], lambda_model_path: Path) -> list[float]:
+    return list(predict_lambda_model_outputs(mixture, lambda_model_path)["raw_lambda_weights"])
 
 
 def add_bayesian_analysis(
@@ -1922,9 +2023,11 @@ def add_bayesian_analysis(
     lambda_model_path: Path | None = None,
 ) -> dict[str, Any]:
     ensure_supported_mixture_prior_mode(mixture_prior_mode)
-    if mixture_prior_mode == "retrospective_calibrated" and lambda_model_path is None:
+    uses_lambda_model = mixture_prior_mode in {"retrospective_calibrated", "retrospective_calibrated_sam"}
+    uses_sam = mixture_prior_mode in {"sam", "retrospective_calibrated_sam"}
+    if uses_lambda_model and lambda_model_path is None:
         raise ValueError(
-            "--lambda-model-path is required when --mixture-prior-mode=retrospective_calibrated"
+            "--lambda-model-path is required when --mixture-prior-mode uses retrospective calibration"
         )
     query_summary = result.get(
         "heldout_query_outcomes",
@@ -1964,12 +2067,25 @@ def add_bayesian_analysis(
             if mixture_prior is not None
             else {"mode": "rule", "lambda_0": 1.0, "components": []}
         )
-        if mixture_prior_mode == "retrospective_calibrated":
+        if uses_lambda_model:
             if mixture_prior is None:
                 raise ValueError("mixture prior module is required for retrospective_calibrated mode")
             assert lambda_model_path is not None
-            model_weights = predict_lambda_model_weights(mixture, lambda_model_path)
-            mixture = mixture_prior.apply_model_lambdas(mixture, model_weights)
+            model_outputs = predict_lambda_model_outputs(mixture, lambda_model_path)
+            mixture = mixture_prior.apply_model_lambdas(
+                mixture,
+                model_outputs["raw_lambda_weights"],
+                model_discounts=model_outputs.get("model_discounts"),
+                model_type=model_outputs.get("model_type"),
+            )
+        if uses_sam and has_query_result:
+            if mixture_prior is None:
+                raise ValueError("mixture prior module is required for SAM mode")
+            mixture = mixture_prior.apply_sam_conflict_adapter(
+                mixture,
+                y=int(float(query["treatment_count"])),
+                n=int(float(query["treatment_denominator"])),
+            )
         analysis = {
             "endpoint_family": endpoint_key,
             "analysis_mode": "posterior" if has_query_result else "prior_only",
@@ -2312,6 +2428,7 @@ def extract_trial_record_like(raw: dict[str, Any], fallback_nct_id: str, json_pa
         "design": design if isinstance(design, dict) else {},
         "enrollment": clean_text(results.get("3. Enrollment (Actual)") if isinstance(results, dict) else ""),
         "dates": dates if isinstance(dates, dict) else {},
+        "date_metadata": extract_temporal_date_metadata(raw, dates if isinstance(dates, dict) else {}),
         "supporting_documents": {
             "protocol_pdf": str(pdfs["protocol"]) if pdfs["protocol"] else "",
             "sap_pdf": str(pdfs["sap"]) if pdfs["sap"] else "",

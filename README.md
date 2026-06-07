@@ -1,118 +1,150 @@
-# Oncology Trial Similarity and Prior Borrowing Pipeline
+# Oncology Trial Similarity for Bayesian Historical Borrowing
 
-This repository contains a prototype pipeline and documentation for finding clinically similar historical oncology trials from ClinicalTrials.gov, with a focus on Bayesian prior borrowing.
+This repository provides a reproducible methodology prototype and retrospective predictive calibration evidence package for oncology trial similarity and Bayesian historical borrowing.
 
-The goal is not only to retrieve textually similar trials, but to identify historical trials that are potentially usable as external evidence based on disease, population, regimen, endpoint, design, results availability, and safety/follow-up relevance.
+The goal is not generic trial text retrieval. The goal is to identify historical ClinicalTrials.gov trials that are sufficiently comparable to serve as candidate evidence for Bayesian mixture-prior borrowing, while making disease, regimen, endpoint, follow-up, eligibility, result usability, information size, and red flags explicit.
 
-## Repository Contents
+## Why Similarity Is Not Borrowability
 
-| File | Description |
-| --- | --- |
-| [`docs/oncology_trial_similarity_pipeline.py`](docs/oncology_trial_similarity_pipeline.py) | Main Python implementation for building an oncology trial similarity index and searching similar trials for a query JSON. |
-| [`docs/oncology_trial_similarity_pipeline.md`](docs/oncology_trial_similarity_pipeline.md) | High-level design document describing the Trial2Vec + SECRET-style hybrid retrieval strategy and prior-borrowing rerank logic. |
-| [`docs/oncology_trial_similarity_final_pipeline_explanation.md`](docs/oncology_trial_similarity_final_pipeline_explanation.md) | Full pipeline explanation covering offline indexing, online query processing, structured extraction, multi-aspect embeddings, reranking, and output reports. |
-| [`docs/random5_clinicalbert_top3_pipeline_report.md`](docs/random5_clinicalbert_top3_pipeline_report.md) | Random five-query ClinicalBERT top-3 test report showing example retrieval and reranking results. |
-| [`docs/evaluation/random5_manual_evaluation_protocol.md`](docs/evaluation/random5_manual_evaluation_protocol.md) | Human-review scoring guide for the random five-query top-3 results. |
-| [`docs/evaluation/random5_top3_manual_review_template.csv`](docs/evaluation/random5_top3_manual_review_template.csv) | Review template with one row per query-candidate pair. |
-| [`scripts/build_manual_evaluation_template.py`](scripts/build_manual_evaluation_template.py) | Helper script for regenerating the manual-review CSV from a random-five summary JSON file. |
-| [`web_agent/`](web_agent/) | Local FastAPI web interface for uploading or pasting one trial JSON and running the pipeline. |
+Textual or title-level similarity is not enough for historical borrowing. A historical trial may have similar wording but differ in endpoint definition, treatment line, follow-up duration, outcome availability, or red flags that make it unsuitable as prior evidence.
 
-## What the Pipeline Does
+This project separates three ideas:
 
-The pipeline has two major stages:
+- **Retrievability:** can a historical trial be surfaced as a plausible candidate?
+- **Clinical/statistical comparability:** does the candidate match the new trial along borrowing-relevant dimensions?
+- **Borrowing behavior:** how much mixture weight and effective sample-size discount should the candidate receive?
 
-1. **Offline indexing**
-   - Discover historical trial folders by NCT ID.
-   - Parse ClinicalTrials.gov JSON records and optional protocol/SAP PDFs.
-   - Extract structured oncology trial fields.
-   - Normalize disease, population, intervention, endpoint, design, and result fields.
-   - Build multi-aspect embeddings for historical trials.
+All current validation is performed without expert borrowability labels. Results should be interpreted as retrospective predictive calibration and simulation evidence, not as clinical validation or regulatory qualification.
 
-2. **Online search**
-   - Accept a new oncology trial JSON as the query.
-   - Convert it into the same structured summary schema.
-   - Retrieve similar historical trials using weighted multi-aspect similarity.
-   - Optionally rerank candidates using deterministic prior-borrowing criteria.
-   - Output JSON results and an optional Markdown report.
+## Pipeline Diagram
 
-### Optional Trial2Vec Retrieval and Mixture Prior
+![Pipeline diagram](results/figures/pipeline_diagram.svg)
 
-By default, Stage 1 uses Bio_ClinicalBERT embeddings to retrieve clinically similar historical trials. The lightweight hashing backend remains available for local smoke tests, but ClinicalBERT is the intended default retrieval backend when the ML dependencies and model are available.
+## Pipeline Overview
 
-The pipeline also supports optional Trial2Vec-style and SECRET-style retrieval paths built from `trial_summaries.jsonl`. These indexes are used for high-recall candidate retrieval: they help surface plausible historical trials for review, but they do not by themselves decide how much information should be borrowed. The current SECRET-style path is a deterministic Q/A-section MVP with section-level scores; it is not a full LLM protocol-summarization reviewer workflow.
+1. **ClinicalTrials.gov JSON parsing**
+   - Parse trial records, results tables, eligibility criteria, endpoints, interventions, and date metadata.
+2. **Structured trial summary**
+   - Build normalized oncology summaries with disease, population, regimen, endpoint, follow-up, eligibility, results availability, and red flags.
+3. **Stage 1 retrieval**
+   - Retrieve high-recall candidate trials using hashing, ClinicalBERT, Trial2Vec-style, or SECRET-style section retrieval.
+4. **SECRET pool**
+   - Use fixed section scores to form a more borrowability-aware candidate pool.
+5. **Stage 2 explainable reranking**
+   - Score candidate pairs using borrowing-relevant features rather than title similarity alone.
+6. **Endpoint observation extraction**
+   - Extract candidate endpoint observations `(y_i, n_i)` when result data are usable.
+7. **Beta component construction**
+   - Construct `alpha_i = 1 + a_i y_i` and `beta_i = 1 + a_i(n_i - y_i)`.
+8. **Mixture prior and optional SAM adapter**
+   - Combine a weak component with historical beta components and optionally downweight prior-data conflict.
+9. **Retrospective validation**
+   - Evaluate held-out beta-binomial NLL, true-date temporal NLL, simulation operating characteristics, paired retrieval benchmarks, baseline comparisons, and feature ablations.
 
-For Bayesian analysis, the original weighted beta-binomial output remains the primary implemented approximation: each reviewed historical trial contributes with a borrowing discount such as `suggested_borrowing_discount`. The experimental mixture-prior output is a sensitivity-analysis extension that separates two roles: `a_i` controls how much effective sample size candidate `i` contributes inside its beta component, while `lambda_i` controls the mixture weight assigned to that component. This keeps per-trial information discounting distinct from model-level component weighting.
+## Key Statistical Definitions
 
-Any retrospective or expert-only training of `lambda_i` should use completed historical trials as pseudo-queries with held-out query outcomes. For pipeline-result JSONL training/evaluation, generate pseudo-query results with `--hide-query-outcomes-for-retrieval`; the training/evaluation scripts require leakage-control metadata before accepting those results. At deployment, the new query trial outcome must not be used to train, tune, select, or calibrate retrieval or mixture weights. The intended workflow is retrieval for high recall, expert/statistical review for borrowing suitability, and leakage-controlled retrospective validation before making manuscript-level claims.
+For historical candidate `i`:
 
-## Similarity Dimensions
+- `y_i`: observed response count or endpoint event count.
+- `n_i`: denominator for the candidate endpoint observation.
+- `a_i`: sample-size discount applied inside the beta component.
+- `lambda_i`: mixture weight assigned to the candidate component.
+- `lambda_0`: weak-prior mixture weight, defaulting to 0.2 in the current prototype.
 
-The retrieval and reranking logic emphasizes:
+The historical beta component is
 
-- disease and patient population match
-- intervention and regimen similarity
-- endpoint and estimand compatibility
-- trial phase, arm structure, and randomization design
-- result availability and borrowable quantities
-- safety and follow-up relevance
-- red flags that should discount or prevent borrowing
-
-## Example Usage
-
-Build a local trial index:
-
-```bash
-python3 docs/oncology_trial_similarity_pipeline.py build-index \
-  --db-root /path/to/Oncology_All_Trials \
-  --output-dir artifacts/oncology_trial_similarity
+```text
+alpha_i = 1 + a_i y_i
+beta_i  = 1 + a_i (n_i - y_i)
 ```
 
-Build an index with ClinicalBERT embeddings:
+The two-head DeepSets model separates `lambda_i` and `a_i`: one head learns mixture allocation across candidates, while the other learns within-component information discounting.
+
+## Main Scripts
+
+| Script | Purpose |
+|---|---|
+| `docs/oncology_trial_similarity_pipeline.py` | Core trial parsing, indexing, retrieval, reranking, and structured summary pipeline. |
+| `scripts/clinicaltrials_dates.py` | Extract true ClinicalTrials.gov date metadata and date precision labels. |
+| `scripts/temporal_validation.py` | Shared date-based and rolling-origin temporal split utilities. |
+| `scripts/run_oncology_retrospective_lambda_training.py` | Retrospective pseudo-query construction, lambda model training, and temporal validation modes. |
+| `scripts/run_borrowing_operating_characteristics_simulation.py` | Formal simulation operating-characteristics study. |
+| `scripts/run_paired_stage1_backend_benchmark.py` | Paired Stage 1 backend benchmark on common query IDs and candidate budgets. |
+| `scripts/run_borrowing_baseline_comparison.py` | Head-to-head comparison of weak, rule, classical, SAM, and trained two-head borrowing priors. |
+| `scripts/run_temporal_borrowing_validation.py` | True-date temporal borrowing NLL summaries. |
+| `scripts/run_feature_ablation_sensitivity.py` | Feature group ablation and SECRET section-weight sensitivity. |
+| `scripts/build_manuscript_evidence_package.py` | Build lightweight `results/` tables and figures from artifacts. |
+| `scripts/run_no_expert_validation_suite.sh` | Reproducibility-oriented command skeleton for the no-expert validation suite. |
+
+## Quick Start
+
+Install Python dependencies:
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py build-index \
-  --db-root /path/to/Oncology_All_Trials \
-  --output-dir artifacts/oncology_trial_similarity_clinicalbert \
-  --embedding-backend clinicalbert
+python -m pip install -r requirements.txt
 ```
 
-Search for similar historical trials:
+Build the manuscript evidence package from existing artifacts:
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py search \
-  --query-json /path/to/new_trial.json \
-  --index-dir artifacts/oncology_trial_similarity \
-  --top-k 10 \
-  --rerank \
-  --output artifacts/query_top10.json \
-  --report-output artifacts/query_top10_report.md
+python scripts/build_manuscript_evidence_package.py
 ```
 
-## Suggested Reading Order
-
-1. Read [`oncology_trial_similarity_pipeline.md`](docs/oncology_trial_similarity_pipeline.md) for the core project idea and architecture.
-2. Read [`oncology_trial_similarity_final_pipeline_explanation.md`](docs/oncology_trial_similarity_final_pipeline_explanation.md) for the complete implementation-level explanation.
-3. Inspect [`oncology_trial_similarity_pipeline.py`](docs/oncology_trial_similarity_pipeline.py) for the executable prototype.
-4. Review [`random5_clinicalbert_top3_pipeline_report.md`](docs/random5_clinicalbert_top3_pipeline_report.md) for sample ClinicalBERT retrieval results.
-
-## Notes
-
-The default database path in the script points to a local ClinicalTrials.gov oncology dataset and should be updated with `--db-root` when running on another machine.
-
-ClinicalBERT mode requires the relevant Python ML dependencies and access to the Bio_ClinicalBERT model. The hashing backend is available as a lightweight fallback for local testing.
-
-PDF parsing uses `pdftotext` when available and falls back to the Python `pypdf` package. Install Python dependencies with:
+Run focused non-torch tests:
 
 ```bash
-python3 -m pip install -r requirements.txt
+python -m unittest \
+  tests/test_clinicaltrials_dates.py \
+  tests/test_temporal_validation.py \
+  tests/test_temporal_borrowing_validation.py \
+  tests/test_borrowing_operating_characteristics_simulation.py \
+  tests/test_paired_stage1_backend_benchmark.py \
+  tests/test_borrowing_baseline_comparison.py \
+  tests/test_feature_ablation_sensitivity.py
 ```
 
-## Web Agent
+The full retrospective two-head model training path requires `torch`. If `torch` is unavailable, the repository still supports date extraction, baseline comparisons, paired backend benchmarking, simulation, feature ablation, and evidence-package generation.
 
-From this directory, start the local web interface with:
+## Artifact Guide
 
-```bash
-../.venv/bin/uvicorn web_agent.app:app --reload --port 8000
-```
+Large runtime artifacts are intentionally ignored by Git. The public, lightweight evidence package lives in `results/`.
 
-Then open `http://127.0.0.1:8000`. The web agent accepts one uploaded or pasted trial JSON and returns the same pipeline-style suitability, discount, red flag, dimension-score, and borrowable-quantity outputs. Suggested borrowing discounts are not final prior weights and require expert clinical/statistical review.
+| Directory | Role |
+|---|---|
+| `artifacts/` | Full local runtime outputs; ignored by Git. May contain large JSONL files and model artifacts. |
+| `results/tables/` | Lightweight CSV and LaTeX-ready tables suitable for manuscript drafting. |
+| `results/figures/` | Lightweight SVG figures for the manuscript and README. |
+| `docs/` | Methods notes, reproducibility notes, data availability statement, and manuscript planning documents. |
+
+## Current Result Highlights
+
+Current lightweight results are generated from ORR pseudo-queries without expert borrowability labels.
+
+- SECRET pool improved paired Stage 1 component-readiness over hashing by 0.0912 with a bootstrap CI of [0.0799, 0.1018].
+- SECRET pool improved reranked endpoint-match score over hashing by 1.1047 with a bootstrap CI of [1.0600, 1.1503].
+- In the borrowing baseline head-to-head table, `two_head_trained` achieved mean NLL 3.0181 versus rule mean NLL 3.1620.
+- `rule_sam` achieved mean NLL 2.9721, highlighting the importance of prior-data conflict adaptation.
+- True-date temporal NLL summaries show `two_head_trained` and `rule_sam` improvements across multiple date-based and rolling-origin subsets.
+- Simulation operating-characteristics results cover exchangeable, optimistic conflict, pessimistic conflict, mixture conflict, and heterogeneous historical scenarios using 500 iterations and 400 deterministic template examples.
+
+See `results/README.md` for the file-level guide.
+
+## Limitations Without Expert Labels
+
+This repository does not contain expert borrowability labels. It does not claim that the retrieved historical trials are clinically approved for borrowing, nor that the resulting priors are acceptable for regulatory submission.
+
+Current evidence is limited to retrospective predictive calibration, internal temporal evaluation, simulation operating characteristics, and automated feature ablation. Clinical and statistical expert review remains necessary before using any historical trial as external evidence in a real oncology trial design.
+
+Additional limitations include automated ClinicalTrials.gov extraction error, endpoint mapping error, primary focus on ORR examples, limited full retraining temporal validation in environments without `torch`, and no prospective operating trial validation.
+
+## Reproducibility Notes
+
+Detailed reproduction commands are documented in `docs/reproducibility.md`. Data access and sharing limitations are documented in `docs/data_availability.md`.
+
+The recommended framing for downstream use is:
+
+> A reproducible methodology prototype and retrospective predictive calibration evidence package for oncology trial similarity and Bayesian historical borrowing.
+
+Not:
+
+> A clinically validated borrowing recommendation system.

@@ -1,0 +1,36 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{True-date temporal borrowing validation (rolling origin splits).}
+\label{tab:temporal-rolling}
+\begin{tabular}{llrrrr}
+\toprule
+Split & Method & Train & Eval & Mean NLL & Delta vs rule \\
+\midrule
+window\_1 & weak\_only & 500 & 250 & 3.2436 & 0.1244 \\
+window\_1 & rule & 500 & 250 & 3.1193 & 0.0000 \\
+window\_1 & fixed\_discount & 500 & 250 & 3.1017 & -0.0176 \\
+window\_1 & commensurate\_like & 500 & 250 & 3.1618 & 0.0426 \\
+window\_1 & rule\_sam & 500 & 250 & 2.9531 & -0.1661 \\
+window\_1 & two\_head\_trained & 500 & 250 & 2.9929 & -0.1263 \\
+window\_2 & weak\_only & 750 & 250 & 3.1957 & -0.0667 \\
+window\_2 & rule & 750 & 250 & 3.2624 & 0.0000 \\
+window\_2 & fixed\_discount & 750 & 250 & 3.2598 & -0.0026 \\
+window\_2 & commensurate\_like & 750 & 250 & 3.2911 & 0.0287 \\
+window\_2 & rule\_sam & 750 & 250 & 3.0573 & -0.2051 \\
+window\_2 & two\_head\_trained & 750 & 250 & 3.0937 & -0.1687 \\
+window\_3 & weak\_only & 1000 & 250 & 3.1315 & 0.0321 \\
+window\_3 & rule & 1000 & 250 & 3.0994 & 0.0000 \\
+window\_3 & fixed\_discount & 1000 & 250 & 3.0927 & -0.0067 \\
+window\_3 & commensurate\_like & 1000 & 250 & 3.1183 & 0.0189 \\
+window\_3 & rule\_sam & 1000 & 250 & 2.9273 & -0.1721 \\
+window\_3 & two\_head\_trained & 1000 & 250 & 2.9449 & -0.1545 \\
+window\_4 & weak\_only & 1250 & 164 & 3.0432 & 0.0072 \\
+window\_4 & rule & 1250 & 164 & 3.0360 & 0.0000 \\
+window\_4 & fixed\_discount & 1250 & 164 & 3.0281 & -0.0079 \\
+window\_4 & commensurate\_like & 1250 & 164 & 3.0899 & 0.0539 \\
+window\_4 & rule\_sam & 1250 & 164 & 2.8607 & -0.1753 \\
+window\_4 & two\_head\_trained & 1250 & 164 & 2.8619 & -0.1741 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -238,8 +238,12 @@ class WebAgentTests(unittest.TestCase):
 
         with mock.patch.object(
             app_module.pipeline,
-            "predict_lambda_model_weights",
-            return_value=[10.0, 1.0],
+            "predict_lambda_model_outputs",
+            return_value={
+                "model_type": "two_head_deepsets",
+                "raw_lambda_weights": [10.0, 1.0],
+                "model_discounts": [0.4, 0.2],
+            },
             create=True,
         ) as predict:
             enriched = app_module.pipeline.add_bayesian_analysis(
@@ -253,8 +257,120 @@ class WebAgentTests(unittest.TestCase):
         self.assertIn("lambda_model", mixture["components"][0])
         self.assertIn("lambda_active", mixture["components"][0])
         self.assertIn("lambda_rule", mixture["components"][0])
+        self.assertIn("discount_model", mixture["components"][0])
+        self.assertIn("discount_active", mixture["components"][0])
+        self.assertEqual(mixture["lambda_model_type"], "two_head_deepsets")
         self.assertIn("No expert labels", mixture["calibration_note"])
         predict.assert_called_once()
+
+    def test_bayesian_analysis_can_apply_sam_conflict_adapter(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 0, "denominator": 10},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "overall_similarity_score": 90.0,
+                    "suggested_borrowing_discount": 1.0,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 5.0,
+                        "result_usability": 5.0,
+                        "disease_population_match": 5.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 45, "denominator": 50},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        enriched = app_module.pipeline.add_bayesian_analysis(result, mixture_prior_mode="sam")
+
+        mixture = enriched["bayesian_analysis"]["endpoint_analyses"][0]["mixture_prior"]
+        self.assertEqual(mixture["mode"], "rule_sam_robust")
+        self.assertIn("sam_prior_data_conflict", mixture)
+        self.assertEqual(mixture["sam_prior_data_conflict"]["status"], "conflict_downweighted")
+        self.assertGreater(mixture["lambda_0"], mixture["lambda_0_pre_sam"])
+        self.assertLess(mixture["components"][0]["lambda_active"], mixture["components"][0]["lambda_pre_sam"])
+
+    def test_bayesian_analysis_can_combine_calibrated_lambda_and_sam(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 0, "denominator": 10},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "overall_similarity_score": 90.0,
+                    "suggested_borrowing_discount": 1.0,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 5.0,
+                        "result_usability": 5.0,
+                        "disease_population_match": 5.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 45, "denominator": 50},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        with mock.patch.object(
+            app_module.pipeline,
+            "predict_lambda_model_outputs",
+            return_value={
+                "model_type": "two_head_deepsets",
+                "raw_lambda_weights": [1.0],
+                "model_discounts": [1.0],
+            },
+            create=True,
+        ):
+            enriched = app_module.pipeline.add_bayesian_analysis(
+                result,
+                mixture_prior_mode="retrospective_calibrated_sam",
+                lambda_model_path=Path("fake.pt"),
+            )
+
+        mixture = enriched["bayesian_analysis"]["endpoint_analyses"][0]["mixture_prior"]
+        self.assertEqual(mixture["mode"], "retrospective_calibrated_sam_robust")
+        self.assertEqual(mixture["lambda_model_type"], "two_head_deepsets")
+        self.assertIn("discount_model", mixture["components"][0])
+        self.assertIn("sam_prior_data_conflict", mixture)
 
     def test_bayesian_analysis_requires_lambda_model_path_for_calibrated_mode(self) -> None:
         result = {

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1080" viewBox="0 0 1200 1080">
+<rect width="1200" height="1080" fill="#ffffff"/>
+<style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:22px;font-weight:700;fill:#18212f}.sub{font-size:15px;fill:#4b5563}.box{fill:#f8fafc;stroke:#1f77b4;stroke-width:2}.arrow{stroke:#334155;stroke-width:2.5;marker-end:url(#arrow)}</style>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+<rect class="box" x="190" y="45" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="76">ClinicalTrials.gov JSON</text>
+<text class="sub" x="218" y="101">Trial records, outcomes, eligibility, dates</text>
+<line class="arrow" x1="600" y1="128" x2="600" y2="154"/>
+<rect class="box" x="190" y="161" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="192">Structured summary</text>
+<text class="sub" x="218" y="217">Disease, regimen, endpoint, follow-up, red flags</text>
+<line class="arrow" x1="600" y1="244" x2="600" y2="270"/>
+<rect class="box" x="190" y="277" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="308">Stage 1 retrieval</text>
+<text class="sub" x="218" y="333">ClinicalBERT / Trial2Vec / SECRET-style / hashing</text>
+<line class="arrow" x1="600" y1="360" x2="600" y2="386"/>
+<rect class="box" x="190" y="393" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="424">SECRET pool</text>
+<text class="sub" x="218" y="449">Section-weighted high-recall candidate set</text>
+<line class="arrow" x1="600" y1="476" x2="600" y2="502"/>
+<rect class="box" x="190" y="509" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="540">Stage 2 reranker</text>
+<text class="sub" x="218" y="565">Explainable borrowability features</text>
+<line class="arrow" x1="600" y1="592" x2="600" y2="618"/>
+<rect class="box" x="190" y="625" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="656">Endpoint observations</text>
+<text class="sub" x="218" y="681">Extract y_i and n_i for candidate endpoints</text>
+<line class="arrow" x1="600" y1="708" x2="600" y2="734"/>
+<rect class="box" x="190" y="741" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="772">Beta components</text>
+<text class="sub" x="218" y="797">alpha_i = 1 + a_i y_i; beta_i = 1 + a_i(n_i-y_i)</text>
+<line class="arrow" x1="600" y1="824" x2="600" y2="850"/>
+<rect class="box" x="190" y="857" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="888">Mixture prior + SAM</text>
+<text class="sub" x="218" y="913">Weak prior, historical components, conflict adaptation</text>
+<line class="arrow" x1="600" y1="940" x2="600" y2="966"/>
+<rect class="box" x="190" y="973" width="820" height="78" rx="6"/>
+<text class="title" x="218" y="1004">Validation</text>
+<text class="sub" x="218" y="1029">NLL, temporal validation, OC simulation, ablation</text>
+</svg>

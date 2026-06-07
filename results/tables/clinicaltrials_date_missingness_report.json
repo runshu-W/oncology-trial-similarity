@@ -1,0 +1,31 @@
+{
+  "trial_count": 7173,
+  "temporal_sort_sources": {
+    "primary_completion_date": 7173
+  },
+  "field_missing_counts": {
+    "primary_completion_date": 0,
+    "completion_date": 9,
+    "results_first_posted_date": 0,
+    "start_date": 0
+  },
+  "precision_counts": {
+    "primary_completion_date": {
+      "day": 6631,
+      "month": 542
+    },
+    "completion_date": {
+      "day": 6539,
+      "missing": 9,
+      "month": 625
+    },
+    "results_first_posted_date": {
+      "day": 7173
+    },
+    "start_date": {
+      "day": 6221,
+      "month": 952
+    }
+  },
+  "note": "Month/year dates are normalized to deterministic anchor dates and retain precision labels; primary completion date is preferred for temporal validation."
+}

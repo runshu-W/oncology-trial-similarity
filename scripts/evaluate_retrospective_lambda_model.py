@@ -50,6 +50,9 @@ def evaluate_examples(
     epochs: int,
     learning_rate: float,
     hidden_dim: int,
+    model_type: str = "mlp",
+    listwise_eta: float = 0.0,
+    listwise_temperature: float = 1.0,
 ) -> dict[str, Any]:
     if not examples:
         raise ValueError("examples must not be empty")
@@ -68,6 +71,9 @@ def evaluate_examples(
         epochs=epochs,
         learning_rate=learning_rate,
         hidden_dim=hidden_dim,
+        model_type=model_type,
+        listwise_eta=listwise_eta,
+        listwise_temperature=listwise_temperature,
     )
     model = training_summary["model"]
 
@@ -101,6 +107,9 @@ def evaluate_examples(
         "eval_indices": eval_indices,
         "seed": seed,
         "train_fraction": train_fraction,
+        "model_type": model_type,
+        "listwise_eta": float(listwise_eta),
+        "listwise_temperature": float(listwise_temperature),
         "evaluation_target": "retrospective_predictive_negative_log_likelihood",
         "outcome_usage": "held_out_query_outcomes_for_post_retrieval_predictive_evaluation_and_analysis",
         "metrics": {
@@ -136,6 +145,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--hidden-dim", type=int, default=16)
+    parser.add_argument("--model-type", choices=lambda_training.LAMBDA_MODEL_TYPES, default="mlp")
+    parser.add_argument("--listwise-eta", type=float, default=0.0)
+    parser.add_argument("--listwise-temperature", type=float, default=1.0)
     args = parser.parse_args(argv)
 
     examples = _load_examples_from_args(args)
@@ -146,6 +158,9 @@ def main(argv: list[str] | None = None) -> None:
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         hidden_dim=args.hidden_dim,
+        model_type=args.model_type,
+        listwise_eta=args.listwise_eta,
+        listwise_temperature=args.listwise_temperature,
     )
 
     args.output_json.parent.mkdir(parents=True, exist_ok=True)

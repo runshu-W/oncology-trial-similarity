@@ -304,6 +304,51 @@ class MixturePriorComponentTests(unittest.TestCase):
         self.assertIn("retrospective predictive loss", updated["calibration_note"])
         self.assertIn("No expert labels", updated["calibration_note"])
 
+    def test_apply_model_lambdas_can_apply_two_head_model_discounts(self):
+        mixture = {
+            "mode": "rule",
+            "lambda_0": 0.2,
+            "components": [
+                {
+                    "lambda_rule": 0.6,
+                    "nct_id": "NCT1",
+                    "count": 20.0,
+                    "denominator": 50.0,
+                    "discount": 0.25,
+                    "alpha": 6.0,
+                    "beta": 8.5,
+                },
+                {
+                    "lambda_rule": 0.2,
+                    "nct_id": "NCT2",
+                    "count": 4.0,
+                    "denominator": 10.0,
+                    "discount": 0.5,
+                    "alpha": 3.0,
+                    "beta": 4.0,
+                },
+            ],
+        }
+
+        updated = mixture_prior.apply_model_lambdas(
+            mixture,
+            [0.5, 0.3],
+            model_discounts=[0.4, 0.1],
+            model_type="two_head_deepsets",
+        )
+
+        first = updated["components"][0]
+        self.assertEqual(updated["lambda_model_type"], "two_head_deepsets")
+        self.assertIn("discount_calibration_note", updated)
+        self.assertAlmostEqual(first["discount_rule"], 0.25)
+        self.assertAlmostEqual(first["discount_model"], 0.4)
+        self.assertAlmostEqual(first["discount_active"], 0.4)
+        self.assertAlmostEqual(first["alpha_rule"], 6.0)
+        self.assertAlmostEqual(first["beta_rule"], 8.5)
+        self.assertAlmostEqual(first["alpha"], 1.0 + 0.4 * 20.0)
+        self.assertAlmostEqual(first["beta"], 1.0 + 0.4 * 30.0)
+        self.assertIn("lambda_active", first)
+
     def test_apply_model_lambdas_rejects_length_mismatch(self):
         mixture = {
             "lambda_0": 0.2,
@@ -315,6 +360,46 @@ class MixturePriorComponentTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "model lambda count"):
             mixture_prior.apply_model_lambdas(mixture, [0.5])
+
+        with self.assertRaisesRegex(ValueError, "model discount count"):
+            mixture_prior.apply_model_lambdas(mixture, [0.5, 0.3], model_discounts=[0.1])
+
+    def test_sam_conflict_adapter_preserves_candidate_mass_when_historical_predicts_well(self):
+        mixture = {
+            "mode": "rule",
+            "lambda_0": 0.2,
+            "components": [
+                {"lambda_active": 0.8, "alpha": 21.0, "beta": 31.0},
+            ],
+        }
+
+        updated = mixture_prior.apply_sam_conflict_adapter(mixture, y=4, n=10)
+
+        self.assertEqual(updated["sam_prior_data_conflict"]["status"], "no_conflict")
+        self.assertAlmostEqual(updated["sam_prior_data_conflict"]["borrowing_multiplier"], 1.0)
+        self.assertAlmostEqual(updated["lambda_0"], 0.2)
+        self.assertAlmostEqual(updated["components"][0]["lambda_active"], 0.8)
+        self.assertAlmostEqual(updated["components"][0]["lambda_pre_sam"], 0.8)
+
+    def test_sam_conflict_adapter_downweights_candidate_mass_when_historical_conflicts(self):
+        mixture = {
+            "mode": "rule",
+            "lambda_0": 0.2,
+            "components": [
+                {"lambda_active": 0.8, "alpha": 46.0, "beta": 6.0},
+            ],
+        }
+
+        updated = mixture_prior.apply_sam_conflict_adapter(mixture, y=0, n=10)
+
+        self.assertEqual(updated["sam_prior_data_conflict"]["status"], "conflict_downweighted")
+        self.assertLess(updated["sam_prior_data_conflict"]["borrowing_multiplier"], 1.0)
+        self.assertGreater(updated["lambda_0"], 0.2)
+        self.assertLess(updated["components"][0]["lambda_active"], 0.8)
+        self.assertAlmostEqual(
+            updated["lambda_0"] + sum(component["lambda_active"] for component in updated["components"]),
+            1.0,
+        )
 
 
 if __name__ == "__main__":

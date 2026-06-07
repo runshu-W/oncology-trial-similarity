@@ -1,0 +1,36 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{True-date temporal borrowing validation (date based splits).}
+\label{tab:temporal-date-based}
+\begin{tabular}{llrrrr}
+\toprule
+Split & Method & Train & Eval & Mean NLL & Delta vs rule \\
+\midrule
+through 2019-12-31 & weak\_only & 458 & 956 & 3.1688 & 0.0258 \\
+through 2019-12-31 & rule & 458 & 956 & 3.1430 & 0.0000 \\
+through 2019-12-31 & fixed\_discount & 458 & 956 & 3.1352 & -0.0077 \\
+through 2019-12-31 & commensurate\_like & 458 & 956 & 3.1771 & 0.0342 \\
+through 2019-12-31 & rule\_sam & 458 & 956 & 2.9622 & -0.1807 \\
+through 2019-12-31 & two\_head\_trained & 458 & 956 & 2.9942 & -0.1488 \\
+through 2020-12-31 & weak\_only & 629 & 785 & 3.1379 & 0.0179 \\
+through 2020-12-31 & rule & 629 & 785 & 3.1200 & 0.0000 \\
+through 2020-12-31 & fixed\_discount & 629 & 785 & 3.1140 & -0.0060 \\
+through 2020-12-31 & commensurate\_like & 629 & 785 & 3.1578 & 0.0379 \\
+through 2020-12-31 & rule\_sam & 629 & 785 & 2.9425 & -0.1775 \\
+through 2020-12-31 & two\_head\_trained & 629 & 785 & 2.9741 & -0.1459 \\
+through 2021-12-31 & weak\_only & 810 & 604 & 3.1154 & 0.0017 \\
+through 2021-12-31 & rule & 810 & 604 & 3.1137 & 0.0000 \\
+through 2021-12-31 & fixed\_discount & 810 & 604 & 3.1096 & -0.0041 \\
+through 2021-12-31 & commensurate\_like & 810 & 604 & 3.1511 & 0.0374 \\
+through 2021-12-31 & rule\_sam & 810 & 604 & 2.9353 & -0.1784 \\
+through 2021-12-31 & two\_head\_trained & 810 & 604 & 2.9581 & -0.1556 \\
+through 2022-12-31 & weak\_only & 1017 & 397 & 3.0842 & 0.0188 \\
+through 2022-12-31 & rule & 1017 & 397 & 3.0654 & 0.0000 \\
+through 2022-12-31 & fixed\_discount & 1017 & 397 & 3.0584 & -0.0070 \\
+through 2022-12-31 & commensurate\_like & 1017 & 397 & 3.1032 & 0.0378 \\
+through 2022-12-31 & rule\_sam & 1017 & 397 & 2.8918 & -0.1736 \\
+through 2022-12-31 & two\_head\_trained & 1017 & 397 & 2.9109 & -0.1545 \\
+\bottomrule
+\end{tabular}
+\end{table}

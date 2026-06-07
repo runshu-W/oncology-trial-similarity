@@ -145,26 +145,42 @@ def score_secret_index(
 ) -> list[dict[str, Any]]:
     index = np.load(index_path, allow_pickle=False)
     nct_ids = index["nct_ids"]
+    if top_k <= 0:
+        return []
+
+    weighted_scores = np.zeros(len(nct_ids), dtype=np.float32)
+    section_score_arrays: dict[str, np.ndarray] = {}
+    for section, weight in SECRET_SECTION_WEIGHTS.items():
+        query = np.asarray(query_vectors[section], dtype=np.float32).reshape(-1)
+        matrix = np.asarray(index[section], dtype=np.float32)
+        query_norm = float(np.linalg.norm(query))
+        row_norms = np.linalg.norm(matrix, axis=1)
+        denom = row_norms * query_norm
+        raw_scores = matrix @ query
+        similarities = np.divide(
+            raw_scores,
+            denom,
+            out=np.zeros_like(raw_scores, dtype=np.float32),
+            where=denom > 0.0,
+        )
+        section_score_arrays[section] = similarities
+        weighted_scores += np.float32(weight) * similarities
+
+    order = np.argsort(-weighted_scores)
     scored = []
-    for idx, raw_nct_id in enumerate(nct_ids):
-        nct_id = str(raw_nct_id)
+    for idx in order:
+        nct_id = str(nct_ids[idx])
         if nct_id == excluded_nct_id:
             continue
-        section_scores = {}
-        score = 0.0
-        for section, weight in SECRET_SECTION_WEIGHTS.items():
-            sim = cosine(
-                np.asarray(query_vectors[section], dtype=np.float32),
-                np.asarray(index[section][idx], dtype=np.float32),
-            )
-            section_scores[section] = sim
-            score += weight * sim
+        section_scores = {
+            section: float(scores[idx]) for section, scores in section_score_arrays.items()
+        }
         candidate_summary = summaries.get(nct_id, {})
         scored.append(
             {
                 "nct_id": nct_id,
-                "score": score,
-                "score_0_100": round(100 * max(0.0, score), 2),
+                "score": float(weighted_scores[idx]),
+                "score_0_100": round(100 * max(0.0, float(weighted_scores[idx])), 2),
                 "retrieval_backend": "secret",
                 "secret_section_scores": {
                     key: round(value, 4) for key, value in section_scores.items()
@@ -172,7 +188,9 @@ def score_secret_index(
                 "secret_evidence": secret_sections_from_summary(candidate_summary),
             }
         )
-    scored.sort(key=lambda row: row["score"], reverse=True)
-    for rank, row in enumerate(scored[:top_k], start=1):
+        if len(scored) >= top_k:
+            break
+
+    for rank, row in enumerate(scored, start=1):
         row["retrieval_rank"] = rank
-    return scored[:top_k]
+    return scored
