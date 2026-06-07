@@ -327,8 +327,8 @@ python3 oncology_trial_similarity_pipeline.py search \
 
 当前 pipeline 支持两种 embedding backend：
 
-- `hashing`: 默认后端，不依赖模型，适合快速调试。
-- `clinicalbert`: 使用本机 HuggingFace cache 中的 `emilyalsentzer/Bio_ClinicalBERT`，通过 `transformers` 做 mean-pooling embedding，输出 768 维向量。
+- `clinicalbert`: 默认后端，使用本机 HuggingFace cache 中的 `emilyalsentzer/Bio_ClinicalBERT`，通过 `transformers` 做 mean-pooling embedding，输出 768 维向量。
+- `hashing`: 轻量 fallback，不依赖模型，适合快速调试；如需使用，应显式传入 `--embedding-backend hashing`。
 
 本机已经有 `torch`、`transformers` 和 Bio_ClinicalBERT cache，因此不需要额外安装 `sentence-transformers` 也能运行 biomedical embedding。注意使用 `clinicalbert` 时应调用项目虚拟环境中的 Python：
 

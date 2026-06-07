@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="802" height="418" viewBox="0 0 802 418">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:20px;font-weight:700;fill:#111827}.label{font-size:12px;fill:#374151}.value{font-size:12px;fill:#111827}.cell{stroke:#ffffff;stroke-width:1}</style>
+<text class="title" x="24" y="34">Simulation operating characteristics: power by scenario and method</text>
+<text class="label" text-anchor="middle" x="309" y="70">weak_only</text>
+<text class="label" text-anchor="middle" x="427" y="70">rule</text>
+<text class="label" text-anchor="middle" x="545" y="70">rule_sam</text>
+<text class="label" text-anchor="middle" x="663" y="70">fixed_discount</text>
+<text class="label" text-anchor="end" x="238" y="113">exchangeable</text>
+<rect class="cell" x="250" y="88" width="118" height="40" fill="rgb(147,209,186)"/>
+<text class="value" text-anchor="middle" x="309" y="113">0.169</text>
+<rect class="cell" x="368" y="88" width="118" height="40" fill="rgb(155,212,192)"/>
+<text class="value" text-anchor="middle" x="427" y="113">0.154</text>
+<rect class="cell" x="486" y="88" width="118" height="40" fill="rgb(153,211,190)"/>
+<text class="value" text-anchor="middle" x="545" y="113">0.158</text>
+<rect class="cell" x="604" y="88" width="118" height="40" fill="rgb(156,213,192)"/>
+<text class="value" text-anchor="middle" x="663" y="113">0.152</text>
+<text class="label" text-anchor="end" x="238" y="153">mild_optimistic_conflict</text>
+<rect class="cell" x="250" y="128" width="118" height="40" fill="rgb(147,209,187)"/>
+<text class="value" text-anchor="middle" x="309" y="153">0.169</text>
+<rect class="cell" x="368" y="128" width="118" height="40" fill="rgb(123,199,172)"/>
+<text class="value" text-anchor="middle" x="427" y="153">0.212</text>
+<rect class="cell" x="486" y="128" width="118" height="40" fill="rgb(122,199,171)"/>
+<text class="value" text-anchor="middle" x="545" y="153">0.214</text>
+<rect class="cell" x="604" y="128" width="118" height="40" fill="rgb(120,198,170)"/>
+<text class="value" text-anchor="middle" x="663" y="153">0.219</text>
+<text class="label" text-anchor="end" x="238" y="193">strong_optimistic_conflict</text>
+<rect class="cell" x="250" y="168" width="118" height="40" fill="rgb(147,209,187)"/>
+<text class="value" text-anchor="middle" x="309" y="193">0.168</text>
+<rect class="cell" x="368" y="168" width="118" height="40" fill="rgb(88,184,149)"/>
+<text class="value" text-anchor="middle" x="427" y="193">0.278</text>
+<rect class="cell" x="486" y="168" width="118" height="40" fill="rgb(92,186,152)"/>
+<text class="value" text-anchor="middle" x="545" y="193">0.270</text>
+<rect class="cell" x="604" y="168" width="118" height="40" fill="rgb(82,182,146)"/>
+<text class="value" text-anchor="middle" x="663" y="193">0.288</text>
+<text class="label" text-anchor="end" x="238" y="233">mild_pessimistic_conflict</text>
+<rect class="cell" x="250" y="208" width="118" height="40" fill="rgb(147,209,187)"/>
+<text class="value" text-anchor="middle" x="309" y="233">0.169</text>
+<rect class="cell" x="368" y="208" width="118" height="40" fill="rgb(174,220,204)"/>
+<text class="value" text-anchor="middle" x="427" y="233">0.118</text>
+<rect class="cell" x="486" y="208" width="118" height="40" fill="rgb(170,219,201)"/>
+<text class="value" text-anchor="middle" x="545" y="233">0.126</text>
+<rect class="cell" x="604" y="208" width="118" height="40" fill="rgb(176,221,205)"/>
+<text class="value" text-anchor="middle" x="663" y="233">0.115</text>
+<text class="label" text-anchor="end" x="238" y="273">mixture_historical_conflict</text>
+<rect class="cell" x="250" y="248" width="118" height="40" fill="rgb(147,209,187)"/>
+<text class="value" text-anchor="middle" x="309" y="273">0.168</text>
+<rect class="cell" x="368" y="248" width="118" height="40" fill="rgb(139,205,181)"/>
+<text class="value" text-anchor="middle" x="427" y="273">0.184</text>
+<rect class="cell" x="486" y="248" width="118" height="40" fill="rgb(137,205,180)"/>
+<text class="value" text-anchor="middle" x="545" y="273">0.187</text>
+<rect class="cell" x="604" y="248" width="118" height="40" fill="rgb(138,205,181)"/>
+<text class="value" text-anchor="middle" x="663" y="273">0.185</text>
+<text class="label" text-anchor="end" x="238" y="313">heterogeneous_historical</text>
+<rect class="cell" x="250" y="288" width="118" height="40" fill="rgb(147,209,187)"/>
+<text class="value" text-anchor="middle" x="309" y="313">0.168</text>
+<rect class="cell" x="368" y="288" width="118" height="40" fill="rgb(159,214,194)"/>
+<text class="value" text-anchor="middle" x="427" y="313">0.146</text>
+<rect class="cell" x="486" y="288" width="118" height="40" fill="rgb(157,213,193)"/>
+<text class="value" text-anchor="middle" x="545" y="313">0.150</text>
+<rect class="cell" x="604" y="288" width="118" height="40" fill="rgb(160,215,195)"/>
+<text class="value" text-anchor="middle" x="663" y="313">0.144</text>
+<text class="label" x="24" y="394">Cell values are empirical power. Type I error, coverage, bias and SAM trigger are reported in Table OC.</text>
+</svg>

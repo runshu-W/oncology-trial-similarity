@@ -1,0 +1,6 @@
+delta_key,paired_query_count,mean_delta,ci_lower,ci_upper,iterations
+secret_pool_minus_hashing_rerank_component_ready_rate,1470,0.09115646258503401,0.0798639455782313,0.10176870748299319,1000
+secret_pool_minus_hashing_rerank_mean_disease_match,1470,0.14202857142857145,0.11719931972789116,0.16751836734693878,1000
+secret_pool_minus_hashing_rerank_mean_endpoint_match,1470,1.1046693877551022,1.0599537414965987,1.1503374149659864,1000
+secret_pool_minus_hashing_rerank_mean_overall_similarity,1470,3.757361904761905,3.58936462585034,3.9419734693877553,1000
+secret_pool_minus_hashing_topk_endpoint_and_result_ready_rate,1470,0.0,0.0,0.0,1000

@@ -1,0 +1,20 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Held-out beta-binomial predictive NLL for borrowing prior baselines.}
+\label{tab:borrowing-baselines}
+\begin{tabular}{lrrrr}
+\toprule
+Method & Examples & Mean NLL & Delta vs rule & Historical mass \\
+\midrule
+commensurate\_like & 1414 & 3.1926 & 0.0305 & 0.784 \\
+fixed\_discount & 1414 & 3.1520 & -0.0100 & 0.784 \\
+map\_like & 1414 & 3.3410 & 0.1789 & 0.784 \\
+power\_prior\_like & 1414 & 3.3547 & 0.1926 & 0.784 \\
+rule & 1414 & 3.1620 & 0.0000 & 0.784 \\
+rule\_sam & 1414 & 2.9721 & -0.1900 & 0.627 \\
+two\_head\_trained & 1414 & 3.0181 & -0.1439 & NA \\
+weak\_only & 1414 & 3.1877 & 0.0257 & 0.000 \\
+\bottomrule
+\end{tabular}
+\end{table}

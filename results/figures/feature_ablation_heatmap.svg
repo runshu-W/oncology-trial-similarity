@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="402" viewBox="0 0 820 402">
+<rect width="100%" height="100%" fill="white"/>
+<text x="24" y="30" font-family="Arial" font-size="20" font-weight="bold">Feature ablation sensitivity</text>
+<text x="300" y="50" font-family="Arial" font-size="12" fill="#555">Delta NLL vs full 9-feature proxy</text>
+<text x="24" y="78" font-family="Arial" font-size="13">full_9_feature_proxy</text>
+<rect x="300" y="62" width="360" height="24" rx="3" fill="rgb(255,245,235)" stroke="#ccc"/>
+<text x="672" y="79" font-family="Arial" font-size="13">0.0000</text>
+<text x="24" y="112" font-family="Arial" font-size="13">drop_disease</text>
+<rect x="300" y="96" width="360" height="24" rx="3" fill="rgb(222,237,255)" stroke="#ccc"/>
+<text x="672" y="113" font-family="Arial" font-size="13">-0.0019</text>
+<text x="24" y="146" font-family="Arial" font-size="13">drop_regimen</text>
+<rect x="300" y="130" width="360" height="24" rx="3" fill="rgb(231,243,255)" stroke="#ccc"/>
+<text x="672" y="147" font-family="Arial" font-size="13">-0.0005</text>
+<text x="24" y="180" font-family="Arial" font-size="13">drop_endpoint</text>
+<rect x="300" y="164" width="360" height="24" rx="3" fill="rgb(255,234,223)" stroke="#ccc"/>
+<text x="672" y="181" font-family="Arial" font-size="13">0.0016</text>
+<text x="24" y="214" font-family="Arial" font-size="13">drop_followup</text>
+<rect x="300" y="198" width="360" height="24" rx="3" fill="rgb(255,239,228)" stroke="#ccc"/>
+<text x="672" y="215" font-family="Arial" font-size="13">0.0008</text>
+<text x="24" y="248" font-family="Arial" font-size="13">drop_eligibility</text>
+<rect x="300" y="232" width="360" height="24" rx="3" fill="rgb(255,245,235)" stroke="#ccc"/>
+<text x="672" y="249" font-family="Arial" font-size="13">0.0000</text>
+<text x="24" y="282" font-family="Arial" font-size="13">drop_result_quality</text>
+<rect x="300" y="266" width="360" height="24" rx="3" fill="rgb(255,236,225)" stroke="#ccc"/>
+<text x="672" y="283" font-family="Arial" font-size="13">0.0013</text>
+<text x="24" y="316" font-family="Arial" font-size="13">drop_redflag</text>
+<rect x="300" y="300" width="360" height="24" rx="3" fill="rgb(226,240,255)" stroke="#ccc"/>
+<text x="672" y="317" font-family="Arial" font-size="13">-0.0013</text>
+<text x="24" y="350" font-family="Arial" font-size="13">drop_information_size</text>
+<rect x="300" y="334" width="360" height="24" rx="3" fill="rgb(115,175,255)" stroke="#ccc"/>
+<text x="672" y="351" font-family="Arial" font-size="13">-0.0187</text>
+</svg>

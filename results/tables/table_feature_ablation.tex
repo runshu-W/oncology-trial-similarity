@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Deterministic feature-weight proxy ablation for the nine-feature borrowability schema.}
+\label{tab:feature-ablation}
+\begin{tabular}{llrrr}
+\toprule
+Ablation & Dropped features & Mean NLL & Delta vs full & Examples \\
+\midrule
+full\_9\_feature\_proxy & None & 3.1495 & 0.0000 & 1414 \\
+drop\_disease & disease\_match\_i & 3.1476 & -0.0019 & 1414 \\
+drop\_regimen & regimen\_match\_i & 3.1490 & -0.0005 & 1414 \\
+drop\_endpoint & endpoint\_match\_i & 3.1511 & 0.0016 & 1414 \\
+drop\_followup & followup\_match\_i & 3.1503 & 0.0008 & 1414 \\
+drop\_eligibility & eligibility\_match\_i & 3.1495 & 0.0000 & 1414 \\
+drop\_result\_quality & result\_quality\_i & 3.1508 & 0.0013 & 1414 \\
+drop\_redflag & negative\_redflag\_severity\_i & 3.1482 & -0.0013 & 1414 \\
+drop\_information\_size & log\_n\_i & 3.1308 & -0.0187 & 1414 \\
+\bottomrule
+\end{tabular}
+\end{table}

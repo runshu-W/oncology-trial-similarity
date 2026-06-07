@@ -1,0 +1,10 @@
+ablation,dropped_features,example_count,mean_nll,mean_nll_minus_full
+full_9_feature_proxy,,1414,3.1495147931427683,0.0
+drop_disease,disease_match_i,1414,3.147599151120544,-0.0019156420222241621
+drop_regimen,regimen_match_i,1414,3.148992064547499,-0.0005227285952691396
+drop_endpoint,endpoint_match_i,1414,3.1510972035859712,0.0015824104432029529
+drop_followup,followup_match_i,1414,3.150340716231306,0.0008259230885379054
+drop_eligibility,eligibility_match_i,1414,3.1495147931427683,0.0
+drop_result_quality,result_quality_i,1414,3.1508083392131345,0.0012935460703662471
+drop_redflag,negative_redflag_severity_i,1414,3.1482133630113105,-0.0013014301314577814
+drop_information_size,log_n_i,1414,3.130842381260209,-0.018672411882559192

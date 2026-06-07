@@ -39,3 +39,5 @@ The page displays:
 - Download buttons for raw JSON and Markdown report.
 
 Suggested discounts are not final prior weights. Bayesian results use a lightweight weighted beta-binomial power-prior approximation, not a full robust MAP mixture posterior. They do not define `p_target`, `OR_target`, or `gamma`; those decision thresholds remain user-defined. Any candidate historical trial still needs clinical and statistical expert review before use in a primary Bayesian analysis.
+
+Mixture-prior outputs, when enabled, are exploratory review artifacts. Component weights are intended for reviewer inspection and sensitivity analysis, not as expert-validated borrowing decisions. The weak-prior component is a robustness safeguard against over-borrowing from apparently similar but clinically incompatible trials. Retrospective training of mixture weights requires strict leakage controls, including held-out pseudo-query outcomes, before any manuscript claim about predictive calibration or borrowing performance.

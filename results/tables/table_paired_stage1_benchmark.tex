@@ -1,0 +1,14 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Paired Stage 1 backend benchmark on common ORR pseudo-queries.}
+\label{tab:paired-stage1}
+\begin{tabular}{lrrrrr}
+\toprule
+Backend & Queries & Component-ready & Endpoint match & Delta component-ready & Delta endpoint match \\
+\midrule
+hashing & 1470 & 0.545 & 2.228 & Reference & Reference \\
+secret\_pool & 1470 & 0.636 & 3.333 & 0.091 [0.080, 0.102] & 1.105 [1.060, 1.150] \\
+\bottomrule
+\end{tabular}
+\end{table}

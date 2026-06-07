@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import unittest
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
@@ -109,7 +111,13 @@ class WebAgentTests(unittest.TestCase):
             "reranked_top_matches": [
                 {
                     "candidate_nct_id": "NCTHIST1",
+                    "overall_similarity_score": 82.0,
                     "suggested_borrowing_discount": 0.4,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
                     "borrowable_quantities": [
                         {
                             "endpoint": "Objective Response Rate",
@@ -122,7 +130,13 @@ class WebAgentTests(unittest.TestCase):
                 },
                 {
                     "candidate_nct_id": "NCTHIST2",
+                    "overall_similarity_score": 76.0,
                     "suggested_borrowing_discount": 0.75,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
                     "borrowable_quantities": [
                         {
                             "endpoint": "Objective Response Rate",
@@ -144,10 +158,264 @@ class WebAgentTests(unittest.TestCase):
         self.assertEqual(endpoint["endpoint_family"], "ORR")
         self.assertEqual(endpoint["analysis_mode"], "posterior")
         self.assertGreater(endpoint["effective_sample_size"], 0)
+        mixture = endpoint["mixture_prior"]
+        self.assertIn("lambda_0", mixture)
+        self.assertIn("components", mixture)
+        self.assertAlmostEqual(mixture["lambda_0"], 0.2)
+        self.assertTrue(mixture["components"])
+        first_component = mixture["components"][0]
+        self.assertIn("nct_id", first_component)
+        self.assertIn("lambda_rule", first_component)
+        self.assertIn("alpha", first_component)
+        self.assertIn("beta", first_component)
+        self.assertAlmostEqual(
+            mixture["lambda_0"] + sum(component["lambda_rule"] for component in mixture["components"]),
+            1.0,
+            places=6,
+        )
         self.assertIn("observed_weights", {row["scenario"] for row in endpoint["weight_sensitivity"]})
         self.assertTrue(endpoint["success_probability_grid"])
         self.assertTrue(endpoint["tipping_points"])
         self.assertGreater(analysis["two_arm_decision_support"]["orr"]["posterior_or_mean"], 1.0)
+
+    def test_bayesian_analysis_applies_calibrated_lambda_model(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 12, "denominator": 40},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST1",
+                    "overall_similarity_score": 82.0,
+                    "suggested_borrowing_discount": 0.4,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 10, "denominator": 50},
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "candidate_nct_id": "NCTHIST2",
+                    "overall_similarity_score": 76.0,
+                    "suggested_borrowing_discount": 0.75,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Treatment Arm", "count": 18, "denominator": 60},
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+
+        with mock.patch.object(
+            app_module.pipeline,
+            "predict_lambda_model_outputs",
+            return_value={
+                "model_type": "two_head_deepsets",
+                "raw_lambda_weights": [10.0, 1.0],
+                "model_discounts": [0.4, 0.2],
+            },
+            create=True,
+        ) as predict:
+            enriched = app_module.pipeline.add_bayesian_analysis(
+                result,
+                mixture_prior_mode="retrospective_calibrated",
+                lambda_model_path=Path("fake.pt"),
+            )
+
+        mixture = enriched["bayesian_analysis"]["endpoint_analyses"][0]["mixture_prior"]
+        self.assertEqual(mixture["mode"], "retrospective_calibrated")
+        self.assertIn("lambda_model", mixture["components"][0])
+        self.assertIn("lambda_active", mixture["components"][0])
+        self.assertIn("lambda_rule", mixture["components"][0])
+        self.assertIn("discount_model", mixture["components"][0])
+        self.assertIn("discount_active", mixture["components"][0])
+        self.assertEqual(mixture["lambda_model_type"], "two_head_deepsets")
+        self.assertIn("No expert labels", mixture["calibration_note"])
+        predict.assert_called_once()
+
+    def test_bayesian_analysis_can_apply_sam_conflict_adapter(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 0, "denominator": 10},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "overall_similarity_score": 90.0,
+                    "suggested_borrowing_discount": 1.0,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 5.0,
+                        "result_usability": 5.0,
+                        "disease_population_match": 5.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 45, "denominator": 50},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        enriched = app_module.pipeline.add_bayesian_analysis(result, mixture_prior_mode="sam")
+
+        mixture = enriched["bayesian_analysis"]["endpoint_analyses"][0]["mixture_prior"]
+        self.assertEqual(mixture["mode"], "rule_sam_robust")
+        self.assertIn("sam_prior_data_conflict", mixture)
+        self.assertEqual(mixture["sam_prior_data_conflict"]["status"], "conflict_downweighted")
+        self.assertGreater(mixture["lambda_0"], mixture["lambda_0_pre_sam"])
+        self.assertLess(mixture["components"][0]["lambda_active"], mixture["components"][0]["lambda_pre_sam"])
+
+    def test_bayesian_analysis_can_combine_calibrated_lambda_and_sam(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 0, "denominator": 10},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "overall_similarity_score": 90.0,
+                    "suggested_borrowing_discount": 1.0,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 5.0,
+                        "result_usability": 5.0,
+                        "disease_population_match": 5.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 45, "denominator": 50},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        with mock.patch.object(
+            app_module.pipeline,
+            "predict_lambda_model_outputs",
+            return_value={
+                "model_type": "two_head_deepsets",
+                "raw_lambda_weights": [1.0],
+                "model_discounts": [1.0],
+            },
+            create=True,
+        ):
+            enriched = app_module.pipeline.add_bayesian_analysis(
+                result,
+                mixture_prior_mode="retrospective_calibrated_sam",
+                lambda_model_path=Path("fake.pt"),
+            )
+
+        mixture = enriched["bayesian_analysis"]["endpoint_analyses"][0]["mixture_prior"]
+        self.assertEqual(mixture["mode"], "retrospective_calibrated_sam_robust")
+        self.assertEqual(mixture["lambda_model_type"], "two_head_deepsets")
+        self.assertIn("discount_model", mixture["components"][0])
+        self.assertIn("sam_prior_data_conflict", mixture)
+
+    def test_bayesian_analysis_requires_lambda_model_path_for_calibrated_mode(self) -> None:
+        result = {
+            "query_summary": {
+                "nct_id": "NCTQUERY",
+                "endpoints": {
+                    "primary": [
+                        {
+                            "title": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Drug", "count": 12, "denominator": 40},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "reranked_top_matches": [
+                {
+                    "candidate_nct_id": "NCTHIST",
+                    "overall_similarity_score": 82.0,
+                    "suggested_borrowing_discount": 0.4,
+                    "dimension_scores": {
+                        "endpoint_estimand_match": 3.0,
+                        "result_usability": 3.0,
+                        "disease_population_match": 3.0,
+                    },
+                    "borrowable_quantities": [
+                        {
+                            "endpoint": "Objective Response Rate",
+                            "endpoint_family": "ORR/CR/PR",
+                            "arm_results": [
+                                {"arm": "Experimental Arm", "count": 10, "denominator": 50},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(ValueError, "--lambda-model-path is required"):
+            app_module.pipeline.add_bayesian_analysis(
+                result,
+                mixture_prior_mode="retrospective_calibrated",
+            )
 
     def test_bayesian_analysis_excludes_duration_of_response(self) -> None:
         result = {
@@ -260,6 +528,88 @@ class WebAgentTests(unittest.TestCase):
         scored = app_module.pipeline.score_prior_borrowing_pair(query, candidate)
 
         self.assertEqual(scored["dimension_scores"]["endpoint_estimand_match"], 0.0)
+
+    def test_prior_borrowing_pair_scores_eligibility_overlap(self) -> None:
+        query = {
+            "phase": "Phase 2",
+            "cancer_type": {"histology": ["NSCLC"], "primary_site": ["Lung"], "molecular_marker": ["EGFR"], "line_of_therapy": "Second line"},
+            "intervention": {"backbone_regimen": ["osimertinib"], "drug_classes": ["EGFR inhibitor"]},
+            "design": {"single_or_multi_arm": "Single-arm", "randomized": "No"},
+            "population": {
+                "key_inclusion": [
+                    "Adults with EGFR-mutated metastatic NSCLC",
+                    "ECOG performance status 0 or 1",
+                ],
+                "key_exclusion": ["Untreated active brain metastases"],
+            },
+            "endpoints": {"primary": [{"endpoint_family": "ORR/CR/PR"}]},
+        }
+        candidate = {
+            "nct_id": "NCTELIG",
+            "score_0_100": 50,
+            "phase": "Phase 2",
+            "cancer_type": {"histology": ["NSCLC"], "primary_site": ["Lung"], "molecular_marker": ["EGFR"], "line_of_therapy": "Second line"},
+            "intervention": {"backbone_regimen": ["osimertinib"], "drug_classes": ["EGFR inhibitor"]},
+            "design": {"single_or_multi_arm": "Single-arm", "randomized": "No"},
+            "population": {
+                "key_inclusion": [
+                    "Adults with EGFR-mutated metastatic NSCLC",
+                    "ECOG performance status 0 or 1",
+                    "Prior platinum chemotherapy",
+                ],
+                "key_exclusion": ["Active brain metastases requiring steroids"],
+            },
+            "result_usability": {"has_posted_results": True, "denominators_available": True},
+            "borrowable_quantities": [
+                {
+                    "endpoint": "Objective Response Rate",
+                    "endpoint_family": "ORR/CR/PR",
+                    "arm_results": [{"arm": "Experimental", "count": 10, "denominator": 20}],
+                }
+            ],
+        }
+
+        scored = app_module.pipeline.score_prior_borrowing_pair(query, candidate)
+
+        eligibility_score = scored["dimension_scores"]["eligibility_criteria_overlap"]
+        self.assertGreater(eligibility_score, 0.0)
+        self.assertLess(eligibility_score, 5.0)
+
+    def test_eligibility_overlap_ignores_schema_keys(self) -> None:
+        score = app_module.pipeline.score_eligibility_overlap(
+            {
+                "key_inclusion": ["EGFR mutation"],
+                "key_exclusion": ["brain metastases"],
+            },
+            {
+                "key_inclusion": ["ALK fusion"],
+                "key_exclusion": ["cardiac disease"],
+            },
+        )
+
+        self.assertEqual(score, 0.0)
+
+    def test_eligibility_overlap_ignores_stringified_schema_keys(self) -> None:
+        score = app_module.pipeline.score_eligibility_overlap(
+            '{"key_inclusion": ["EGFR mutation"], "key_exclusion": ["brain metastases"]}',
+            '{"key_inclusion": ["ALK fusion"], "key_exclusion": ["cardiac disease"]}',
+        )
+
+        self.assertEqual(score, 0.0)
+
+    def test_eligibility_overlap_ignores_generic_boilerplate_terms(self) -> None:
+        score = app_module.pipeline.score_eligibility_overlap(
+            {
+                "key_inclusion": ["Adult patients with adequate organ function available for study"],
+                "key_exclusion": [],
+            },
+            {
+                "key_inclusion": ["Adult patients with adequate archival tissue available for study"],
+                "key_exclusion": [],
+            },
+        )
+
+        self.assertEqual(score, 0.0)
 
     def test_root_serves_html(self) -> None:
         response = self.client.get("/")

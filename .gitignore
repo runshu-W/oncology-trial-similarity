@@ -1,8 +1,59 @@
+# macOS and editor noise
 .DS_Store
-.venv/
-.pycache/
+*.swp
+*.swo
+
+# Python
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Codex / local workflow
 .superpowers/
+.worktrees/
+
+# Large runtime artifacts
 artifacts/
-*.npz
 *.jsonl
+*.npz
+*.pt
+*.pth
+*.pkl
+*.joblib
+**/pipeline_results.jsonl
+**/trial_embeddings.npz
+**/hashing_index/
+
+# Raw ClinicalTrials.gov exports and local PDFs
+Oncology_All_Trials/
+**/NCT*_data.json
+**/Study_Protocol.pdf
+**/Statistical_Analysis_Plan.pdf
+
+# Large generated manuscript media outside the lightweight results package
+docs/figures/
+*.pdf
+*.tif
+*.tiff
+
+# LaTeX build outputs
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+
+# Keep lightweight manuscript evidence package
+!results/
+!results/**

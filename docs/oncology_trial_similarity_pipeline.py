@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
+import inspect
+import importlib.util
 import json
 import math
 import os
@@ -10,10 +13,62 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+
+def _load_mixture_prior() -> Any:
+    if __package__:
+        try:
+            from . import mixture_prior as package_mixture_prior
+
+            return package_mixture_prior
+        except ImportError:
+            pass
+
+    sibling_path = Path(__file__).with_name("mixture_prior.py")
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_oncology_trial_similarity_mixture_prior",
+            sibling_path,
+        )
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except (ImportError, OSError):
+        return None
+
+
+mixture_prior = _load_mixture_prior()
+
+
+def _load_secret_retrieval() -> Any:
+    if __package__:
+        try:
+            from . import secret_retrieval as package_secret_retrieval
+
+            return package_secret_retrieval
+        except ImportError:
+            pass
+
+    sibling_path = Path(__file__).with_name("secret_retrieval.py")
+    spec = importlib.util.spec_from_file_location(
+        "_oncology_trial_similarity_secret_retrieval",
+        sibling_path,
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load SECRET retrieval module from {sibling_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+secret_retrieval = _load_secret_retrieval()
 
 
 DEFAULT_DB_ROOT = Path(
@@ -34,6 +89,26 @@ ASPECT_WEIGHTS = {
 
 
 DEFAULT_CLINICALBERT_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
+DEFAULT_RETRIEVAL_BACKEND = "clinicalbert"
+DEFAULT_INDEX_EMBEDDING_BACKEND = "clinicalbert"
+RETRIEVAL_BACKENDS = ("clinicalbert", "trial2vec", "secret")
+MIXTURE_PRIOR_MODES = ("rule", "retrospective_calibrated", "sam", "retrospective_calibrated_sam")
+
+
+def ensure_supported_retrieval_backend(backend: str) -> None:
+    if backend not in RETRIEVAL_BACKENDS:
+        raise ValueError(
+            f"Unsupported retrieval backend: {backend}. "
+            f"Supported backends: {', '.join(RETRIEVAL_BACKENDS)}"
+        )
+
+
+def ensure_supported_mixture_prior_mode(mode: str) -> None:
+    if mode not in MIXTURE_PRIOR_MODES:
+        raise ValueError(
+            f"Unsupported mixture prior mode: {mode}. "
+            f"Supported modes: {', '.join(MIXTURE_PRIOR_MODES)}"
+        )
 
 
 @dataclass
@@ -458,6 +533,82 @@ def summarize_borrowable_quantities(primary: list[dict[str, Any]]) -> list[dict[
     return quantities
 
 
+def _date_text(value: Any) -> str | None:
+    if isinstance(value, dict):
+        value = value.get("date")
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def normalize_trial_date(value: Any) -> tuple[str | None, str]:
+    text = _date_text(value)
+    if text is None:
+        return None, "missing"
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(text, fmt).date().isoformat(), "day"
+        except ValueError:
+            pass
+    for fmt in ("%B %Y", "%b %Y", "%Y-%m", "%Y/%m"):
+        try:
+            parsed = datetime.strptime(text, fmt)
+            return date(parsed.year, parsed.month, 15).isoformat(), "month"
+        except ValueError:
+            pass
+    year_match = re.search(r"\b(19|20|21)\d{2}\b", text)
+    if year_match:
+        return date(int(year_match.group(0)), 6, 30).isoformat(), "year"
+    return None, "unparseable"
+
+
+def extract_temporal_date_metadata(raw: dict[str, Any], legacy_dates: dict[str, Any] | None = None) -> dict[str, Any]:
+    status = get_nested(raw, "protocolSection", "statusModule", default={})
+    if not isinstance(status, dict):
+        status = {}
+    legacy_dates = legacy_dates if isinstance(legacy_dates, dict) else {}
+    raw_values = {
+        "primary_completion_date": (
+            status.get("primaryCompletionDateStruct")
+            or status.get("primaryCompletionDate")
+            or legacy_dates.get("Primary Completion Date")
+        ),
+        "completion_date": (
+            status.get("completionDateStruct")
+            or status.get("completionDate")
+            or legacy_dates.get("Completion Date")
+        ),
+        "results_first_posted_date": (
+            status.get("resultsFirstPostDateStruct")
+            or status.get("resultsFirstSubmitDate")
+            or status.get("resultsFirstPostDate")
+            or legacy_dates.get("Results First Posted")
+        ),
+        "start_date": (
+            status.get("startDateStruct")
+            or status.get("startDate")
+            or legacy_dates.get("Start Date")
+        ),
+    }
+    output: dict[str, Any] = {}
+    for field, raw_value in raw_values.items():
+        normalized, precision = normalize_trial_date(raw_value)
+        output[field] = normalized
+        output[f"{field}_precision"] = precision
+        output[f"{field}_raw"] = _date_text(raw_value)
+    temporal_sort_source = "missing"
+    temporal_sort_date = None
+    for field in ("primary_completion_date", "completion_date", "results_first_posted_date", "start_date"):
+        if output.get(field):
+            temporal_sort_source = field
+            temporal_sort_date = output[field]
+            break
+    output["temporal_sort_date"] = temporal_sort_date
+    output["temporal_sort_source"] = temporal_sort_source
+    return output
+
+
 def extract_trial_record(folder: Path) -> TrialRecord | None:
     json_path = find_trial_json(folder)
     if json_path is None:
@@ -488,6 +639,7 @@ def extract_trial_record(folder: Path) -> TrialRecord | None:
         "design": design if isinstance(design, dict) else {},
         "enrollment": clean_text(results.get("3. Enrollment (Actual)") if isinstance(results, dict) else ""),
         "dates": dates if isinstance(dates, dict) else {},
+        "date_metadata": extract_temporal_date_metadata(raw, dates if isinstance(dates, dict) else {}),
         "supporting_documents": {
             "protocol_pdf": str(pdfs["protocol"]) if pdfs["protocol"] else "",
             "sap_pdf": str(pdfs["sap"]) if pdfs["sap"] else "",
@@ -562,6 +714,7 @@ def make_rule_based_summary(extracted: dict[str, Any]) -> dict[str, Any]:
         "brief_title": extracted.get("brief_title", ""),
         "phase": extracted.get("phase", ""),
         "status": extracted.get("status", ""),
+        **(extracted.get("date_metadata") or {}),
         "cancer_type": {
             "primary_site": oncology["primary_site"],
             "histology": oncology["histology"],
@@ -632,6 +785,68 @@ def make_rule_based_summary(extracted: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _redact_endpoint_outcome_values(endpoint: Any) -> Any:
+    if not isinstance(endpoint, dict):
+        return endpoint
+    allowed_keys = {
+        "type",
+        "title",
+        "description",
+        "time_frame",
+        "endpoint_family",
+    }
+    return {
+        key: copy.deepcopy(value)
+        for key, value in endpoint.items()
+        if key in allowed_keys
+    }
+
+
+def redact_query_outcomes_for_retrieval(summary: dict[str, Any]) -> dict[str, Any]:
+    """Return a query summary with held-out outcome values removed for pseudo-query retrieval."""
+    redacted = copy.deepcopy(summary)
+    endpoints = redacted.get("endpoints")
+    if isinstance(endpoints, dict):
+        for key in ("primary", "secondary_or_other"):
+            values = endpoints.get(key)
+            if isinstance(values, list):
+                endpoints[key] = [_redact_endpoint_outcome_values(value) for value in values]
+            elif isinstance(values, dict):
+                endpoints[key] = _redact_endpoint_outcome_values(values)
+
+    redacted["results"] = {
+        "has_posted_results": False,
+        "primary_results": [],
+        "safety_results": [],
+        "denominators": [],
+        "follow_up_duration": "Hidden for retrospective pseudo-query evaluation.",
+    }
+    borrowing = redacted.get("borrowing_relevance")
+    if isinstance(borrowing, dict):
+        borrowing["borrowable_quantities"] = []
+    redacted["one_paragraph_summary_for_embedding"] = clean_text(
+        [
+            redacted.get("brief_title", ""),
+            redacted.get("official_title", ""),
+            redacted.get("brief_summary", ""),
+            redacted.get("detailed_description", ""),
+            clean_text(redacted.get("intervention", "")),
+            clean_text(redacted.get("cancer_type", "")),
+            clean_text(redacted.get("population", "")),
+            clean_text(redacted.get("endpoints", {})),
+            clean_text(redacted.get("design", {})),
+        ]
+    )[:4000]
+    return redacted
+
+
+def heldout_query_outcomes_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "nct_id": summary.get("nct_id", ""),
+        "endpoints": copy.deepcopy(summary.get("endpoints", {})),
+    }
+
+
 def aspect_text(summary: dict[str, Any], aspect: str) -> str:
     if aspect == "disease_population":
         return clean_text({"cancer_type": summary["cancer_type"], "population": summary["population"]})
@@ -644,6 +859,77 @@ def aspect_text(summary: dict[str, Any], aspect: str) -> str:
     if aspect == "results_safety":
         return clean_text(summary["results"])
     return clean_text(summary)
+
+
+TRIAL2VEC_COLUMNS = (
+    "nct_id",
+    "description",
+    "title",
+    "intervention_name",
+    "disease",
+    "keyword",
+    "outcome_measure",
+    "criteria",
+    "reference",
+    "overall_status",
+)
+
+
+def summary_to_trial2vec_row(summary: dict[str, Any]) -> dict[str, str]:
+    summary = summary if isinstance(summary, dict) else {}
+    endpoints = summary.get("endpoints") or {}
+    endpoints = endpoints if isinstance(endpoints, dict) else {}
+    primary_endpoints = endpoints.get("primary") or []
+    if isinstance(primary_endpoints, dict):
+        primary_endpoints = [primary_endpoints]
+    if not isinstance(primary_endpoints, (list, tuple)):
+        primary_endpoints = []
+    endpoint_titles = [
+        clean_text(endpoint.get("title", ""))
+        for endpoint in primary_endpoints
+        if isinstance(endpoint, dict) and clean_text(endpoint.get("title", ""))
+    ]
+    population = summary.get("population") or {}
+    population = population if isinstance(population, dict) else {}
+    inclusion = clean_text(population.get("key_inclusion", []))
+    exclusion = clean_text(population.get("key_exclusion", []))
+    criteria = clean_text(
+        {
+            label: value
+            for label, value in (("inclusion", inclusion), ("exclusion", exclusion))
+            if value
+        }
+    )
+    intervention = summary.get("intervention") or {}
+    intervention = intervention if isinstance(intervention, dict) else {}
+    cancer_type = summary.get("cancer_type") or {}
+    cancer_type = cancer_type if isinstance(cancer_type, dict) else {}
+    design = summary.get("design") or {}
+    design = design if isinstance(design, dict) else {}
+    row = {
+        "nct_id": clean_text(summary.get("nct_id", "")),
+        "description": clean_text(
+            [
+                summary.get("brief_summary", ""),
+                summary.get("one_paragraph_summary_for_embedding", ""),
+            ]
+        ),
+        "title": clean_text(summary.get("brief_title", summary.get("title", ""))),
+        "intervention_name": clean_text(intervention),
+        "disease": clean_text(cancer_type),
+        "keyword": clean_text(
+            [
+                summary.get("phase", ""),
+                summary.get("status", ""),
+                design,
+            ]
+        ),
+        "outcome_measure": clean_text(endpoint_titles),
+        "criteria": criteria,
+        "reference": "",
+        "overall_status": clean_text(summary.get("status", "")),
+    }
+    return {column: row[column] for column in TRIAL2VEC_COLUMNS}
 
 
 def hashing_embedding(text: str, dim: int = 2048) -> np.ndarray:
@@ -782,10 +1068,110 @@ def weighted_similarity(query: dict[str, np.ndarray], candidate: dict[str, np.nd
     return score, by_aspect
 
 
+def score_trial2vec_index(
+    query_vector: np.ndarray,
+    trial2vec_index_path: Path,
+    excluded_nct_id: str,
+    top_k: int,
+) -> list[dict[str, Any]]:
+    index = np.load(trial2vec_index_path, allow_pickle=False)
+    nct_ids = index["nct_ids"]
+    embeddings = index["embeddings"]
+    query = np.asarray(query_vector, dtype=np.float32).reshape(-1)
+    scored = []
+    for idx, nct_id_raw in enumerate(nct_ids):
+        nct_id = str(nct_id_raw)
+        if nct_id == excluded_nct_id:
+            continue
+        score = cosine(query, np.asarray(embeddings[idx], dtype=np.float32).reshape(-1))
+        scored.append(
+            {
+                "nct_id": nct_id,
+                "score": score,
+                "score_0_100": round(100 * max(0.0, score), 2),
+                "aspect_scores": {},
+                "retrieval_backend": "trial2vec",
+            }
+        )
+    scored.sort(key=lambda row: row["score"], reverse=True)
+    top_rows = scored[:top_k]
+    for rank, row in enumerate(top_rows, start=1):
+        row["retrieval_rank"] = rank
+    return top_rows
+
+
+def make_compatible_torch_load(original_torch_load: Any) -> Any:
+    try:
+        supports_weights_only = "weights_only" in inspect.signature(original_torch_load).parameters
+    except (TypeError, ValueError):
+        supports_weights_only = False
+
+    def compatible_torch_load(*args: Any, **kwargs: Any) -> Any:
+        if supports_weights_only and "weights_only" not in kwargs:
+            kwargs["weights_only"] = False
+        return original_torch_load(*args, **kwargs)
+
+    return compatible_torch_load
+
+
+def make_compatible_load_state_dict(original_load_state_dict: Any) -> Any:
+    def compatible_load_state_dict(
+        module: Any,
+        state_dict: dict[str, Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        if not args and "strict" not in kwargs:
+            kwargs["strict"] = False
+        return original_load_state_dict(module, state_dict, *args, **kwargs)
+
+    return compatible_load_state_dict
+
+
+def ensure_pandas_applymap_compat(pd: Any) -> None:
+    if not hasattr(pd.DataFrame, "applymap") and hasattr(pd.DataFrame, "map"):
+        pd.DataFrame.applymap = pd.DataFrame.map
+
+
+def load_trial2vec_search_dependencies() -> tuple[Any, Any, Any]:
+    try:
+        import pandas as pd
+        import torch
+        from trial2vec import Trial2Vec
+    except ImportError as exc:
+        raise RuntimeError(
+            "Trial2Vec retrieval requires optional Trial2Vec search dependencies: "
+            "pandas, torch, and trial2vec."
+        ) from exc
+    return pd, torch, Trial2Vec
+
+
+def encode_trial2vec_query(query_row: dict[str, str], trial2vec_model_dir: Path) -> np.ndarray:
+    pd, torch, Trial2Vec = load_trial2vec_search_dependencies()
+    ensure_pandas_applymap_compat(pd)
+    model = Trial2Vec(device="cpu")
+
+    original_torch_load = torch.load
+    original_load_state_dict = torch.nn.Module.load_state_dict
+    torch.load = make_compatible_torch_load(original_torch_load)
+    torch.nn.Module.load_state_dict = make_compatible_load_state_dict(original_load_state_dict)
+    try:
+        model.from_pretrained(str(trial2vec_model_dir))
+    finally:
+        torch.load = original_torch_load
+        torch.nn.Module.load_state_dict = original_load_state_dict
+
+    _, embeddings = model.encode({"x": pd.DataFrame([query_row])}, return_dict=False)
+    embeddings = np.asarray(embeddings, dtype=np.float32)
+    if embeddings.shape[0] < 1:
+        raise RuntimeError("Trial2Vec did not return a query embedding.")
+    return embeddings[0]
+
+
 def build_index(
     db_root: Path,
     output_dir: Path,
-    embedding_backend: str = "hashing",
+    embedding_backend: str = DEFAULT_INDEX_EMBEDDING_BACKEND,
     embedding_model: str = DEFAULT_CLINICALBERT_MODEL,
     embedding_batch_size: int = 16,
     embedding_max_length: int = 256,
@@ -844,6 +1230,50 @@ def build_index(
     print(f"Wrote {embeddings_path}")
 
 
+def build_secret_index(
+    summaries_path: Path,
+    output_path: Path,
+    embedding_backend: str = DEFAULT_INDEX_EMBEDDING_BACKEND,
+    embedding_model: str = DEFAULT_CLINICALBERT_MODEL,
+    embedding_batch_size: int = 16,
+    embedding_max_length: int = 256,
+) -> None:
+    summaries = load_summaries(summaries_path)
+    embedder = make_embedder(
+        embedding_backend,
+        model_name=embedding_model,
+        batch_size=embedding_batch_size,
+        max_length=embedding_max_length,
+    )
+    nct_ids = list(summaries)
+    section_texts = {section: [] for section in secret_retrieval.SECRET_SECTIONS}
+    for nct_id in nct_ids:
+        sections = secret_retrieval.secret_sections_from_summary(
+            secret_ready_summary(summaries[nct_id])
+        )
+        for section in secret_retrieval.SECRET_SECTIONS:
+            section_texts[section].append(sections[section])
+    arrays = {
+        section: embedder.encode(section_texts[section]).astype(np.float32)
+        for section in secret_retrieval.SECRET_SECTIONS
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        output_path,
+        nct_ids=np.array(nct_ids),
+        retrieval_backend=np.array(["secret"]),
+        embedding_backend=np.array([embedding_backend]),
+        embedding_model=np.array(
+            [
+                embedding_model
+                if embedding_backend != "hashing"
+                else "signed-token-hashing-2048"
+            ]
+        ),
+        **arrays,
+    )
+
+
 def load_summaries(path: Path) -> dict[str, dict[str, Any]]:
     records = {}
     with path.open("r", encoding="utf-8") as f:
@@ -869,6 +1299,36 @@ def load_summaries(path: Path) -> dict[str, dict[str, Any]]:
                     "source_documents": item.get("source_documents", {}),
                 }
     return records
+
+
+def enrich_candidate_row(row: dict[str, Any], candidate_summary: dict[str, Any]) -> dict[str, Any]:
+    borrowing = candidate_summary.get("borrowing_relevance", {})
+    row.update(
+        {
+            "title": candidate_summary.get("brief_title", ""),
+            "phase": candidate_summary.get("phase", ""),
+            "status": candidate_summary.get("status", ""),
+            "cancer_type": candidate_summary.get("cancer_type", {}),
+            "population": candidate_summary.get("population", {}),
+            "intervention": candidate_summary.get("intervention", {}),
+            "design": candidate_summary.get("design", {}),
+            "endpoints": candidate_summary.get("endpoints", {}),
+            "results": candidate_summary.get("results", {}),
+            "result_usability": {
+                "has_posted_results": candidate_summary.get("results", {}).get("has_posted_results"),
+                "denominators_available": bool(candidate_summary.get("results", {}).get("denominators")),
+                "source_documents": candidate_summary.get("source_documents", {}),
+            },
+            "similarity_drivers": borrowing.get("major_similarity_drivers", []),
+            "nonborrowability_risks": borrowing.get("major_nonborrowability_risks", []),
+            "borrowable_quantities": borrowing.get("borrowable_quantities", []),
+        }
+    )
+    return row
+
+
+def secret_ready_summary(candidate_summary: dict[str, Any]) -> dict[str, Any]:
+    return enrich_candidate_row({}, candidate_summary)
 
 
 def normalized_values(value: Any) -> set[str]:
@@ -951,6 +1411,65 @@ def score_phase_match(query_phase: str, candidate_phase: str) -> float:
     if q_num and c_num and abs(int(q_num.group()) - int(c_num.group())) <= 1:
         return 0.65
     return 0.25
+
+
+ELIGIBILITY_STOPWORDS = {
+    "a",
+    "adequate",
+    "adult",
+    "adults",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "available",
+    "be",
+    "by",
+    "criteria",
+    "for",
+    "from",
+    "has",
+    "have",
+    "in",
+    "into",
+    "is",
+    "of",
+    "or",
+    "participant",
+    "participants",
+    "patient",
+    "patients",
+    "study",
+    "the",
+    "to",
+    "with",
+}
+
+
+def eligibility_tokens(population: Any) -> set[str]:
+    if not isinstance(population, dict):
+        return set()
+    text = clean_text(
+        [
+            population.get("key_inclusion", []),
+            population.get("key_exclusion", []),
+        ]
+    ).lower()
+    tokens = re.findall(r"[a-z0-9]+", text)
+    return {
+        token
+        for token in tokens
+        if len(token) > 2 and token not in ELIGIBILITY_STOPWORDS
+    }
+
+
+def score_eligibility_overlap(query_population: Any, candidate_population: Any) -> float:
+    query_tokens = eligibility_tokens(query_population)
+    candidate_tokens = eligibility_tokens(candidate_population)
+    if not query_tokens or not candidate_tokens:
+        return 0.0
+    return round(5 * len(query_tokens & candidate_tokens) / len(query_tokens | candidate_tokens), 2)
 
 
 def score_prior_borrowing_pair(
@@ -1050,18 +1569,25 @@ def score_prior_borrowing_pair(
     safety_raw = 0.6 * float(has_safety) + 0.4 * float(followup_known)
     safety_score = round(5 * safety_raw, 2)
 
+    eligibility_score = score_eligibility_overlap(
+        query_summary.get("population", {}),
+        candidate.get("population", {}),
+    )
+
     dimension_scores = {
         "disease_population_match": disease_score,
         "treatment_regimen_match": treatment_score,
         "endpoint_estimand_match": endpoint_score,
+        "eligibility_criteria_overlap": eligibility_score,
         "design_phase_match": design_score,
         "result_usability": result_score,
         "safety_and_followup_relevance": safety_score,
     }
     weighted_dimension_score = (
-        0.30 * disease_score
-        + 0.25 * treatment_score
+        0.25 * disease_score
+        + 0.20 * treatment_score
         + 0.20 * endpoint_score
+        + 0.10 * eligibility_score
         + 0.10 * design_score
         + 0.10 * result_score
         + 0.05 * safety_score
@@ -1420,8 +1946,93 @@ def two_arm_orr_support(endpoint_analysis: dict[str, Any], query: dict[str, Any]
     }
 
 
-def add_bayesian_analysis(result: dict[str, Any]) -> dict[str, Any]:
-    query_summary = result.get("query_summary", result.get("query", {}))
+def _load_lambda_training_module() -> Any:
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "train_retrospective_lambda_model.py"
+    spec = importlib.util.spec_from_file_location(
+        "_oncology_trial_similarity_lambda_training",
+        script_path,
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load retrospective lambda training module from {script_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def predict_lambda_model_outputs(mixture: dict[str, Any], lambda_model_path: Path) -> dict[str, Any]:
+    lambda_training = _load_lambda_training_module()
+    import torch
+
+    artifact = lambda_training.load_model_artifact(lambda_model_path)
+    model = lambda_training.create_lambda_scorer(
+        model_type=artifact.get("model_type", "mlp"),
+        input_dim=int(artifact["input_dim"]),
+        hidden_dim=int(artifact["hidden_dim"]),
+    )
+    model.load_state_dict(artifact["state_dict"])
+    model.eval()
+
+    components = mixture.get("components") or []
+    if not components:
+        return {
+            "model_type": artifact.get("model_type", "mlp"),
+            "raw_lambda_weights": [],
+            "model_discounts": None,
+        }
+    features = lambda_training.features_from_mixture_components(components)
+    feature_tensor = torch.tensor(features, dtype=torch.float32)
+    gates = torch.tensor(
+        [max(0.0, float(component.get("gate", 1.0))) for component in components],
+        dtype=torch.float32,
+    )
+    positive_gate_mask = gates > 0.0
+    if not positive_gate_mask.any().item():
+        return {
+            "model_type": artifact.get("model_type", "mlp"),
+            "raw_lambda_weights": [0.0 for _ in components],
+            "model_discounts": (
+                [0.0 for _ in components] if hasattr(model, "predict_discount") else None
+            ),
+        }
+
+    with torch.no_grad():
+        scores = lambda_training._model_scores(model, feature_tensor)
+        log_raw = scores + gates.clamp_min(1e-12).log()
+        stable_log_raw = torch.where(
+            positive_gate_mask,
+            log_raw - log_raw[positive_gate_mask].max(),
+            torch.full_like(log_raw, -torch.inf),
+        )
+        model_discounts = None
+        if hasattr(model, "predict_discount"):
+            model_discounts = model.predict_discount(feature_tensor).tolist()
+        return {
+            "model_type": artifact.get("model_type", "mlp"),
+            "raw_lambda_weights": torch.exp(stable_log_raw).tolist(),
+            "model_discounts": model_discounts,
+        }
+
+
+def predict_lambda_model_weights(mixture: dict[str, Any], lambda_model_path: Path) -> list[float]:
+    return list(predict_lambda_model_outputs(mixture, lambda_model_path)["raw_lambda_weights"])
+
+
+def add_bayesian_analysis(
+    result: dict[str, Any],
+    mixture_prior_mode: str = "rule",
+    lambda_model_path: Path | None = None,
+) -> dict[str, Any]:
+    ensure_supported_mixture_prior_mode(mixture_prior_mode)
+    uses_lambda_model = mixture_prior_mode in {"retrospective_calibrated", "retrospective_calibrated_sam"}
+    uses_sam = mixture_prior_mode in {"sam", "retrospective_calibrated_sam"}
+    if uses_lambda_model and lambda_model_path is None:
+        raise ValueError(
+            "--lambda-model-path is required when --mixture-prior-mode uses retrospective calibration"
+        )
+    query_summary = result.get(
+        "heldout_query_outcomes",
+        result.get("query_summary", result.get("query", {})),
+    )
     rows = result.get("reranked_top_matches") or result.get("reranked_top10") or result.get("top10") or []
     query_observations = query_endpoint_observations(query_summary)
     endpoint_analyses = []
@@ -1451,6 +2062,30 @@ def add_bayesian_analysis(result: dict[str, Any]) -> dict[str, Any]:
         if observed_summary is None:
             continue
         has_query_result = to_float(query.get("treatment_count")) is not None and to_float(query.get("treatment_denominator")) is not None
+        mixture = (
+            mixture_prior.components_from_reranked_rows(rows, endpoint_key, lambda0=0.2)
+            if mixture_prior is not None
+            else {"mode": "rule", "lambda_0": 1.0, "components": []}
+        )
+        if uses_lambda_model:
+            if mixture_prior is None:
+                raise ValueError("mixture prior module is required for retrospective_calibrated mode")
+            assert lambda_model_path is not None
+            model_outputs = predict_lambda_model_outputs(mixture, lambda_model_path)
+            mixture = mixture_prior.apply_model_lambdas(
+                mixture,
+                model_outputs["raw_lambda_weights"],
+                model_discounts=model_outputs.get("model_discounts"),
+                model_type=model_outputs.get("model_type"),
+            )
+        if uses_sam and has_query_result:
+            if mixture_prior is None:
+                raise ValueError("mixture prior module is required for SAM mode")
+            mixture = mixture_prior.apply_sam_conflict_adapter(
+                mixture,
+                y=int(float(query["treatment_count"])),
+                n=int(float(query["treatment_denominator"])),
+            )
         analysis = {
             "endpoint_family": endpoint_key,
             "analysis_mode": "posterior" if has_query_result else "prior_only",
@@ -1459,6 +2094,7 @@ def add_bayesian_analysis(result: dict[str, Any]) -> dict[str, Any]:
             "historical_trial_count": len(historical),
             "effective_sample_size": observed_summary["effective_sample_size"],
             "weighted_historical_rate": observed_summary["weighted_rate"],
+            "mixture_prior": mixture,
             "mixture_weight_pi": borrowing_pi_summaries(weights),
             "weight_sensitivity": sensitivity,
             "success_probability_grid": observed_summary["success_probability_grid"],
@@ -1568,16 +2204,49 @@ def search(
     embedding_model: str | None = None,
     embedding_batch_size: int = 16,
     embedding_max_length: int = 256,
+    retrieval_backend: str = DEFAULT_RETRIEVAL_BACKEND,
+    trial2vec_index_path: Path | None = None,
+    trial2vec_model_dir: Path | None = None,
+    secret_index_path: Path | None = None,
+    mixture_prior_mode: str = "rule",
+    lambda_model_path: Path | None = None,
+    hide_query_outcomes_for_retrieval: bool = False,
 ) -> dict[str, Any]:
+    ensure_supported_retrieval_backend(retrieval_backend)
+    ensure_supported_mixture_prior_mode(mixture_prior_mode)
     if not query_json.exists():
         raise FileNotFoundError(f"Query JSON does not exist: {query_json}")
     embeddings_path = index_dir / "trial_embeddings.npz"
     summaries_path = index_dir / "trial_summaries.jsonl"
-    if not embeddings_path.exists() or not summaries_path.exists():
+    if retrieval_backend == "clinicalbert" and (not embeddings_path.exists() or not summaries_path.exists()):
         raise FileNotFoundError(
             "Index files were not found. Run build-index first, or pass the correct --index-dir. "
             f"Expected: {embeddings_path} and {summaries_path}"
         )
+    if retrieval_backend == "trial2vec":
+        if trial2vec_index_path is None:
+            raise ValueError("--trial2vec-index-path is required when --retrieval-backend=trial2vec.")
+        if trial2vec_model_dir is None:
+            raise ValueError("--trial2vec-model-dir is required when --retrieval-backend=trial2vec.")
+        if not summaries_path.exists():
+            raise FileNotFoundError(
+                "Trial summaries were not found. Run build-index first, or pass the correct --index-dir. "
+                f"Expected: {summaries_path}"
+            )
+        if not trial2vec_index_path.exists():
+            raise FileNotFoundError(f"Trial2Vec index file does not exist: {trial2vec_index_path}")
+        if not trial2vec_model_dir.exists():
+            raise FileNotFoundError(f"Trial2Vec model directory does not exist: {trial2vec_model_dir}")
+    if retrieval_backend == "secret":
+        if secret_index_path is None:
+            raise ValueError("--secret-index-path is required when --retrieval-backend=secret.")
+        if not summaries_path.exists():
+            raise FileNotFoundError(
+                "Trial summaries were not found. Run build-index first, or pass the correct --index-dir. "
+                f"Expected: {summaries_path}"
+            )
+        if not secret_index_path.exists():
+            raise FileNotFoundError(f"SECRET-style index file does not exist: {secret_index_path}")
 
     tmp_folder = query_json.parent
     raw = read_json(query_json)
@@ -1591,84 +2260,150 @@ def search(
         raw_json=raw,
         extracted=extract_trial_record_like(raw, folder_name, query_json),
     )
-    query_summary = make_rule_based_summary(record.extracted)
-
-    embeddings_file = np.load(embeddings_path, allow_pickle=False)
-    stored_backend = str(embeddings_file["embedding_backend"][0]) if "embedding_backend" in embeddings_file else "hashing"
-    stored_model = str(embeddings_file["embedding_model"][0]) if "embedding_model" in embeddings_file else "signed-token-hashing-2048"
-    active_backend = embedding_backend or stored_backend
-    active_model = embedding_model or (stored_model if active_backend != "hashing" else DEFAULT_CLINICALBERT_MODEL)
-    if active_backend != stored_backend:
-        raise ValueError(
-            f"Query embedding backend ({active_backend}) does not match index backend ({stored_backend}). "
-            "Rebuild the index with the desired backend or pass the matching --embedding-backend."
-        )
-    query_embedder = make_embedder(
-        active_backend,
-        model_name=active_model,
-        batch_size=embedding_batch_size,
-        max_length=embedding_max_length,
+    full_query_summary = make_rule_based_summary(record.extracted)
+    query_summary = (
+        redact_query_outcomes_for_retrieval(full_query_summary)
+        if hide_query_outcomes_for_retrieval
+        else full_query_summary
     )
-    query_emb = summary_embedding(query_summary, query_embedder)
-    embeddings = {
-        "nct_ids": embeddings_file["nct_ids"],
-        **{aspect: embeddings_file[aspect] for aspect in ASPECT_WEIGHTS},
-    }
+
     summaries = load_summaries(summaries_path)
-    nct_ids = embeddings["nct_ids"]
     scored = []
+    result_embedding_backend = ""
+    result_embedding_model = ""
+    result_retrieval_backend = retrieval_backend
 
-    for idx, nct_id_raw in enumerate(nct_ids):
-        nct_id = str(nct_id_raw)
-        if nct_id == query_summary.get("nct_id"):
-            continue
-        by_aspect = {}
-        score = 0.0
-        for aspect, weight in ASPECT_WEIGHTS.items():
-            sim = cosine(query_emb[aspect], embeddings[aspect][idx])
-            by_aspect[aspect] = sim
-            score += weight * sim
-        candidate_summary = summaries.get(nct_id, {})
-        borrowing = candidate_summary.get("borrowing_relevance", {})
-        scored.append(
-            {
-                "nct_id": nct_id,
-                "score": score,
-                "score_0_100": round(100 * max(0.0, score), 2),
-                "aspect_scores": {k: round(v, 4) for k, v in by_aspect.items()},
-                "title": candidate_summary.get("brief_title", ""),
-                "phase": candidate_summary.get("phase", ""),
-                "status": candidate_summary.get("status", ""),
-                "cancer_type": candidate_summary.get("cancer_type", {}),
-                "intervention": candidate_summary.get("intervention", {}),
-                "design": candidate_summary.get("design", {}),
-                "results": candidate_summary.get("results", {}),
-                "result_usability": {
-                    "has_posted_results": candidate_summary.get("results", {}).get("has_posted_results"),
-                    "denominators_available": bool(candidate_summary.get("results", {}).get("denominators")),
-                    "source_documents": candidate_summary.get("source_documents", {}),
-                },
-                "similarity_drivers": borrowing.get("major_similarity_drivers", []),
-                "nonborrowability_risks": borrowing.get("major_nonborrowability_risks", []),
-                "borrowable_quantities": borrowing.get("borrowable_quantities", []),
-            }
+    if retrieval_backend == "clinicalbert":
+        embeddings_file = np.load(embeddings_path, allow_pickle=False)
+        stored_backend = str(embeddings_file["embedding_backend"][0]) if "embedding_backend" in embeddings_file else "hashing"
+        stored_model = str(embeddings_file["embedding_model"][0]) if "embedding_model" in embeddings_file else "signed-token-hashing-2048"
+        active_backend = embedding_backend or stored_backend
+        active_model = embedding_model or (stored_model if active_backend != "hashing" else DEFAULT_CLINICALBERT_MODEL)
+        if active_backend != stored_backend:
+            raise ValueError(
+                f"Query embedding backend ({active_backend}) does not match index backend ({stored_backend}). "
+                "Rebuild the index with the desired backend or pass the matching --embedding-backend."
+            )
+        result_retrieval_backend = active_backend
+        query_embedder = make_embedder(
+            active_backend,
+            model_name=active_model,
+            batch_size=embedding_batch_size,
+            max_length=embedding_max_length,
         )
+        query_emb = summary_embedding(query_summary, query_embedder)
+        embeddings = {
+            "nct_ids": embeddings_file["nct_ids"],
+            **{aspect: embeddings_file[aspect] for aspect in ASPECT_WEIGHTS},
+        }
+        nct_ids = embeddings["nct_ids"]
 
-    scored.sort(key=lambda x: x["score"], reverse=True)
+        for idx, nct_id_raw in enumerate(nct_ids):
+            nct_id = str(nct_id_raw)
+            if nct_id == query_summary.get("nct_id"):
+                continue
+            by_aspect = {}
+            score = 0.0
+            for aspect, weight in ASPECT_WEIGHTS.items():
+                sim = cosine(query_emb[aspect], embeddings[aspect][idx])
+                by_aspect[aspect] = sim
+                score += weight * sim
+            scored.append(
+                enrich_candidate_row(
+                    {
+                        "nct_id": nct_id,
+                        "score": score,
+                        "score_0_100": round(100 * max(0.0, score), 2),
+                        "aspect_scores": {k: round(v, 4) for k, v in by_aspect.items()},
+                        "retrieval_backend": active_backend,
+                    },
+                    summaries.get(nct_id, {}),
+                )
+            )
+
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        result_embedding_backend = stored_backend
+        result_embedding_model = stored_model
+    elif retrieval_backend == "trial2vec":
+        assert trial2vec_index_path is not None
+        assert trial2vec_model_dir is not None
+        query_row = summary_to_trial2vec_row(query_summary)
+        query_vector = encode_trial2vec_query(query_row, trial2vec_model_dir)
+        scored = score_trial2vec_index(
+            query_vector,
+            trial2vec_index_path,
+            excluded_nct_id=query_summary.get("nct_id", ""),
+            top_k=max(rerank_top_n, top_k),
+        )
+        scored = [
+            enrich_candidate_row(row, summaries.get(row["nct_id"], {}))
+            for row in scored
+        ]
+        result_embedding_backend = "trial2vec"
+        result_embedding_model = str(trial2vec_model_dir)
+    elif retrieval_backend == "secret":
+        assert secret_index_path is not None
+        secret_file = np.load(secret_index_path, allow_pickle=False)
+        stored_backend = (
+            str(secret_file["embedding_backend"][0])
+            if "embedding_backend" in secret_file
+            else "hashing"
+        )
+        stored_model = (
+            str(secret_file["embedding_model"][0])
+            if "embedding_model" in secret_file
+            else "signed-token-hashing-2048"
+        )
+        query_embedder = make_embedder(
+            stored_backend,
+            model_name=stored_model if stored_backend != "hashing" else DEFAULT_CLINICALBERT_MODEL,
+            batch_size=embedding_batch_size,
+            max_length=embedding_max_length,
+        )
+        query_sections = secret_retrieval.secret_sections_from_summary(query_summary)
+        query_vectors = {
+            section: query_embedder.encode([query_sections[section]])[0]
+            for section in secret_retrieval.SECRET_SECTIONS
+        }
+        scored = secret_retrieval.score_secret_index(
+            query_vectors,
+            secret_index_path,
+            {nct_id: secret_ready_summary(summary) for nct_id, summary in summaries.items()},
+            excluded_nct_id=query_summary.get("nct_id", ""),
+            top_k=max(rerank_top_n, top_k),
+        )
+        scored = [
+            enrich_candidate_row(row, summaries.get(row["nct_id"], {}))
+            for row in scored
+        ]
+        result_embedding_backend = stored_backend
+        result_embedding_model = stored_model
+
     top_matches = scored[:top_k]
     result = {
         "query_summary": query_summary,
-        "embedding_backend": stored_backend,
-        "embedding_model": stored_model,
+        "retrieval_backend": result_retrieval_backend,
+        "embedding_backend": result_embedding_backend,
+        "embedding_model": result_embedding_model,
         "top_matches": top_matches,
         "top10": top_matches[: min(top_k, 10)],
     }
+    if hide_query_outcomes_for_retrieval:
+        result["heldout_query_outcomes"] = heldout_query_outcomes_from_summary(full_query_summary)
+        result["retrospective_leakage_control"] = {
+            "query_outcomes_hidden_from_retrieval": True,
+            "heldout_query_outcomes_for_post_retrieval_analysis": True,
+        }
     if rerank_top_n > 0:
         rerank_input = scored[: max(rerank_top_n, top_k)]
         reranked = rerank_candidates(query_summary, rerank_input, rerank_top_n)
         result["reranked_top_matches"] = reranked
         result["reranked_top10"] = reranked[:10]
-    return add_bayesian_analysis(result)
+    return add_bayesian_analysis(
+        result,
+        mixture_prior_mode=mixture_prior_mode,
+        lambda_model_path=lambda_model_path,
+    )
 
 
 def extract_trial_record_like(raw: dict[str, Any], fallback_nct_id: str, json_path: Path) -> dict[str, Any]:
@@ -1693,6 +2428,7 @@ def extract_trial_record_like(raw: dict[str, Any], fallback_nct_id: str, json_pa
         "design": design if isinstance(design, dict) else {},
         "enrollment": clean_text(results.get("3. Enrollment (Actual)") if isinstance(results, dict) else ""),
         "dates": dates if isinstance(dates, dict) else {},
+        "date_metadata": extract_temporal_date_metadata(raw, dates if isinstance(dates, dict) else {}),
         "supporting_documents": {
             "protocol_pdf": str(pdfs["protocol"]) if pdfs["protocol"] else "",
             "sap_pdf": str(pdfs["sap"]) if pdfs["sap"] else "",
@@ -1715,12 +2451,29 @@ def main() -> None:
     build.add_argument(
         "--embedding-backend",
         choices=["hashing", "clinicalbert"],
-        default="hashing",
+        default=DEFAULT_INDEX_EMBEDDING_BACKEND,
         help="Embedding backend for index construction. clinicalbert uses cached Bio_ClinicalBERT via transformers.",
     )
     build.add_argument("--embedding-model", default=DEFAULT_CLINICALBERT_MODEL)
     build.add_argument("--embedding-batch-size", type=int, default=16)
     build.add_argument("--embedding-max-length", type=int, default=256)
+
+    secret_build = sub.add_parser("build-secret-index")
+    secret_build.add_argument(
+        "--index-dir",
+        type=Path,
+        default=Path("artifacts/oncology_trial_similarity"),
+    )
+    secret_build.add_argument("--summaries-path", type=Path, default=None)
+    secret_build.add_argument("--output-path", type=Path, default=None)
+    secret_build.add_argument(
+        "--embedding-backend",
+        choices=["hashing", "clinicalbert"],
+        default=DEFAULT_INDEX_EMBEDDING_BACKEND,
+    )
+    secret_build.add_argument("--embedding-model", default=DEFAULT_CLINICALBERT_MODEL)
+    secret_build.add_argument("--embedding-batch-size", type=int, default=16)
+    secret_build.add_argument("--embedding-max-length", type=int, default=256)
 
     query = sub.add_parser("search")
     query.add_argument("--query-json", type=Path, required=True)
@@ -1735,6 +2488,28 @@ def main() -> None:
     query.add_argument("--embedding-model", default=None)
     query.add_argument("--embedding-batch-size", type=int, default=16)
     query.add_argument("--embedding-max-length", type=int, default=256)
+    query.add_argument(
+        "--retrieval-backend",
+        choices=list(RETRIEVAL_BACKENDS),
+        default=DEFAULT_RETRIEVAL_BACKEND,
+    )
+    query.add_argument("--trial2vec-index-path", type=Path, default=None)
+    query.add_argument("--trial2vec-model-dir", type=Path, default=None)
+    query.add_argument("--secret-index-path", type=Path, default=None)
+    query.add_argument(
+        "--mixture-prior-mode",
+        choices=list(MIXTURE_PRIOR_MODES),
+        default="rule",
+    )
+    query.add_argument("--lambda-model-path", type=Path, default=None)
+    query.add_argument(
+        "--hide-query-outcomes-for-retrieval",
+        action="store_true",
+        help=(
+            "For retrospective pseudo-query evaluation, hide posted query outcomes from "
+            "retrieval/reranking and store a held-out copy for post-retrieval loss/analysis."
+        ),
+    )
     query.add_argument(
         "--rerank",
         action="store_true",
@@ -1777,6 +2552,17 @@ def main() -> None:
             embedding_batch_size=args.embedding_batch_size,
             embedding_max_length=args.embedding_max_length,
         )
+    elif args.command == "build-secret-index":
+        summaries_path = args.summaries_path or args.index_dir / "trial_summaries.jsonl"
+        output_path = args.output_path or args.index_dir / "secret_embeddings.npz"
+        build_secret_index(
+            summaries_path=summaries_path,
+            output_path=output_path,
+            embedding_backend=args.embedding_backend,
+            embedding_model=args.embedding_model,
+            embedding_batch_size=args.embedding_batch_size,
+            embedding_max_length=args.embedding_max_length,
+        )
     elif args.command == "search":
         rerank_top_n = args.rerank_top_n if args.rerank else 0
         result = search(
@@ -1788,6 +2574,13 @@ def main() -> None:
             embedding_model=args.embedding_model,
             embedding_batch_size=args.embedding_batch_size,
             embedding_max_length=args.embedding_max_length,
+            retrieval_backend=args.retrieval_backend,
+            trial2vec_index_path=args.trial2vec_index_path,
+            trial2vec_model_dir=args.trial2vec_model_dir,
+            secret_index_path=args.secret_index_path,
+            mixture_prior_mode=args.mixture_prior_mode,
+            lambda_model_path=args.lambda_model_path,
+            hide_query_outcomes_for_retrieval=args.hide_query_outcomes_for_retrieval,
         )
         text = json.dumps(result, indent=2, ensure_ascii=False)
         if args.output:
