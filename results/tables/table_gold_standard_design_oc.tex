@@ -1,0 +1,26 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Design-based operating characteristics from the gold-standard simulation (2000 replicates per cell). Single-arm design testing $H_0\!:\theta \le 0.20$ at the one-sided 0.025 level. Type I error is the rejection rate in the null world ($\theta_0=0.20$); power is the rejection rate in the alternative world ($\theta_0=0.35$). Columns are the historical-versus-current logit shift.}
+\label{tab:gold-standard-design-oc}
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{3}{c}{Type I error} & \multicolumn{3}{c}{Power} \\
+Method & 0.0 & 0.5 & 1.0 & 0.0 & 0.5 & 1.0 \\
+\midrule
+No borrowing & 0.037 & 0.029 & 0.034 & 0.536 & 0.544 & 0.561 \\
+Rule mixture & 0.029 & 0.030 & 0.050 & 0.556 & 0.609 & 0.635 \\
+Rule + SAM & 0.030 & 0.030 & 0.048 & 0.555 & 0.600 & 0.603 \\
+Two-head (no prospective) & 0.026 & 0.038 & 0.068 & 0.588 & 0.634 & 0.630 \\
+Two-head + prospective & 0.025 & 0.037 & 0.070 & 0.587 & 0.631 & 0.625 \\
+Two-head + prospective + SAM & 0.029 & 0.038 & 0.068 & 0.588 & 0.623 & 0.599 \\
+Two-head + prospective, fixed discount & 0.027 & 0.032 & 0.056 & 0.573 & 0.620 & 0.643 \\
+Robust-MAP (w=0.5) & 0.037 & 0.035 & 0.047 & 0.575 & 0.603 & 0.609 \\
+Robust-MAP (w=0.9) & 0.042 & 0.046 & 0.070 & 0.614 & 0.666 & 0.703 \\
+Power prior (a0=0.3) & 0.484 & 0.701 & 0.863 & 0.861 & 0.917 & 0.970 \\
+UIP-Dirichlet & 0.064 & 0.100 & 0.142 & 0.674 & 0.748 & 0.788 \\
+UIP-JS (uses outcome) & 0.050 & 0.048 & 0.069 & 0.625 & 0.670 & 0.721 \\
+Full pooling & 0.584 & 0.777 & 0.904 & 0.880 & 0.930 & 0.974 \\
+\bottomrule
+\end{tabular}
+\end{table}

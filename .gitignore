@@ -15,6 +15,8 @@ venv/
 # Codex / local workflow
 .superpowers/
 .worktrees/
+.understand-anything/
+*.Rhistory
 
 # Large runtime artifacts
 artifacts/
@@ -27,6 +29,9 @@ artifacts/
 **/pipeline_results.jsonl
 **/trial_embeddings.npz
 **/hashing_index/
+
+# Transient run logs
+scripts/**/*.log
 
 # Raw ClinicalTrials.gov exports and local PDFs
 Oncology_All_Trials/

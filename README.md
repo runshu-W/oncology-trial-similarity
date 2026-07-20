@@ -75,6 +75,38 @@ The two-head DeepSets model separates `lambda_i` and `a_i`: one head learns mixt
 | `scripts/run_feature_ablation_sensitivity.py` | Feature group ablation and SECRET section-weight sensitivity. |
 | `scripts/build_manuscript_evidence_package.py` | Build lightweight `results/` tables and figures from artifacts. |
 | `scripts/run_no_expert_validation_suite.sh` | Reproducibility-oriented command skeleton for the no-expert validation suite. |
+| `scripts/gold_standard_simulation/` | Simulation study in which the correct borrowing decision is known by construction: design-based type I error and power, borrowing-decision diagnostic accuracy, and the external control arm scenario. See its `README.md`. |
+| `scripts/fix_endpoint_units.py` | Unit-aware conversion of ClinicalTrials.gov outcome rows to rates. |
+| `scripts/audit_orr_units.py` | Quantifies the impact of the endpoint-unit defect (`docs/KNOWN_ISSUE_endpoint_units.md`). |
+
+### Gold-standard simulation
+
+The retrospective analyses show the pipeline runs on real registry text, but
+cannot show whether it borrows from the *right* trials, because the truth is
+unknown. `scripts/gold_standard_simulation/` supplies that counterfactual: trial
+truth is generated from latent clinical attributes through a non-linear map that
+is deliberately not the fitted model, exchangeability is defined at the parameter
+level, and operating characteristics are evaluated against a fixed design null
+rather than against each replicate's own realised truth.
+
+```bash
+cd scripts/gold_standard_simulation
+python3 run_simulation.py --mode train --train-size 300 --epochs 60
+python3 run_simulation.py --mode scenarios --replicates 2000
+python3 run_simulation.py --mode design --design-replicates 2000
+python3 run_external_control.py --replicates 2000
+python3 build_outputs.py
+python3 test_simulation.py && python3 test_autodiff.py
+```
+
+Pure NumPy, no PyTorch or SciPy. Full study runs in a few minutes.
+
+> **Known issue.** Endpoint-unit handling when converting outcome rows to rates
+> is defective at four call sites and affects a minority of held-out ORR values
+> in the retrospective aggregates. Diagnosed, quantified and tooled, but not yet
+> fixed, because a piecemeal fix would make the codebase internally inconsistent
+> and a correct one needs a pipeline re-run from the raw exports. See
+> `docs/KNOWN_ISSUE_endpoint_units.md`. The simulations above are unaffected.
 
 ## Quick Start
 

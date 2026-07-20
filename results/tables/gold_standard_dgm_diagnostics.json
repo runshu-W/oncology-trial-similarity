@@ -1,0 +1,32 @@
+{
+  "S1_exchangeable": {
+    "n_candidates": 24000,
+    "prop_borrowable": 0.43,
+    "prop_trap": 0.3142083333333333,
+    "prop_hidden_gem": 0.09466666666666666
+  },
+  "S2_trap_heavy": {
+    "n_candidates": 24000,
+    "prop_borrowable": 0.22795833333333335,
+    "prop_trap": 0.6642916666666666,
+    "prop_hidden_gem": 0.022875
+  },
+  "S3_hidden_gem": {
+    "n_candidates": 24000,
+    "prop_borrowable": 0.2613333333333333,
+    "prop_trap": 0.18825,
+    "prop_hidden_gem": 0.14716666666666667
+  },
+  "S4_conflict": {
+    "n_candidates": 24000,
+    "prop_borrowable": 0.08220833333333333,
+    "prop_trap": 0.566875,
+    "prop_hidden_gem": 0.045208333333333336
+  },
+  "S5_heterogeneous": {
+    "n_candidates": 24000,
+    "prop_borrowable": 0.17170833333333332,
+    "prop_trap": 0.496625,
+    "prop_hidden_gem": 0.0605
+  }
+}

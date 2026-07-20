@@ -1,0 +1,23 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{External control arm, null world (no true treatment effect), external controls displaced downward by a logit drift of $-1.2$; 2000 replicates. FPR is the proportion of non-comparable external controls that were nonetheless borrowed.}
+\label{tab:gold-standard-external-control}
+\begin{tabular}{lrrrr}
+\toprule
+Method & Type I error & Control bias & Prior ESS & FPR \\
+\midrule
+Rule mixture & 0.021 & +0.0028 & 18.9 & 0.61 \\
+Two-head (no prospective) & 0.028 & -0.0038 & 61.7 & 0.55 \\
+Two-head + prospective & 0.032 & -0.0071 & 55.9 & 0.56 \\
+Two-head + prospective + SAM & 0.032 & -0.0040 & 53.8 & 0.56 \\
+Two-head + prospective, fixed discount & 0.025 & -0.0022 & 22.7 & 0.51 \\
+Robust-MAP (w=0.5) & 0.015 & +0.0100 & 7.7 & 1.00 \\
+Power prior (a0=0.3) & 0.150 & -0.0393 & 228.1 & 1.00 \\
+UIP-Dirichlet & 0.035 & -0.0160 & 16.7 & 1.00 \\
+UIP-JS (uses outcome) & 0.066 & +0.0004 & 9.4 & 0.19 \\
+Full pooling & 0.210 & -0.0443 & 760.5 & 1.00 \\
+Internal control only & 0.013 & +0.0281 & 0.0 & 0.00 \\
+\bottomrule
+\end{tabular}
+\end{table}
