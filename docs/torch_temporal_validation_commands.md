@@ -7,7 +7,7 @@ Use the commands below in an environment with `torch` installed to run full temp
 ## Date-Based Temporal Retraining
 
 ```bash
-python scripts/run_oncology_retrospective_lambda_training.py \
+python pipeline/run_oncology_retrospective_lambda_training.py \
   --pipeline-results-jsonl artifacts/stage1_secret_pool_rerank_orr_all/pipeline_results.jsonl \
   --output-dir artifacts/temporal_retraining_date_based_2020 \
   --endpoint-key ORR \
@@ -27,7 +27,7 @@ Repeat with alternative cutoffs:
 
 ```bash
 for cutoff in 2019-12-31 2020-12-31 2021-12-31 2022-12-31; do
-  python scripts/run_oncology_retrospective_lambda_training.py \
+  python pipeline/run_oncology_retrospective_lambda_training.py \
     --pipeline-results-jsonl artifacts/stage1_secret_pool_rerank_orr_all/pipeline_results.jsonl \
     --output-dir "artifacts/temporal_retraining_date_based_${cutoff}" \
     --endpoint-key ORR \
@@ -46,7 +46,7 @@ done
 ## Rolling-Origin Temporal Retraining
 
 ```bash
-python scripts/run_oncology_retrospective_lambda_training.py \
+python pipeline/run_oncology_retrospective_lambda_training.py \
   --pipeline-results-jsonl artifacts/stage1_secret_pool_rerank_orr_all/pipeline_results.jsonl \
   --output-dir artifacts/temporal_retraining_rolling_origin \
   --endpoint-key ORR \

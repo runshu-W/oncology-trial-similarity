@@ -47,12 +47,12 @@
 
 | 文件 | 主要改动 |
 | --- | --- |
-| `docs/oncology_trial_similarity_pipeline.py` | 主 pipeline 接入 retrieval backend selection、Trial2Vec search path、mixture prior Bayesian output、ClinicalBERT 默认 backend、hashing index 真实 backend 报告。 |
-| `docs/secret_retrieval.py` | 新增 SECRET-style Q/A section construction、section weights、section-vector cosine scoring。 |
-| `docs/mixture_prior.py` | 新增纯 Python mixture-prior 数学工具：lambda normalization、beta-binomial predictive probability、posterior component responsibility、从 reranked rows 构造 mixture components、retrospective calibrated lambda replacement。 |
-| `scripts/build_trial2vec_index.py` | 新增 Trial2Vec embedding index builder，从 `trial_summaries.jsonl` 生成 `.npz` 向量索引。 |
-| `scripts/train_retrospective_lambda_model.py` | 新增 retrospective lambda model 训练脚本，从 pipeline results JSONL 训练完整 9-feature `lambda_i` scorer，并可输出 model artifact。 |
-| `scripts/evaluate_retrospective_lambda_model.py` | 新增无专家标签 retrospective evaluation，输出 weak-only / rule / learned predictive NLL。 |
+| `pipeline/oncology_trial_similarity_pipeline.py` | 主 pipeline 接入 retrieval backend selection、Trial2Vec search path、mixture prior Bayesian output、ClinicalBERT 默认 backend、hashing index 真实 backend 报告。 |
+| `pipeline/secret_retrieval.py` | 新增 SECRET-style Q/A section construction、section weights、section-vector cosine scoring。 |
+| `pipeline/mixture_prior.py` | 新增纯 Python mixture-prior 数学工具：lambda normalization、beta-binomial predictive probability、posterior component responsibility、从 reranked rows 构造 mixture components、retrospective calibrated lambda replacement。 |
+| `pipeline/build_trial2vec_index.py` | 新增 Trial2Vec embedding index builder，从 `trial_summaries.jsonl` 生成 `.npz` 向量索引。 |
+| `pipeline/train_retrospective_lambda_model.py` | 新增 retrospective lambda model 训练脚本，从 pipeline results JSONL 训练完整 9-feature `lambda_i` scorer，并可输出 model artifact。 |
+| `pipeline/evaluate_retrospective_lambda_model.py` | 新增无专家标签 retrospective evaluation，输出 weak-only / rule / learned predictive NLL。 |
 | `tests/test_stage1_backends.py` | 新增 Stage 1 backend、Trial2Vec、pandas compatibility、hashing reporting 测试。 |
 | `tests/test_mixture_prior.py` | 新增 mixture-prior 数学、校验、component construction 测试。 |
 | `tests/test_retrospective_lambda_training.py` | 新增 lambda training loss、9-feature schema validation、artifact save/load、非法输入 validation、pipeline result example builder 测试。 |
@@ -108,7 +108,7 @@ Offline indexing 仍然先把每个 NCT folder 转成统一的 structured summar
 当前默认 build-index backend 已改为 ClinicalBERT：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py build-index \
+python3 pipeline/oncology_trial_similarity_pipeline.py build-index \
   --db-root /path/to/Oncology_All_Trials \
   --output-dir artifacts/oncology_trial_similarity
 ```
@@ -116,7 +116,7 @@ python3 docs/oncology_trial_similarity_pipeline.py build-index \
 如果只想做本地快速 smoke test，需要显式使用 hashing：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py build-index \
+python3 pipeline/oncology_trial_similarity_pipeline.py build-index \
   --db-root /path/to/Oncology_All_Trials \
   --output-dir artifacts/oncology_trial_similarity_hashing \
   --embedding-backend hashing
@@ -181,12 +181,12 @@ Hashing backend 仍保留，但定位变成 explicit fallback / smoke-test backe
 示例：
 
 ```bash
-python3 scripts/build_trial2vec_index.py \
+python3 pipeline/build_trial2vec_index.py \
   --summaries-path artifacts/oncology_trial_similarity_clinicalbert/trial_summaries.jsonl \
   --output-path artifacts/oncology_trial_similarity_clinicalbert/trial2vec_embeddings.npz \
   --trial2vec-model-dir artifacts/trial2vec/pretrained_model
 
-python3 docs/oncology_trial_similarity_pipeline.py search \
+python3 pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json /path/to/query.json \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --retrieval-backend trial2vec \
@@ -213,7 +213,7 @@ results
 safety_followup
 ```
 
-section 权重保存在 `docs/secret_retrieval.py` 的 `SECRET_SECTION_WEIGHTS`。每个候选 trial 的 section vectors 保存到 `secret_embeddings.npz`，search 时 query 也生成相同 sections，然后逐 section 计算 cosine similarity：
+section 权重保存在 `pipeline/secret_retrieval.py` 的 `SECRET_SECTION_WEIGHTS`。每个候选 trial 的 section vectors 保存到 `secret_embeddings.npz`，search 时 query 也生成相同 sections，然后逐 section 计算 cosine similarity：
 
 ```text
 s_secret(q, c) = sum_k w_k * cos(q_k, c_k)
@@ -222,7 +222,7 @@ s_secret(q, c) = sum_k w_k * cos(q_k, c_k)
 构建 SECRET-style index 示例：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py build-secret-index \
+python3 pipeline/oncology_trial_similarity_pipeline.py build-secret-index \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --embedding-backend clinicalbert
 ```
@@ -230,7 +230,7 @@ python3 docs/oncology_trial_similarity_pipeline.py build-secret-index \
 快速 smoke test 可以用 hashing backend：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py build-secret-index \
+python3 pipeline/oncology_trial_similarity_pipeline.py build-secret-index \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --output-path artifacts/oncology_trial_similarity_clinicalbert/secret_embeddings_smoke.npz \
   --embedding-backend hashing
@@ -239,7 +239,7 @@ python3 docs/oncology_trial_similarity_pipeline.py build-secret-index \
 SECRET-style search 示例：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py search \
+python3 pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json /path/to/query.json \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --retrieval-backend secret \
@@ -415,7 +415,7 @@ retrospective_calibrated
 默认 `rule` mode 保留原始 `lambda_rule`。如果传入训练好的 lambda model artifact，则 pipeline 可以进入 `retrospective_calibrated` mode，把 learned model score 转成 `lambda_model` / `lambda_active`，同时保留 `lambda_rule` 供审阅比较：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py search \
+python3 pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json /path/to/query.json \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --top-k 10 \
@@ -431,7 +431,7 @@ python3 docs/oncology_trial_similarity_pipeline.py search \
 新增脚本：
 
 ```text
-scripts/train_retrospective_lambda_model.py
+pipeline/train_retrospective_lambda_model.py
 ```
 
 它支持两种输入：
@@ -442,7 +442,7 @@ scripts/train_retrospective_lambda_model.py
 对于 completed trials 作为 pseudo-query 的 retrospective run，必须先在 search 时隐藏 query outcomes：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py search \
+python3 pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json /path/to/completed_trial.json \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --top-k 10 \
@@ -540,7 +540,7 @@ Loss
 训练并保存 model artifact 示例：
 
 ```bash
-python3 scripts/train_retrospective_lambda_model.py \
+python3 pipeline/train_retrospective_lambda_model.py \
   --pipeline-results-jsonl artifacts/pseudo_query_results.jsonl \
   --output-json artifacts/lambda_training_summary.json \
   --model-output artifacts/lambda_model.pt
@@ -555,7 +555,7 @@ CLI 输出 JSON 会过滤掉 PyTorch model object，并使用 strict JSON serial
 新增脚本：
 
 ```text
-scripts/evaluate_retrospective_lambda_model.py
+pipeline/evaluate_retrospective_lambda_model.py
 ```
 
 它用于没有专家评审标签时的替代评估：把 completed trials 作为 pseudo-queries，做 deterministic train/eval split，并在 held-out pseudo-query outcome 上比较三种 predictive NLL：
@@ -570,7 +570,7 @@ learned_minus_rule_mean_nll
 评估命令示例：
 
 ```bash
-python3 scripts/evaluate_retrospective_lambda_model.py \
+python3 pipeline/evaluate_retrospective_lambda_model.py \
   --pipeline-results-jsonl artifacts/pseudo_query_results.jsonl \
   --output-json artifacts/retrospective_lambda_evaluation.json \
   --train-fraction 0.8 \
@@ -787,7 +787,7 @@ Top reranked candidate 示例：
 | 验证 | 结果 |
 | --- | --- |
 | `python -m unittest discover -s tests -v` | 89 tests OK |
-| `python -m py_compile docs/oncology_trial_similarity_pipeline.py docs/mixture_prior.py docs/secret_retrieval.py scripts/build_trial2vec_index.py scripts/train_retrospective_lambda_model.py scripts/evaluate_retrospective_lambda_model.py` | exit 0 |
+| `python -m py_compile pipeline/oncology_trial_similarity_pipeline.py pipeline/mixture_prior.py pipeline/secret_retrieval.py pipeline/build_trial2vec_index.py pipeline/train_retrospective_lambda_model.py pipeline/evaluate_retrospective_lambda_model.py` | exit 0 |
 | `build-secret-index` smoke with hashing | exit 0 |
 | SECRET-style smoke search on smoke8 summaries | exit 0; `secret_section_scores` present |
 | Task 4/5 reviewer subagents | APPROVED after fixes |
@@ -801,7 +801,7 @@ Top reranked candidate 示例：
 ## 7. 已完成的第 7 节改进与剩余限制
 
 1. SECRET-style backend 已从 future interface 升级为 runnable MVP：
-   - 新增 `docs/secret_retrieval.py`，可从 structured summary 构造 deterministic Q/A sections。
+   - 新增 `pipeline/secret_retrieval.py`，可从 structured summary 构造 deterministic Q/A sections。
    - 新增 `build-secret-index` 和 `--retrieval-backend secret` search path。
    - 输出 `secret_section_scores`，可以查看 disease/intervention/eligibility/endpoint/design/results/safety-followup 各 section 的贡献。
    - 剩余限制：这仍是 SECRET-style deterministic MVP，不是完整 SECRET 论文中的 LLM protocol summarization + reviewer-facing explanation system。
@@ -827,7 +827,7 @@ x_i = [
    - `eligibility_match_i` 已从 Stage 2 eligibility overlap 得到；`-redflag_severity_i` 已从 red flags severity 得到。
 
 3. Retrospective evaluation 已可运行：
-   - 新增 `scripts/evaluate_retrospective_lambda_model.py`。
+   - 新增 `pipeline/evaluate_retrospective_lambda_model.py`。
    - 用 deterministic train/eval split 评估 `weak_only_mean_nll`、`rule_lambda_mean_nll`、`learned_lambda_mean_nll`。
    - held-out pseudo-query outcome 不参与 retrieval/rerank/feature/model selection；只在 post-retrieval 阶段用于 predictive loss、evaluation 或 analysis。
    - `--pipeline-results-jsonl` 默认要求 search output 带有 `retrospective_leakage_control.query_outcomes_hidden_from_retrieval=true`。

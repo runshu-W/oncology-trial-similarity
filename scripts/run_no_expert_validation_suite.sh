@@ -11,19 +11,19 @@ HASHING_RESULTS="${HASHING_RESULTS:-artifacts/retrospective_lambda_oncology_orr_
 SECRET_RESULTS="${SECRET_RESULTS:-artifacts/stage1_secret_pool_rerank_orr_all/pipeline_results.jsonl}"
 
 echo "== Step 1: true ClinicalTrials.gov date metadata =="
-python scripts/clinicaltrials_dates.py \
+python pipeline/clinicaltrials_dates.py \
   --db-root "$DB_ROOT" \
   --output-dir artifacts/temporal_validation_true_dates
 
 echo "== Step 2: attach true dates to lambda examples =="
-python scripts/attach_temporal_metadata_to_lambda_examples.py \
+python pipeline/attach_temporal_metadata_to_lambda_examples.py \
   --examples-jsonl "$SECRET_EXAMPLES" \
   --date-metadata-csv artifacts/temporal_validation_true_dates/clinicaltrials_date_rows.csv \
   --output-jsonl artifacts/temporal_validation_true_dates/lambda_training_examples_with_true_dates.jsonl \
   --report-json artifacts/temporal_validation_true_dates/lambda_training_examples_date_attachment.json
 
 echo "== Step 3: true-date temporal NLL summaries =="
-python scripts/run_temporal_borrowing_validation.py \
+python pipeline/run_temporal_borrowing_validation.py \
   --examples-jsonl artifacts/temporal_validation_true_dates/lambda_training_examples_with_true_dates.jsonl \
   --output-dir artifacts/temporal_validation_true_dates \
   --methods weak_only rule fixed_discount commensurate_like rule_sam \
@@ -32,7 +32,7 @@ python scripts/run_temporal_borrowing_validation.py \
   --reference-method rule
 
 echo "== Step 4: paired Stage 1 backend benchmark =="
-python scripts/run_paired_stage1_backend_benchmark.py \
+python pipeline/run_paired_stage1_backend_benchmark.py \
   --results "hashing=$HASHING_RESULTS" "secret_pool=$SECRET_RESULTS" \
   --baseline-label hashing \
   --output-dir artifacts/paired_stage1_backend_benchmark \
@@ -41,7 +41,7 @@ python scripts/run_paired_stage1_backend_benchmark.py \
   --bootstrap-iterations 1000
 
 echo "== Step 5: borrowing baseline head-to-head =="
-python scripts/run_borrowing_baseline_comparison.py \
+python pipeline/run_borrowing_baseline_comparison.py \
   --examples-jsonl "$SECRET_EXAMPLES" \
   --output-dir artifacts/borrowing_baseline_head_to_head \
   --methods weak_only rule fixed_discount map_like power_prior_like commensurate_like rule_sam \
@@ -50,7 +50,7 @@ python scripts/run_borrowing_baseline_comparison.py \
   --reference-method rule
 
 echo "== Step 6: simulation operating characteristics =="
-python scripts/run_borrowing_operating_characteristics_simulation.py \
+python simulation/run_borrowing_operating_characteristics_simulation.py \
   --examples-jsonl "$SECRET_EXAMPLES" \
   --output-dir artifacts/operating_characteristics_simulation \
   --iterations "${SIMULATION_ITERATIONS:-500}" \
@@ -59,7 +59,7 @@ python scripts/run_borrowing_operating_characteristics_simulation.py \
   --seed 20260607
 
 echo "== Step 7: feature ablation and section sensitivity =="
-python scripts/run_feature_ablation_sensitivity.py \
+python pipeline/run_feature_ablation_sensitivity.py \
   --examples-jsonl "$SECRET_EXAMPLES" \
   --pipeline-results-jsonl "$SECRET_RESULTS" \
   --output-dir artifacts/feature_ablation_sensitivity

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_feature_ablation_sensitivity.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "run_feature_ablation_sensitivity.py"
 
 
 def load_ablation_module():

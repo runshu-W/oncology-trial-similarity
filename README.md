@@ -60,37 +60,40 @@ beta_i  = 1 + a_i (n_i - y_i)
 
 The two-head DeepSets model separates `lambda_i` and `a_i`: one head learns mixture allocation across candidates, while the other learns within-component information discounting.
 
-## Main Scripts
+## Repository Layout
 
-| Script | Purpose |
+The project is organised into five sections.
+
+| Section | Contents |
 |---|---|
-| `docs/oncology_trial_similarity_pipeline.py` | Core trial parsing, indexing, retrieval, reranking, and structured summary pipeline. |
-| `scripts/clinicaltrials_dates.py` | Extract true ClinicalTrials.gov date metadata and date precision labels. |
-| `scripts/temporal_validation.py` | Shared date-based and rolling-origin temporal split utilities. |
-| `scripts/run_oncology_retrospective_lambda_training.py` | Retrospective pseudo-query construction, lambda model training, and temporal validation modes. |
-| `scripts/run_borrowing_operating_characteristics_simulation.py` | Formal simulation operating-characteristics study. |
-| `scripts/run_paired_stage1_backend_benchmark.py` | Paired Stage 1 backend benchmark on common query IDs and candidate budgets. |
-| `scripts/run_borrowing_baseline_comparison.py` | Head-to-head comparison of weak, rule, classical, SAM, and trained two-head borrowing priors. |
-| `scripts/run_temporal_borrowing_validation.py` | True-date temporal borrowing NLL summaries. |
-| `scripts/run_feature_ablation_sensitivity.py` | Feature group ablation and SECRET section-weight sensitivity. |
-| `scripts/build_manuscript_evidence_package.py` | Build lightweight `results/` tables and figures from artifacts. |
-| `scripts/run_no_expert_validation_suite.sh` | Reproducibility-oriented command skeleton for the no-expert validation suite. |
-| `scripts/gold_standard_simulation/` | Simulation study in which the correct borrowing decision is known by construction: design-based type I error and power, borrowing-decision diagnostic accuracy, and the external control arm scenario. See its `README.md`. |
-| `scripts/fix_endpoint_units.py` | Unit-aware conversion of ClinicalTrials.gov outcome rows to rates. |
-| `scripts/audit_orr_units.py` | Quantifies the impact of the endpoint-unit defect (`docs/KNOWN_ISSUE_endpoint_units.md`). |
+| [`pipeline/`](pipeline/) | **1. Full pipeline.** Record parsing, structured summaries, Stage 1 retrieval, SECRET pool, Stage 2 reranking, mixture-prior construction, and the retrospective evaluation on real registry text. |
+| [`simulation/`](simulation/) | **2. Simulation.** Controlled evaluation where the correct borrowing decision is known by construction. Our method and every comparator on identical footing. |
+| [`casestudy/`](casestudy/) | **3. Case study.** Worked single-query examples on real trials, our method against the same comparators. |
+| [`results/`](results/) | **4. Results.** The lightweight, git-tracked evidence package: tables and figures backing the manuscript. |
+| [`web_agent/`](web_agent/) | **5. Web agent.** Interactive front end over the borrowing pipeline. |
+
+Alongside these: `docs/` holds the manuscript and methodology notes, `tests/`
+holds the test suite, and `scripts/` holds cross-cutting build and orchestration
+utilities. Large runtime artifacts land in `artifacts/` and are not tracked.
+
+### What each section can and cannot establish
+
+This distinction matters more than the code layout. `pipeline/` shows the method
+runs on real registry text and predicts held-out outcomes, but cannot show it
+borrowed from the *right* trials, because on real data the borrowing truth is
+unknown. `simulation/` supplies exactly that missing counterfactual by
+constructing the truth. `casestudy/` sits in between: real text, real outcomes,
+no borrowing truth. Neither the simulation nor the case studies substitute for
+expert clinical and statistical review.
+
+Within `simulation/` and `casestudy/`, methods that consult the query outcome
+(SAM, UIP-JS) are labelled as retrospective and are not compared as equals with
+methods usable at design time.
 
 ### Gold-standard simulation
 
-The retrospective analyses show the pipeline runs on real registry text, but
-cannot show whether it borrows from the *right* trials, because the truth is
-unknown. `scripts/gold_standard_simulation/` supplies that counterfactual: trial
-truth is generated from latent clinical attributes through a non-linear map that
-is deliberately not the fitted model, exchangeability is defined at the parameter
-level, and operating characteristics are evaluated against a fixed design null
-rather than against each replicate's own realised truth.
-
 ```bash
-cd scripts/gold_standard_simulation
+cd simulation/gold_standard
 python3 run_simulation.py --mode train --train-size 300 --epochs 60
 python3 run_simulation.py --mode scenarios --replicates 2000
 python3 run_simulation.py --mode design --design-replicates 2000
@@ -102,11 +105,12 @@ python3 test_simulation.py && python3 test_autodiff.py
 Pure NumPy, no PyTorch or SciPy. Full study runs in a few minutes.
 
 > **Known issue.** Endpoint-unit handling when converting outcome rows to rates
-> is defective at four call sites and affects a minority of held-out ORR values
-> in the retrospective aggregates. Diagnosed, quantified and tooled, but not yet
-> fixed, because a piecemeal fix would make the codebase internally inconsistent
-> and a correct one needs a pipeline re-run from the raw exports. See
-> `docs/KNOWN_ISSUE_endpoint_units.md`. The simulations above are unaffected.
+> is defective at four call sites in `pipeline/` and affects a minority of
+> held-out ORR values in the retrospective aggregates. Diagnosed, quantified and
+> tooled, but not yet fixed, because a piecemeal fix would make the codebase
+> internally inconsistent and a correct one needs a pipeline re-run from the raw
+> exports. See `docs/KNOWN_ISSUE_endpoint_units.md`. The simulations and the
+> case-study runner are unaffected.
 
 ## Quick Start
 

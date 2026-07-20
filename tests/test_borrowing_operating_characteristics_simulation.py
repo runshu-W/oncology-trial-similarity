@@ -5,7 +5,7 @@ import unittest
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
-    / "scripts"
+    / "simulation"
     / "run_borrowing_operating_characteristics_simulation.py"
 )
 

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "apply_secret_pool_rerank.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "apply_secret_pool_rerank.py"
 
 
 def load_module():

@@ -30,7 +30,7 @@ This creates:
 ## True Date Extraction
 
 ```bash
-python scripts/clinicaltrials_dates.py \
+python pipeline/clinicaltrials_dates.py \
   --db-root /path/to/Oncology_All_Trials \
   --output-dir artifacts/temporal_validation_true_dates
 ```
@@ -43,7 +43,7 @@ Expected outputs:
 ## Attach Date Metadata to Lambda Examples
 
 ```bash
-python scripts/attach_temporal_metadata_to_lambda_examples.py \
+python pipeline/attach_temporal_metadata_to_lambda_examples.py \
   --examples-jsonl artifacts/retrospective_lambda_secret_pool_orr_all/lambda_training_examples.jsonl \
   --date-metadata-csv artifacts/temporal_validation_true_dates/clinicaltrials_date_rows.csv \
   --output-jsonl artifacts/temporal_validation_true_dates/lambda_training_examples_with_true_dates.jsonl \
@@ -53,7 +53,7 @@ python scripts/attach_temporal_metadata_to_lambda_examples.py \
 ## True-Date Temporal NLL Table
 
 ```bash
-python scripts/run_temporal_borrowing_validation.py \
+python pipeline/run_temporal_borrowing_validation.py \
   --examples-jsonl artifacts/temporal_validation_true_dates/lambda_training_examples_with_true_dates.jsonl \
   --output-dir artifacts/temporal_validation_true_dates \
   --methods weak_only rule fixed_discount commensurate_like rule_sam \
@@ -67,7 +67,7 @@ This is a true-date temporal NLL summary using existing learned NLL rows. It is 
 ## Paired Stage 1 Backend Benchmark
 
 ```bash
-python scripts/run_paired_stage1_backend_benchmark.py \
+python pipeline/run_paired_stage1_backend_benchmark.py \
   --results hashing=artifacts/retrospective_lambda_oncology_orr_all/pipeline_results.jsonl \
             secret_pool=artifacts/stage1_secret_pool_rerank_orr_all/pipeline_results.jsonl \
   --baseline-label hashing \
@@ -80,7 +80,7 @@ python scripts/run_paired_stage1_backend_benchmark.py \
 ## Borrowing Baseline Head-to-Head
 
 ```bash
-python scripts/run_borrowing_baseline_comparison.py \
+python pipeline/run_borrowing_baseline_comparison.py \
   --examples-jsonl artifacts/retrospective_lambda_secret_pool_orr_all/lambda_training_examples.jsonl \
   --output-dir artifacts/borrowing_baseline_head_to_head \
   --methods weak_only rule fixed_discount map_like power_prior_like commensurate_like rule_sam \
@@ -92,7 +92,7 @@ python scripts/run_borrowing_baseline_comparison.py \
 ## Simulation Operating Characteristics
 
 ```bash
-python scripts/run_borrowing_operating_characteristics_simulation.py \
+python simulation/run_borrowing_operating_characteristics_simulation.py \
   --examples-jsonl artifacts/retrospective_lambda_secret_pool_orr_all/lambda_training_examples.jsonl \
   --output-dir artifacts/operating_characteristics_simulation \
   --iterations 500 \
@@ -106,7 +106,7 @@ The current lightweight manuscript evidence package uses 500 iterations with 400
 ## Feature Ablation and Sensitivity
 
 ```bash
-python scripts/run_feature_ablation_sensitivity.py \
+python pipeline/run_feature_ablation_sensitivity.py \
   --examples-jsonl artifacts/retrospective_lambda_secret_pool_orr_all/lambda_training_examples.jsonl \
   --pipeline-results-jsonl artifacts/stage1_secret_pool_rerank_orr_all/pipeline_results.jsonl \
   --output-dir artifacts/feature_ablation_sensitivity
@@ -131,12 +131,12 @@ Compile key scripts:
 
 ```bash
 python -m py_compile \
-  scripts/clinicaltrials_dates.py \
-  scripts/temporal_validation.py \
-  scripts/run_borrowing_operating_characteristics_simulation.py \
-  scripts/run_paired_stage1_backend_benchmark.py \
-  scripts/run_borrowing_baseline_comparison.py \
-  scripts/run_temporal_borrowing_validation.py \
-  scripts/run_feature_ablation_sensitivity.py \
+  pipeline/clinicaltrials_dates.py \
+  pipeline/temporal_validation.py \
+  simulation/run_borrowing_operating_characteristics_simulation.py \
+  pipeline/run_paired_stage1_backend_benchmark.py \
+  pipeline/run_borrowing_baseline_comparison.py \
+  pipeline/run_temporal_borrowing_validation.py \
+  pipeline/run_feature_ablation_sensitivity.py \
   scripts/build_manuscript_evidence_package.py
 ```

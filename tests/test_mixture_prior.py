@@ -1,6 +1,6 @@
 import unittest
 
-from docs import mixture_prior
+from pipeline import mixture_prior
 
 
 class MixturePriorTest(unittest.TestCase):

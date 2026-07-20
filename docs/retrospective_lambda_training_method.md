@@ -4,10 +4,10 @@
 适用分支：`codex/trial2vec-secret-mixture-prior`  
 对应实现：
 
-- `scripts/train_retrospective_lambda_model.py`
-- `scripts/evaluate_retrospective_lambda_model.py`
-- `docs/mixture_prior.py`
-- `docs/oncology_trial_similarity_pipeline.py`
+- `pipeline/train_retrospective_lambda_model.py`
+- `pipeline/evaluate_retrospective_lambda_model.py`
+- `pipeline/mixture_prior.py`
+- `pipeline/oncology_trial_similarity_pipeline.py`
 
 ## 0. 本次全量 ORR 训练结果先说结论
 
@@ -189,7 +189,7 @@ retrospective lambda training = 用历史 completed trials 做 pseudo-query，
 对每个 completed trial `q`，运行 search 时必须使用：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py search \
+python3 pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json /path/to/completed_trial.json \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --top-k 100 \
@@ -291,7 +291,7 @@ beta_i  = 1 + a_i * (n_i - y_i)
 - `a_i * (n_i - y_i)` 是折扣后的失败数。
 - `a_i` 越小，历史 trial 的 effective sample size 越小。
 
-这一步对应 `docs/mixture_prior.py` 中的 `components_from_reranked_rows()`。
+这一步对应 `pipeline/mixture_prior.py` 中的 `components_from_reranked_rows()`。
 
 ## 5. rule lambda 如何得到
 
@@ -939,7 +939,7 @@ for epoch in 1..E:
 命令示例：
 
 ```bash
-python3 scripts/train_retrospective_lambda_model.py \
+python3 pipeline/train_retrospective_lambda_model.py \
   --pipeline-results-jsonl artifacts/retrospective/pipeline_results.jsonl \
   --output-json artifacts/retrospective/lambda_training_summary.json \
   --model-output artifacts/retrospective/lambda_model.pt \
@@ -1013,7 +1013,7 @@ seed = 20260603
 命令示例：
 
 ```bash
-python3 scripts/evaluate_retrospective_lambda_model.py \
+python3 pipeline/evaluate_retrospective_lambda_model.py \
   --pipeline-results-jsonl artifacts/retrospective/pipeline_results.jsonl \
   --output-json artifacts/retrospective/lambda_evaluation.json \
   --train-fraction 0.8 \
@@ -1052,7 +1052,7 @@ python3 scripts/evaluate_retrospective_lambda_model.py \
 搜索新 query 时：
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py search \
+python3 pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json /path/to/new_query.json \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --top-k 100 \
@@ -1127,7 +1127,7 @@ expert-validated borrowing weights
 ### Step 1: 生成 leakage-safe pseudo-query results
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py search \
+python3 pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json completed_trial.json \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --top-k 100 \
@@ -1148,7 +1148,7 @@ artifacts/retrospective/pipeline_results.jsonl
 ### Step 3: 训练模型
 
 ```bash
-python3 scripts/train_retrospective_lambda_model.py \
+python3 pipeline/train_retrospective_lambda_model.py \
   --pipeline-results-jsonl artifacts/retrospective/pipeline_results.jsonl \
   --output-json artifacts/retrospective/lambda_training_summary.json \
   --model-output artifacts/retrospective/lambda_model.pt \
@@ -1160,7 +1160,7 @@ python3 scripts/train_retrospective_lambda_model.py \
 ### Step 4: 做 retrospective evaluation
 
 ```bash
-python3 scripts/evaluate_retrospective_lambda_model.py \
+python3 pipeline/evaluate_retrospective_lambda_model.py \
   --pipeline-results-jsonl artifacts/retrospective/pipeline_results.jsonl \
   --output-json artifacts/retrospective/lambda_evaluation.json \
   --train-fraction 0.8 \
@@ -1170,7 +1170,7 @@ python3 scripts/evaluate_retrospective_lambda_model.py \
 ### Step 5: 在新 query 中使用
 
 ```bash
-python3 docs/oncology_trial_similarity_pipeline.py search \
+python3 pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json new_query.json \
   --index-dir artifacts/oncology_trial_similarity_clinicalbert \
   --top-k 100 \

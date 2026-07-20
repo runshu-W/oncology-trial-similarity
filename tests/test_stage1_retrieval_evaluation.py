@@ -6,7 +6,7 @@ import unittest
 
 
 SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1] / "scripts" / "evaluate_stage1_retrieval.py"
+    Path(__file__).resolve().parents[1] / "pipeline" / "evaluate_stage1_retrieval.py"
 )
 
 

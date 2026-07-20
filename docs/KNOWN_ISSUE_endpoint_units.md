@@ -16,7 +16,7 @@ denotes an ORR of **0.26**. The current code produces **0.839**.
 
 ## Measured impact
 
-From `scripts/audit_orr_units.py` over the ORR corpus:
+From `pipeline/audit_orr_units.py` over the ORR corpus:
 
 | | |
 |---|---|
@@ -47,10 +47,10 @@ these, and **all four must be fixed together**:
 
 | Location | Code |
 |---|---|
-| `docs/oncology_trial_similarity_pipeline.py:296` | `result["proportion"] = round(float(result["count"]) / float(denominator), 6)` |
-| `docs/oncology_trial_similarity_pipeline.py:1703` | `"rate": count / denominator` |
-| `docs/mixture_prior.py:134` | `return count, denominator, count / denominator` |
-| `scripts/train_retrospective_lambda_model.py:613` | derives the query rate from count/denominator |
+| `pipeline/oncology_trial_similarity_pipeline.py:296` | `result["proportion"] = round(float(result["count"]) / float(denominator), 6)` |
+| `pipeline/oncology_trial_similarity_pipeline.py:1703` | `"rate": count / denominator` |
+| `pipeline/mixture_prior.py:134` | `return count, denominator, count / denominator` |
+| `pipeline/train_retrospective_lambda_model.py:613` | derives the query rate from count/denominator |
 
 Note that `unit` is currently read *after* the `arm_results` loop in
 `extract_outcomes` (line 305), so the fix requires hoisting it above the loop.
@@ -63,7 +63,7 @@ apart downstream. That is worse than a uniform, documented defect.
 
 A correct fix is:
 
-1. Centralise the conversion (`scripts/fix_endpoint_units.py` already implements
+1. Centralise the conversion (`pipeline/fix_endpoint_units.py` already implements
    and tests the correct dispatch).
 2. Thread `unit` through to all four call sites.
 3. Regenerate the affected artifacts from the raw ClinicalTrials.gov records.
@@ -74,14 +74,14 @@ tracked in this repository.
 
 ## Tooling already available
 
-- `scripts/fix_endpoint_units.py` — unit-aware conversion. Dispatches on the
+- `pipeline/fix_endpoint_units.py` — unit-aware conversion. Dispatches on the
   reported unit and raises `UnitError` rather than guessing when the unit is
   missing or unrecognised (29 such rows in the corpus).
-- `scripts/audit_orr_units.py` — reproduces the numbers above and writes a
+- `pipeline/audit_orr_units.py` — reproduces the numbers above and writes a
   per-query correction table:
 
   ```bash
-  python3 scripts/audit_orr_units.py \
+  python3 pipeline/audit_orr_units.py \
       --corpus path/to/trial_summaries.jsonl \
       --lambda-features path/to/lambda_component_features.csv
   ```

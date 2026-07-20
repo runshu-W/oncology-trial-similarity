@@ -3,7 +3,7 @@ into beta-binomial (responders, denominator) pairs.
 
 THE BUG
 -------
-``docs/oncology_trial_similarity_pipeline.py`` computes
+``pipeline/oncology_trial_similarity_pipeline.py`` computes
 
     proportion = count / denominator
 

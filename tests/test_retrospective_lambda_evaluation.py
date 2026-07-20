@@ -6,7 +6,7 @@ import unittest
 from unittest import mock
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_retrospective_lambda_model.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "evaluate_retrospective_lambda_model.py"
 
 
 def load_eval_module():

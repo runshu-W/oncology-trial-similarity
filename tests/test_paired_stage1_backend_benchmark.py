@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_paired_stage1_backend_benchmark.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "run_paired_stage1_backend_benchmark.py"
 
 
 def load_benchmark_module():

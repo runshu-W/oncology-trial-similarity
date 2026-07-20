@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_temporal_borrowing_validation.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "run_temporal_borrowing_validation.py"
 
 
 def load_temporal_borrowing_module():

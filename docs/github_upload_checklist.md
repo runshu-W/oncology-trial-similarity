@@ -7,7 +7,7 @@ This repository should be uploaded as a reproducible methodology prototype and r
 - `README.md`
 - `.gitignore`
 - `requirements.txt`
-- `docs/oncology_trial_similarity_pipeline.py`
+- `pipeline/oncology_trial_similarity_pipeline.py`
 - `docs/methods_no_expert_validation.md`
 - `docs/reproducibility.md`
 - `docs/data_availability.md`

@@ -14,7 +14,7 @@ ARTIFACTS = REPO_ROOT / "artifacts"
 RESULTS = REPO_ROOT / "results"
 TABLES = RESULTS / "tables"
 FIGURES = RESULTS / "figures"
-DOCS = REPO_ROOT / "docs"
+DOCS = REPO_ROOT / "pipeline"
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:

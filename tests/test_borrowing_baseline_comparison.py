@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_borrowing_baseline_comparison.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "run_borrowing_baseline_comparison.py"
 
 
 def load_baseline_module():

@@ -32,7 +32,7 @@ The current system supports:
 - `requirements.txt`  
   Runtime dependencies for pipeline and Web agent.
 
-- `docs/oncology_trial_similarity_pipeline.py`  
+- `pipeline/oncology_trial_similarity_pipeline.py`  
   Main executable pipeline. It includes indexing, retrieval, reranking, Bayesian analysis, report rendering, and CLI entrypoints.
 
 - `docs/oncology_trial_similarity_pipeline.md`  
@@ -160,7 +160,7 @@ Input is one ClinicalTrials.gov-style oncology trial JSON.
 
 The system can run through:
 
-- CLI: `docs/oncology_trial_similarity_pipeline.py search`
+- CLI: `pipeline/oncology_trial_similarity_pipeline.py search`
 - Web agent: upload or paste JSON into the local browser UI
 
 ### Step 2. JSON and document extraction
@@ -189,7 +189,7 @@ The code for this is mainly in:
 - `extract_trial_record`
 - `extract_trial_record_like`
 
-All are in `docs/oncology_trial_similarity_pipeline.py`.
+All are in `pipeline/oncology_trial_similarity_pipeline.py`.
 
 ### Step 3. Oncology normalization
 
@@ -279,7 +279,7 @@ The index builder:
 CLI example:
 
 ```bash
-../.venv/bin/python docs/oncology_trial_similarity_pipeline.py build-index \
+../.venv/bin/python pipeline/oncology_trial_similarity_pipeline.py build-index \
   --db-root /Users/wang/PHD/clinic.gov/Oncology_All_Trials/Oncology_All_Trials \
   --output-dir ../artifacts/oncology_trial_similarity_clinicalbert \
   --embedding-backend clinicalbert \
@@ -617,7 +617,7 @@ Default index:
 
 The backend:
 
-- loads the pipeline module from `docs/oncology_trial_similarity_pipeline.py`
+- loads the pipeline module from `pipeline/oncology_trial_similarity_pipeline.py`
 - writes pasted/uploaded JSON to a temp file
 - calls `pipeline.search`
 - returns raw result plus Markdown report
@@ -711,7 +711,7 @@ Syntax validation:
 
 ```bash
 ../.venv/bin/python -m py_compile \
-  docs/oncology_trial_similarity_pipeline.py \
+  pipeline/oncology_trial_similarity_pipeline.py \
   web_agent/app.py \
   scripts/build_manual_evaluation_template.py
 ```
@@ -800,7 +800,7 @@ Run syntax check:
 
 ```bash
 ../.venv/bin/python -m py_compile \
-  docs/oncology_trial_similarity_pipeline.py \
+  pipeline/oncology_trial_similarity_pipeline.py \
   web_agent/app.py \
   scripts/build_manual_evaluation_template.py
 ```
@@ -808,7 +808,7 @@ Run syntax check:
 Search via CLI:
 
 ```bash
-../.venv/bin/python docs/oncology_trial_similarity_pipeline.py search \
+../.venv/bin/python pipeline/oncology_trial_similarity_pipeline.py search \
   --query-json /path/to/new_trial.json \
   --index-dir ../artifacts/oncology_trial_similarity_clinicalbert \
   --top-k 10 \
@@ -822,7 +822,7 @@ Search via CLI:
 
 At the time this document was written, the main modified files were:
 
-- `docs/oncology_trial_similarity_pipeline.py`
+- `pipeline/oncology_trial_similarity_pipeline.py`
 - `tests/test_web_agent.py`
 - `web_agent/README.md`
 - `web_agent/app.py`

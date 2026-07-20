@@ -8,8 +8,8 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+if str(REPO_ROOT / "pipeline") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "pipeline"))
 
 import temporal_validation  # noqa: E402
 

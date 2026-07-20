@@ -55,5 +55,5 @@ To regenerate this directory from local artifacts, run:
 
 ```bash
 python scripts/build_manuscript_evidence_package.py
-python scripts/gold_standard_simulation/build_outputs.py
+python simulation/gold_standard/build_outputs.py
 ```

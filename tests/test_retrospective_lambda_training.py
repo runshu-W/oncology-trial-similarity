@@ -8,7 +8,7 @@ import unittest
 import torch
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "train_retrospective_lambda_model.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "train_retrospective_lambda_model.py"
 
 EXPECTED_FEATURE_NAMES = [
     "s_i",

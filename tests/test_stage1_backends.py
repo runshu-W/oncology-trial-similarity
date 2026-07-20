@@ -14,7 +14,7 @@ pipeline = importlib.import_module("docs.oncology_trial_similarity_pipeline")
 
 
 def load_trial2vec_builder_module(module_name: str = "build_trial2vec_index"):
-    path = Path(__file__).resolve().parents[1] / "scripts" / "build_trial2vec_index.py"
+    path = Path(__file__).resolve().parents[1] / "pipeline" / "build_trial2vec_index.py"
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load module spec for {path}")

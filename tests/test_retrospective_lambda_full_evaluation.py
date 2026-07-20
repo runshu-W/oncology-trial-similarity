@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_oncology_retrospective_lambda_training.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "run_oncology_retrospective_lambda_training.py"
 
 
 def load_run_module():

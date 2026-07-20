@@ -74,7 +74,7 @@ for. Reporting only adversarial scenarios would be cherry-picking.
 ## Reproducing
 
 ```bash
-cd scripts/gold_standard_simulation
+cd simulation/gold_standard
 
 # 1. Train the three two-head variants (~1 min)
 python3 run_simulation.py --mode train --train-size 300 --epochs 60

@@ -3,8 +3,8 @@
 日期：2026-06-04  
 对应实现：
 
-- `docs/secret_retrieval.py`
-- `scripts/evaluate_stage1_retrieval.py`
+- `pipeline/secret_retrieval.py`
+- `pipeline/evaluate_stage1_retrieval.py`
 - `tests/test_stage1_retrieval_evaluation.py`
 
 ## 1. 为什么需要单独评估 Stage 1
@@ -23,7 +23,7 @@ Stage 1 的任务不是直接决定能不能借用历史数据，而是尽量把
 评估脚本读取一个或多个 pipeline result JSONL：
 
 ```bash
-python3 scripts/evaluate_stage1_retrieval.py \
+python3 pipeline/evaluate_stage1_retrieval.py \
   --results hashing=artifacts/.../hashing_pipeline_results.jsonl \
   --results secret=artifacts/.../secret_pipeline_results.jsonl \
   --baseline-label hashing \
@@ -229,7 +229,7 @@ mean shared top30 candidates = 5.125
 
 ## 8. 本轮 Stage 1 优化
 
-`docs/secret_retrieval.py` 的 `score_secret_index()` 已从 Python candidate loop 改为 NumPy 向量化 cosine scoring。
+`pipeline/secret_retrieval.py` 的 `score_secret_index()` 已从 Python candidate loop 改为 NumPy 向量化 cosine scoring。
 
 原逻辑：
 
@@ -273,7 +273,7 @@ hashing/ClinicalBERT top100 recall pool
 对应脚本：
 
 ```text
-scripts/apply_secret_pool_rerank.py
+pipeline/apply_secret_pool_rerank.py
 ```
 
 生成 full ORR hybrid pipeline results：

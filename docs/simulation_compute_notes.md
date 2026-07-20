@@ -27,7 +27,7 @@ For a final manuscript revision, repeat at least one of the following:
 1. Full-template 500-iteration run:
 
 ```bash
-python scripts/run_borrowing_operating_characteristics_simulation.py \
+python simulation/run_borrowing_operating_characteristics_simulation.py \
   --examples-jsonl artifacts/retrospective_lambda_secret_pool_orr_all/lambda_training_examples.jsonl \
   --output-dir artifacts/operating_characteristics_simulation_full_500 \
   --iterations 500 \
@@ -38,7 +38,7 @@ python scripts/run_borrowing_operating_characteristics_simulation.py \
 2. Deterministic 1000-iteration subsampling sensitivity:
 
 ```bash
-python scripts/run_borrowing_operating_characteristics_simulation.py \
+python simulation/run_borrowing_operating_characteristics_simulation.py \
   --examples-jsonl artifacts/retrospective_lambda_secret_pool_orr_all/lambda_training_examples.jsonl \
   --output-dir artifacts/operating_characteristics_simulation_subsample_1000 \
   --iterations 1000 \
@@ -50,7 +50,7 @@ python scripts/run_borrowing_operating_characteristics_simulation.py \
 3. Alternative template subset:
 
 ```bash
-python scripts/run_borrowing_operating_characteristics_simulation.py \
+python simulation/run_borrowing_operating_characteristics_simulation.py \
   --examples-jsonl artifacts/retrospective_lambda_secret_pool_orr_all/lambda_training_examples.jsonl \
   --output-dir artifacts/operating_characteristics_simulation_subsample_seed2 \
   --iterations 500 \

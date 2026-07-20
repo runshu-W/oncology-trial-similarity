@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "temporal_validation.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "pipeline" / "temporal_validation.py"
 
 
 def load_temporal_module():
