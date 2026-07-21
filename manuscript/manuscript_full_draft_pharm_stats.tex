@@ -1,0 +1,1830 @@
+% =====================================================================
+%  Manuscript for Pharmaceutical Statistics (portable Overleaf version)
+%  Regenerated from docs/manuscript_full_draft_pharm_stats.md
+%  (source of record). Numbers are the genuine two-head DeepSets
+%  evidence package; keep this .tex in sync with the .md.
+%
+%  This uses the standard `article` class so it compiles on Overleaf
+%  with no extra .cls upload. For the official Wiley submission format,
+%  replace the class line with the Wiley NJD template, e.g.
+%     \documentclass[AMA,STIX1COL]{WileyNJD-v2}
+%  (upload WileyNJD-v2.cls + WileyNJD-AMA.bst from the Wiley
+%  "Pharmaceutical Statistics" author template), then the body below
+%  should transfer with minimal changes.
+% =====================================================================
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{graphicx}
+% Figure files live in results/figures/final_v2/ (vector PDF + 300 dpi TIFF).
+% On Overleaf, upload those PDFs (flat) — the first path below then applies.
+\graphicspath{{figures/}{../results/figures/final_v2/}{results/figures/final_v2/}}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{setspace}
+
+\newcommand{\lamz}{\lambda_{0}}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+\title{Retrospective predictive calibration of oncology trial similarity
+for Bayesian historical borrowing}
+
+\author{[Author names and affiliations to be completed by the authors]}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% ---------------------------------------------------------------------
+\begin{abstract}
+\noindent\textbf{Background.} Bayesian historical borrowing can improve the
+efficiency of oncology trials, but the choice of historical evidence is a
+central methodological and regulatory concern. Textual similarity between
+trial records is insufficient for borrowing because historical evidence must
+also be compatible in disease setting, patient population, regimen, endpoint
+definition, follow-up, eligibility criteria, result usability, information
+size, and prior-data conflict risk.
+
+\noindent\textbf{Methods.} We developed an explainable pipeline for oncology
+trial retrieval and Bayesian mixture-prior construction from
+ClinicalTrials.gov records. Trial records were converted into structured
+summaries, retrieved through Stage~1 backends including hashing and a
+deterministic section pool inspired by SECRET, and reranked using
+borrowing-relevant clinical and statistical features. Candidate endpoint
+observations were converted into beta-binomial historical components, with
+effective sample-size discounts and mixture weights represented as distinct
+quantities. A two-head DeepSets model was used where trained retrospective
+predictions were available, and a SAM-style conflict adapter was evaluated as
+a transparent sensitivity approach. Because expert borrowability labels were
+unavailable, retrospective evaluation used leakage-controlled pseudo-queries, held-out
+beta-binomial predictive negative log-likelihood, true-date temporal
+validation, simulation operating characteristics, paired backend
+benchmarking, baseline comparisons, feature ablation, and software tests.
+
+\noindent\textbf{Results.} In objective response rate (ORR) pseudo-queries,
+SECRET pool retrieval improved reranked component-readiness over hashing by
+$0.0912$ (paired bootstrap CI $0.0799$ to $0.1018$) and endpoint-match score
+by $1.1047$ (CI $1.0600$ to $1.1503$). In borrowing baseline comparisons the
+trained two-head mixture model achieved mean negative log-likelihood (NLL)
+$3.0562$ versus $3.1800$ for the rule-based mixture; the conflict-adapted rule
+baseline achieved $2.9755$, and the same SAM adapter applied to the trained
+two-head prior achieved $2.9328$. Under leakage-free rolling-origin
+train-on-past/test-on-future validation across three cutoffs, the
+conflict-adapted priors showed lower future-fold NLL with paired bootstrap
+95\% confidence intervals excluding zero. In constructed sham-history negative
+controls and a known-truth operating-characteristics simulation, the SAM
+adapter reduced historical influence and showed conflict sensitivity. An
+exploratory borrowing-layer analysis showed similar NLL reductions in selected
+additional binary endpoint families.
+
+In a gold-standard simulation with parameter-level exchangeability known by
+construction, evaluated in a single-arm design testing $H_0\!:\theta \le 0.20$,
+the learned prior attained a type I error of $0.025$ and power of $0.587$ under
+no prior-data conflict, against $0.037$ and $0.536$ without borrowing, while
+full pooling and the power prior reached type I errors of $0.584$ and $0.484$.
+Under strong conflict the learned prior's type I error rose to $0.070$, above
+the rule-based ($0.050$) and robust-MAP ($0.047$) baselines, without a
+compensating power gain. Ablation showed that the prospective set-level conflict
+signal did not improve donor discrimination (ROC-AUC changes $-0.000$ to
+$+0.016$), but was necessary for the learned per-source effective sample-size
+discount to respond to comparability at all: without it the fitted discount was
+constant (standard deviation $0.002$) and borrowed information was flat across
+donors, and with it borrowed information declined monotonically with true
+distance from the query rate. In an external control arm scenario with controls
+drifted downward, full pooling inflated type I error to $0.211$ against $0.014$
+for internal-control-only analysis, while the learned prior held it to $0.032$.
+
+\noindent\textbf{Conclusions.} The framework provides a reproducible
+methodology prototype and retrospective predictive-calibration evidence
+package for oncology historical borrowing. Its defensible contribution is the
+integration of free-text retrieval with candidate-level borrowing and a
+gold-standard evaluation protocol, rather than any individual statistical
+component, each of which has close precedents. The retrospective and simulation
+analyses reported here do not establish expert borrowability of individual
+historical trials or clinical decision validity, and do not replace expert
+clinical and statistical review, prospective validation, or protocol-specific
+operating-characteristics evaluation. An endpoint-unit defect affecting a
+minority of real-data held-out outcomes is documented in the text; the
+simulation results are unaffected by it.
+
+\vspace{0.5em}
+\noindent\textbf{Keywords:} Bayesian historical borrowing; mixture prior;
+prior-data conflict; oncology trials; trial similarity; predictive
+calibration; operating characteristics.
+\end{abstract}
+
+% ---------------------------------------------------------------------
+\section{Introduction}
+
+A recurring problem in oncology drug development is to estimate how well a
+treatment works in a new trial, expressed through an endpoint such as objective
+response rate (ORR) --- the proportion of treated patients whose tumour burden
+shrinks by a pre-specified amount under a standard response criterion. This
+estimate is often harder to obtain in oncology than the sample-size arithmetic
+suggests: many trials are small, single-arm, restricted to a narrow histology or
+biomarker-defined subgroup, or constrained by the number of eligible patients
+who can realistically be enrolled, so the resulting estimate carries wide
+uncertainty. The intuitive remedy is that the registry of completed trials
+already contains relevant evidence --- earlier studies of the same agent, the
+same class, or the same disease setting --- that could sharpen the estimate if
+it were used. The difficulty is that this remedy cuts both ways: historical
+evidence that is genuinely comparable improves precision, whereas historical
+evidence that is not comparable biases the estimate, distorts type~I error and
+coverage, and can mislead the decision the trial was designed to inform
+[1,~2]. The methodological question is therefore not only \emph{how} to combine
+current and historical data, but \emph{which} historical trials should be
+allowed to contribute at all --- and \emph{how much} each of them should
+contribute.
+
+The first family of answers comes from the Bayesian historical-borrowing
+literature, which supplies formal machinery for letting past trial results
+inform the prior for a new trial. The classical constructions are now
+standard: simple pooling of concurrent and historical controls [1]; the power
+prior, which raises the historical likelihood to a fractional exponent so that
+the historical data count for less than their nominal sample size [3]; the
+commensurate prior, which ties borrowing strength to an estimated
+commensurability parameter between historical and current parameters [6]; and
+the meta-analytic-predictive (MAP) prior, which summarises multiple historical
+studies through a random-effects meta-analysis and derives the predictive
+distribution for a new study [4,~15]. A second generation of constructions makes
+borrowing self-limiting: the robust MAP prior adds a vague mixture component so
+that borrowing collapses when the current data disagree with history [5],
+heavy-tailed priors achieve a similar conflict resolution through their tail
+behaviour [10], and the self-adapting mixture (SAM) prior sets the mixture
+weight as an explicit function of the observed prior--data conflict [11].
+Effective sample size (ESS) provides the accompanying accounting device,
+translating a prior's influence into a number of patients [7]. The strengths of
+this family are considerable --- the constructions are principled, extensively
+studied, and in their dynamic forms able to discount conflicting history
+automatically --- but two limitations matter for the problem posed above. First,
+and most importantly, these methods take the historical set as given: they
+answer ``how much should we borrow from \emph{these} studies?'' and are silent on
+how those studies were chosen, which in practice is done by manual clinical
+review of a small, already-curated candidate list. Second, most assign a single
+pooled borrowing weight to the historical evidence as a whole, so they cannot
+express the common situation in which one donor trial is highly informative and
+another, in the same pool, is not; and they typically collapse allocation (which
+component receives weight) and information size (how much information that
+component carries) into one quantity.
+
+Bayesian borrowing is not the only route to an efficacy estimate, and the
+weaknesses of the alternatives are informative. Machine-learning models for
+trial-outcome prediction --- hierarchical interaction networks and related
+deep or graph-based architectures --- predict trial success directly from
+molecule structure, disease codes, and protocol text, and their strength is the
+richness of the features they can exploit at registry scale; their weakness for
+present purposes is that they emit a predicted label or success probability
+rather than a calibrated prior distribution, and their internal reasoning is
+difficult to audit, which is disqualifying in a regulatory setting.
+[Citation needed: HINT / deep trial-outcome prediction.] External and synthetic
+control arms, and model-based meta-analysis, reuse patient-level or
+summary-level data from prior studies and have an established place in
+regulatory submissions [8,~18]; their weakness is that they presuppose a
+curated, pre-selected set of comparators and require substantial manual
+assembly and covariate harmonisation, with propensity-score-integrated power
+priors and composite-likelihood approaches formalising the covariate side of
+that work [20,~21]. Biomarker- and pharmacokinetic/pharmacodynamic models
+predict efficacy from mechanism, which is their strength; they are also
+data-hungry and drug-specific, and so do not offer a general way of reusing the
+published trial literature.
+[Citation needed: PK/PD or biomarker-based efficacy prediction.] Across all
+three, the same gap recurs: none provides an auditable and statistically
+calibrated way to \emph{select} historical trials and \emph{weight} them for a
+mixture prior.
+
+The third family attacks selection directly, through trial similarity and
+retrieval. Keyword and TF--IDF matching, general biomedical language-model
+embeddings such as Bio\_ClinicalBERT [13], trial-specific self-supervised
+representations such as Trial2Vec [12], and semi-supervised section-based
+retrieval such as SECRET [14] can all rank registry records by resemblance to a
+query trial. Their strength is recall and scale: they operate over the whole of
+ClinicalTrials.gov without manual curation. Their weakness is that textual
+similarity is not borrowability. Two oncology trials can be strikingly similar
+in wording while differing in treatment line, endpoint definition, response
+assessment window, follow-up duration, eligibility restrictions, or the
+availability and maturity of posted results --- differences that are decisive
+for whether a beta-binomial component can be built at all, yet nearly invisible
+to a text encoder. Conversely, a trial with less obvious surface similarity may
+contain exactly the endpoint observation needed for a well-calibrated
+historical component. We therefore separate \emph{retrievability} --- can the
+record be found? --- from \emph{borrowability} --- should it be borrowed from,
+and how much?
+
+Reading the three families together makes the missing piece precise. Borrowing
+methods weight a set that someone else has already chosen; outcome-prediction
+methods return labels rather than priors; retrieval methods rank by textual
+resemblance rather than by the statistical consequence of borrowing. What is
+absent is an explainable pipeline that connects retrieval to candidate-specific,
+conflict-aware Bayesian borrowing and is validated by predictive calibration
+rather than assumed to be correct. Filling that gap requires four things at
+once: weights assigned per candidate rather than pooled across the historical
+set; a separation of allocation from information size, so that ``which donor''
+and ``how much information'' are distinct decisions; an explicit check for
+prior--data conflict; and an evaluation protocol that functions in the absence
+of expert borrowability labels, which do not exist at scale.
+
+We propose a three-stage retrieve $\rightarrow$ rerank $\rightarrow$ borrow
+pipeline that converts ClinicalTrials.gov records into a Bayesian mixture prior
+(Figure~\ref{fig:pipeline}). Stage~1 (retrieve) reuses existing tools --- a
+deterministic hashing backend, Bio\_ClinicalBERT embeddings [13], an optional
+Trial2Vec-style backend [12], and a SECRET-inspired section pool [14] --- to
+assemble a high-recall candidate set, taking the recall strength of family~C
+while deferring the borrowability judgement. Stage~2 (rerank) is an explainable
+scorer over nine clinical and statistical features relevant to borrowing, so
+that candidate selection is inspectable feature by feature rather than
+delegated to an opaque model, which addresses the auditability weakness of
+family~B. Stage~3 (borrow) contains the core methodological contribution: a
+two-head DeepSets model (2H-DS), which treats the retrieved candidates as an
+unordered set and is therefore permutation-invariant by construction [24], and
+which emits for each candidate \emph{both} a mixture weight $\lambda_i$
+\emph{and} a separate effective-sample-size discount $a_i$ --- addressing the
+pooled-weight and conflated-quantity limitations of family~A directly. A
+SAM-style conflict adapter then down-weights historical components that
+disagree with the observed data [11], supplying the dynamic-borrowing safeguard
+in a form whose trigger behaviour can be reported and inspected. Preceding all
+learned weighting, a conservative clinical gate zeroes out candidates that are
+endpoint-incompatible or whose posted results are unusable, so that statistical
+fit can never override clinical incompatibility. The novelty we claim is not
+any single component but the linkage: an auditable retrieval stage connected to
+candidate-specific, conflict-aware mixture-prior construction, evaluated by
+predictive calibration.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F7_pipeline_schematic}
+  \caption{\textbf{Pipeline overview.} Schematic of the borrowability
+  pipeline: ClinicalTrials.gov parsing, structured trial summary, Stage~1
+  retrieval with the SECRET-inspired section pool, explainable Stage~2
+  reranking, beta-binomial mixture components, and two-head DeepSets weighting
+  --- separating the mixture weight $\lambda$ from the effective-sample-size
+  discount $a$ --- followed by the SAM conflict adapter.}
+  \label{fig:pipeline}
+\end{figure}
+
+We are explicit about what this evidence can and cannot establish. No corpus of
+expert borrowability labels exists for oncology registry trials, so we make no
+claim to adjudicate clinical suitability, and every result below is a
+calibration statement rather than a clinical one. In place of labels we assemble
+a retrospective evidence package: leakage-controlled pseudo-queries, in which
+completed trials are replayed with their outcomes hidden; held-out beta-binomial
+predictive negative log-likelihood (NLL) as a proper scoring rule; true-date
+temporal validation using ClinicalTrials.gov completion dates rather than NCT
+numeric proxies; simulation operating characteristics reported following
+established reporting standards for simulation studies [25]; paired Stage~1
+retrieval benchmarking; comparison against weak-only, rule-based, power-prior-,
+MAP- and UIP-style baselines [3,~4,~19]; and feature ablation. The contributions
+are therefore fourfold: (i) the retrieve $\rightarrow$ rerank $\rightarrow$
+borrow pipeline linking registry retrieval to prior construction; (ii) the
+two-head DeepSets model, which separates the mixture weight from the
+effective-sample-size discount at the level of the individual donor trial;
+(iii) a transparent SAM-style conflict adapter reported as a sensitivity
+mechanism rather than a qualified procedure; and (iv) a label-free retrospective
+calibration protocol for evaluating borrowability pipelines. We draw the
+boundary plainly: automated retrospective evidence of this kind supports method
+development and pre-specification, not clinical borrowing decisions, which
+continue to require disease-specific expert review. The remainder of the paper
+is organised as follows. Section~2 describes the data, the three stages, and
+the evaluation protocol; Section~3 reports retrieval benchmarking, borrowing
+baselines, temporal validation, simulation operating characteristics, and
+worked case studies; Section~4 discusses the implications, the relationship to
+existing adaptive-borrowing methods, and the limitations of the approach.
+
+
+\subsection*{Positioning relative to existing adaptive-borrowing methods}
+
+We state at the outset what is and is not new here, because the individual
+statistical components of this framework have close precedents and we do not
+wish to claim otherwise.
+
+Per-source adaptive weights driven by the information content of each
+historical dataset are the defining feature of the unit information prior (UIP)
+of Jin and Yin [19], which also requires only summary statistics. Deciding how
+much to borrow from covariates without looking at the current outcome --- what
+we call prospective allocation --- is the basis of propensity-score integrated
+power priors and related proactive overlap-based borrowing [20,~21]. Dynamic
+borrowing from trial-level summaries with covariates has been developed as a
+Bayesian model-averaging construction [22], and covariate-adjusted dynamic
+borrowing has been studied in this journal [23]. Outcome-dependent conflict
+adaptation is the SAM prior [11]. The permutation-invariant set architecture we
+use is DeepSets [24], applied here with two output heads; multi-head networks
+are standard practice. Taken individually, therefore, neither a per-source
+effective sample size, nor prospective allocation, nor a two-head set network
+constitutes a new statistical method, and we do not present them as such.
+
+What we did not find a precedent for is the integration: a \emph{learned set
+function} that maps a large, retrieval-derived candidate pool of free-text
+trial records to both a mixture allocation and a per-source effective
+sample-size discount, trained end-to-end against held-out predictive
+likelihood. The contribution we defend is that integration, together with a
+gold-standard simulation protocol that makes the borrowing decision itself ---
+not merely the resulting estimate --- an object of evaluation with known truth.
+The methodological increments over the closest precedents (decoupling the
+allocation from the discount; a set-level rather than per-source conflict
+signal) are, on the evidence below, modest, and we report them as such,
+including where they fail to help.
+
+% ---------------------------------------------------------------------
+\section{Methods}
+
+\subsection{Data source and structured trial summaries}
+The pipeline uses local ClinicalTrials.gov oncology trial records. Each record
+is parsed into a structured summary that includes disease context, patient
+population, regimen, endpoint text, follow-up or time-frame text, eligibility
+criteria, result availability, extractable endpoint observations, and red
+flags. The structured summary is the shared representation used by retrieval,
+reranking, candidate feature construction, and temporal validation.
+
+True date metadata are extracted separately to support temporal validation.
+The date extraction module reads newer ClinicalTrials.gov API-style records
+and local legacy exported JSON structures. It extracts primary completion
+date, completion date, results first posted date, and start date. Dates are
+normalized with precision labels (day, month, year, missing, unparseable).
+Month-only dates are mapped to deterministic mid-month anchors for sorting
+while retaining the precision label. Primary completion date is preferred for
+temporal sorting, followed by completion date, results first posted date,
+start date, and NCT numeric proxy only when true date metadata are
+unavailable. In the current extract this module produced true
+ClinicalTrials.gov temporal metadata for 7{,}173 oncology trials: primary
+completion date was available for all 7{,}173 trials (6{,}631 at day-level and
+542 at month-level precision), and start and results-first-posted dates were
+available for all records, enabling temporal analyses based on primary
+completion dates rather than NCT numeric proxy ordering.
+
+\subsection{Leakage-controlled pseudo-query construction}
+Completed trials are used retrospectively as pseudo-queries. For each
+pseudo-query, the query outcome is hidden from retrieval and reranking.
+Candidate selection uses only structured trial information and historical
+candidate records. The held-out pseudo-query endpoint observation is used only
+for retrospective predictive evaluation. Pipeline-result rows used for
+training or evaluation require explicit leakage-control metadata and held-out
+query outcomes; rows lacking those fields are rejected by the training and
+evaluation code.
+
+The current empirical evidence package focuses on objective response rate
+(ORR) pseudo-queries because ORR endpoint observations are commonly
+extractable from ClinicalTrials.gov result tables in this prototype. As a
+borrowing-layer generality check (Section~\ref{sec:multiendpoint}), disease control rate,
+dose-limiting toxicity, and treatment-discontinuation counts are additionally
+extracted under the same conservative $0 \le y \le n$ admission rule; extending
+the full retrieval and two-head pipeline to each endpoint, which requires
+per-endpoint pseudo-query construction, is treated as a pre-submission
+enhancement and future validation target.
+
+\subsection{Stage 1 retrieval and SECRET pool construction}
+Stage~1 retrieval identifies high-recall candidate historical trials. The
+implemented backends include hashing, ClinicalBERT-style embeddings [13],
+optional Trial2Vec-style retrieval [12], and SECRET-style section retrieval
+[14]. Trial2Vec-style
+retrieval depends on local package, model, and index availability and was
+treated as an optional backend rather than a required component of the present
+evidence package. The SECRET-style path is a deterministic section-weighted
+implementation that emphasizes borrowing-relevant trial sections rather than
+title similarity alone; it should be interpreted as a SECRET-inspired pool
+construction path, not a complete reproduction of the SECRET method [14]. Candidate
+pools produced by Stage~1 are then available for Stage~2 reranking and
+endpoint observation extraction.
+
+The ClinicalBERT backend encodes five weighted aspect views of each trial ---
+disease and population (weight $0.30$), intervention ($0.25$), endpoint
+($0.20$), design ($0.15$), and results and safety ($0.10$) --- using
+mean-pooled \texttt{emilyalsentzer/Bio\_ClinicalBERT} token embeddings
+(maximum sequence length 256) and retrieves candidates by cosine similarity of
+the weighted aspect representation. Bio\_ClinicalBERT is a biomedical language
+model rather than a model trained specifically for trial-to-trial similarity,
+so it is used here only as a high-recall candidate-discovery backend. Stage~1
+returns up to 100 candidates per query, of which the top 10 reranked candidates
+are carried forward to endpoint extraction and mixture-prior construction.
+
+The paired Stage~1 benchmark compares retrieval outputs on common query IDs
+using the same endpoint key and candidate budget. This paired design avoids
+comparing backend results across different query sets and supports query-level
+bootstrap confidence intervals for metric differences.
+
+\subsection{Explainable Stage 2 reranking}
+Stage~2 reranking scores candidate pairs using borrowing-relevant features.
+The current feature schema includes overall similarity, disease match, regimen
+match, endpoint match, follow-up match, eligibility match, result quality,
+negative red-flag severity, and information size. These features are intended
+to make the basis for candidate prioritization auditable. They are not expert
+labels and are not interpreted as final clinical borrowing decisions. The
+rule-based raw weight for a component combines clinical gating, discounting,
+similarity, and information size:
+\begin{equation}
+w_i \;=\; \mathrm{gate}_i \cdot a_i \cdot \frac{\max(\mathrm{overall}_i,0)}{100}
+\cdot \log(1+n_i).
+\end{equation}
+Here $\mathrm{overall}_i$ is the Stage~2 overall similarity on a $0$--$100$
+scale and $n_i$ the candidate endpoint denominator; the individual reranking
+dimensions are scored on a $0$--$5$ scale. The gate is deliberately
+conservative: $\mathrm{gate}_i = 0$ when the endpoint match falls below $1.5$
+on the $0$--$5$ scale or result usability is zero; otherwise
+$\mathrm{gate}_i = 1$, multiplied by $0.2$ for severe disease mismatch (disease
+match below $1.5$), by $0.6$ for moderate disease mismatch (below $2.5$), and
+by $0.5$ when a low-quality red flag is present. Endpoint-incompatible
+candidates, candidates without usable result data, severe disease mismatch, and
+red flags can therefore remove or downweight a candidate before any learned
+model assigns mixture mass. This design prevents retrospective predictive fit
+from overriding basic endpoint, result, and clinical-compatibility checks.
+
+\subsection{Endpoint observations and beta-binomial components}
+For candidate $i$, the pipeline extracts an endpoint observation
+$(y_i,n_i)$ when a compatible result table is available, where $y_i$ is the
+candidate endpoint response or event count and $n_i$ is the candidate endpoint
+denominator. Candidates without compatible endpoint observations can still be
+retrieved and reranked, but they do not contribute a historical beta-binomial
+component. When an endpoint observation is usable, the candidate contributes a
+beta component
+\begin{equation}
+\alpha_i = 1 + a_i y_i, \qquad
+\beta_i  = 1 + a_i (n_i - y_i),
+\end{equation}
+where $a_i$ is an effective sample-size discount that controls the amount of
+information borrowed inside the candidate beta component.
+
+\subsection{Mixture prior, mixture weights, and effective sample-size discounts}
+The prior for the response probability $\theta$ is represented as a weak
+component plus historical components:
+\begin{equation}
+p(\theta) \;=\; \lamz\,\mathrm{Beta}(\theta\mid 1,1)
+\;+\; \sum_i \lambda_i\,\mathrm{Beta}(\theta\mid \alpha_i,\beta_i).
+\end{equation}
+The current prototype uses $\lamz = 0.2$ by default unless otherwise
+specified. Raw historical weights are normalized to the remaining prior mass
+$1-\lamz$. If all raw historical weights are zero, the prior falls back to a
+weak-only form with $\lamz = 1$. The component weight $\lambda_i$ and the
+discount $a_i$ are conceptually distinct: the former controls allocation
+across mixture components, whereas the latter controls the effective sample
+size inside a component. The two-head DeepSets model is designed to preserve
+this distinction by learning mixture allocation and sample-size discounting as
+separate outputs. When model-based weights are applied, the implementation
+retains rule-based weights and rule-based beta parameters for auditability.
+
+\subsection{Two-head DeepSets model for mixture weights and discounts (core method)}
+The two-head DeepSets model is the central methodological contribution of this
+work. Classical robust priors assign a single pooled weight to all historical
+evidence and set the borrowing discount separately or by fixed rule; here both
+quantities are instead learned as \emph{candidate-specific} functions of
+borrowability features while remaining a permutation-invariant function of the
+whole retrieved candidate set. The learned prior therefore replaces the
+rule-based mixture weight $\lambda_i$ and, optionally, the effective sample-size
+discount $a_i$ with the two output heads of a single model. The paired
+benchmarks in Sections~\ref{sec:headtohead-results}, \ref{sec:forward-results},
+and~\ref{sec:calib-results} evaluate exactly this model
+(\texttt{two\_head}, and \texttt{two\_head\_sam} when combined with the
+Section~2.8 conflict adapter).
+
+\paragraph{Candidate features.} Each candidate $i$ is represented by a
+nine-dimensional feature vector
+\begin{equation}
+x_i = \big[\, s_i,\ d^{\mathrm{dis}}_i,\ d^{\mathrm{reg}}_i,\ d^{\mathrm{end}}_i,\
+d^{\mathrm{fu}}_i,\ d^{\mathrm{elig}}_i,\ q^{\mathrm{res}}_i,\
+-\,\mathrm{rf}_i,\ \log(1+n_i) \,\big],
+\end{equation}
+where $s_i$ is the Stage~2 overall similarity divided by $100$, each match term
+$d^{\bullet}_i$ is the corresponding $0$--$5$ dimension score divided by $5$,
+the red-flag severity $\mathrm{rf}_i \in [0,1]$ enters with a negative sign, and
+$\log(1+n_i)$ encodes information size on a diminishing-returns scale. These are
+the same auditable borrowability dimensions used by the rule reranker
+(Section~2.4), so the learned and rule priors operate on identical inputs and
+differ only in how those inputs are combined.
+
+\paragraph{DeepSets backbone.} A shared per-candidate encoder $\phi$ (a
+one-hidden-layer network of width $16$ with a ReLU activation) maps each $x_i$
+to a hidden vector. The set context is the mean of $\phi$ over the retrieved
+candidate set, $c = \tfrac{1}{K}\sum_j \phi(x_j)$; this permutation-invariant
+pooling is the DeepSets construction and makes every candidate score
+independent of candidate ordering and dependent on the whole candidate pool
+rather than the candidate in isolation. A function $\rho$ combines the
+candidate embedding $\phi(x_i)$ with the pooled context $c$ to yield a raw score
+$z_i$, so that borrowing ``this candidate relative to the rest of the set'' is
+expressible --- the property a single pooled prior cannot represent.
+
+\paragraph{Head 1 --- mixture allocation.} The allocation head converts scores
+to mixture weights through a gated softmax over candidates,
+\begin{equation}
+\lambda_i = (1-\lamz)\,\frac{\exp(z_i)\,\mathrm{gate}_i}{\sum_j \exp(z_j)\,\mathrm{gate}_j},
+\end{equation}
+so candidates with $\mathrm{gate}_i = 0$ (the conservative clinical gate of
+Section~2.4) are masked entirely, $\sum_i \lambda_i = 1-\lamz$, and
+$\lamz + \sum_i \lambda_i = 1$. If every gate is zero the prior collapses to
+weak-only ($\lamz = 1$).
+
+\paragraph{Head 2 --- effective sample-size discount.} The second head outputs a
+per-candidate discount $a_i \in (0,1]$, which reconstructs that candidate's beta
+component as $\alpha_i = 1 + a_i y_i$ and $\beta_i = 1 + a_i(n_i - y_i)$.
+Separating $a_i$ (how much information a borrowed component carries) from
+$\lambda_i$ (how much mixture mass it receives) is the key modeling choice:
+allocation and information size are learned independently rather than tied to a
+single weight. If a checkpoint has no discount head, the rule discount and its
+beta parameters are used.
+
+\paragraph{Training objective.} The model is trained end-to-end by minimizing,
+over training pseudo-queries, the combined loss
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\mathrm{pred}}
++ \rho\,\mathrm{KL}(\lambda^{\mathrm{rule}}\,\|\,\lambda^{\mathrm{model}})
++ \eta\,\mathcal{L}_{\mathrm{list}}
++ \mathcal{L}_{\mathrm{ESS}},
+\end{equation}
+whose terms are: (i)~the primary predictive loss $\mathcal{L}_{\mathrm{pred}}$,
+the mean held-out beta-binomial mixture predictive NLL (Section~2.9);
+(ii)~a Kullback--Leibler term pulling the learned candidate allocation toward
+the rule allocation with weight $\rho = 0.1$, a mild regularizer that stabilizes
+the fit on small data without forcing it to copy the rule; (iii)~an optional
+listwise allocation term with weight $\eta$ (disabled by default, $\eta = 0$)
+whose target $t_i = \mathrm{softmax}_i(r_i/T)$ is built from each candidate's
+relative held-out log predictive
+$r_i = \log P(y_0\mid n_0,\alpha_i,\beta_i) - \log P(y_0\mid n_0,1,1)$, giving a
+within-candidate-set signal for which donors best explain the held-out outcome;
+and (iv)~an effective sample-size penalty
+$\mathcal{L}_{\mathrm{ESS}} = 10^{-4}\,\max\!\big(\sum_i \lambda_i a_i n_i - \mathrm{ESS_{cap}},\,0\big)^2$
+with $\mathrm{ESS_{cap}} = 100$. Held-out evaluation uses only the pure
+predictive NLL and excludes all regularizers. Optimization used Adam
+(learning rate $0.01$) for $100$ epochs with hidden width $16$; the model was
+fit on an $80\%$ split of the pseudo-queries (seed $20260603$) and, for the
+leakage-free forward analysis, retrained on past-only data at each temporal
+cutoff (Section~\ref{sec:forward-results}).
+
+\paragraph{Inference.} For a new query with no available outcome, Stages~1--2
+produce the candidate set and features; the model outputs $\lambda_i$ and $a_i$,
+the mixture prior is assembled, and the rule-based $\lambda^{\mathrm{rule}}$ and
+beta parameters are retained alongside the learned values so that reports can
+compare rule-based versus learned prior mass. The SAM conflict adapter
+(Section~2.8) is applied afterward only when the current outcome is available
+and conflict adaptation is requested.
+
+\subsection{SAM-style prior-data conflict adaptation}
+An optional conflict adapter in the style of the self-adapting mixture (SAM)
+prior [11] is evaluated as a sensitivity analysis.
+The adapter downweights historical components when the pseudo-query outcome
+conflicts with the prior predictive distribution. Let
+$P_{\mathrm{weak}} = P(y_0 \mid n_0, 1, 1)$ be the weak-prior predictive of the
+held-out outcome and
+$P_{\mathrm{hist}} = \sum_i \tilde\lambda_i\,P(y_0 \mid n_0, \alpha_i, \beta_i)$
+the historical-informative predictive, where $\tilde\lambda_i$ are the active
+candidate weights renormalized to sum to one. With the conflict ratio
+$R = P_{\mathrm{hist}}/P_{\mathrm{weak}}$, the borrowing multiplier is $1$ when
+$R \ge 1$ and $R^{\tau}$ when $R < 1$ (temperature $\tau = 1$); each active
+candidate weight is scaled by this multiplier and the removed mass is returned
+to the weak component. Borrowing is thus preserved when the historical prior is
+at least as consistent with the data as the weak prior, and progressively
+withdrawn as prior-data conflict grows. In this manuscript, SAM adaptation is
+interpreted as a transparent conflict-sensitivity mechanism, not as a regulatory
+qualification procedure. Because SAM uses the observed (pseudo-)query outcome to
+assess prior-data conflict, it cannot be used to pre-select historical evidence
+before the trial outcome is observed; any applied use would require embedding it
+within a pre-specified dynamic-borrowing design.
+
+\subsection{Prospective set-level conflict signal}
+\label{sec:prospective}
+The nine reranking dimensions all describe design and surface comparability:
+disease, regimen, endpoint definition, follow-up window, eligibility, result
+quality, red flags and information size. None of them carries any information
+about whether a candidate's \emph{observed outcome} is discrepant. We therefore
+add one further input, computed from the donors alone.
+
+For candidate $i$ with observed rate $r_i = y_i/n_i$, let $m_{-i}$ be the
+sample-size-weighted median of $\{r_j : j \neq i\}$ and let $s_{-i}$ be the
+corresponding weighted median absolute deviation, scaled by $1.4826$ and
+floored at $0.02$. The set-level conflict signal is
+\[
+  g_i \;=\; \min\!\left(\frac{|r_i - m_{-i}|}{s_{-i}},\; 8\right).
+\]
+The leave-one-out construction matters: including candidate $i$ in the
+consensus it is measured against would let a single dominant donor define its
+own reference and mask the outlier we are trying to detect.
+
+Crucially $g_i$ uses only outcomes that are already published for the candidate
+trials; the query trial's outcome never enters. The signal is therefore
+available at design time, which distinguishes it from SAM (Section~2.8) and
+from UIP-JS [19], both of which compute their conflict measure against the
+current trial's data. We report $g_i$-augmented and $g_i$-free versions of the
+same model throughout, so that its contribution can be read directly.
+
+\subsection{Gold-standard borrowability simulation}
+\label{sec:goldsim}
+The retrospective analyses above establish that the pipeline works on real
+registry text, but they cannot establish whether it borrows from the
+\emph{right} trials, because the truth is unknown. We therefore added a
+simulation in which the truth is known by construction, reported following
+ADEMP [25].
+
+\paragraph{Data-generating mechanism.} Trial attributes (line of therapy,
+histology, regimen, PD-L1 status, biomarker) are drawn first, and the true
+response rate follows from them through a non-linear map with interaction terms
+(immunotherapy benefits only PD-L1-high patients; targeted therapy only the
+biomarker-enriched subgroup). Parameters are anchored to advanced non-small-cell
+lung cancer: first-line chemo-immunotherapy ORR near $0.50$--$0.60$, second-line
+immunotherapy monotherapy near $0.20$, third line and beyond near $0.10$, with
+per-arm sizes concentrated between 20 and 60.
+
+Two properties are deliberate. First, the mechanism is \emph{not} the fitted
+model: truth is generated from latent attributes through a non-linear map the
+borrowing methods never observe, and the methods see only noisy nine-dimensional
+feature scores. A simulation whose data-generating mechanism coincides with the
+analysis model would be self-confirming. Second, surface similarity is driven by
+disease and regimen, whereas the true rate is driven mainly by line of therapy
+and PD-L1 status. Trap donors (textually similar, not exchangeable) and hidden
+gems (textually dissimilar, exchangeable) therefore arise from clinical
+structure rather than from artificial injection, and non-exchangeability is
+triggered by several distinct causes --- population mismatch, incompatible
+endpoint definition, poor result quality, and insufficient information size ---
+rather than one.
+
+\paragraph{Gold standard.} Borrowing correctness is defined at the parameter
+level, not by surface similarity. A donor is borrowable if and only if its
+observed rate lies within $\epsilon = 0.05$ of the query's true rate. We use the
+observed rather than the latent rate deliberately: a donor whose endpoint
+definition biases its reported rate will damage a borrowed analysis even when
+its underlying biology is comparable, so the decision-relevant quantity is the
+rate that actually enters the likelihood. As an auxiliary standard we also
+compute the oracle allocation, which places mass on exchangeable donors in
+proportion to their information and zero elsewhere, and report rank agreement
+between each method's weights and that oracle.
+
+\paragraph{Estimand, methods and performance measures.} The estimand is the
+query trial's true response rate $\theta_0$, together with the per-donor
+borrowable/not label and the oracle allocation. Thirteen priors are compared
+(Section~4.6). Performance measures are bias, empirical standard error, RMSE and
+credible-interval coverage for $\theta_0$; sensitivity, specificity, PPV, NPV
+and ROC/PR-AUC for the borrowing decision; prior effective sample size; and
+agreement with the oracle allocation. All quantities carry Monte Carlo standard
+errors. We use statistical rather than machine-learning nomenclature throughout,
+and we keep the two levels separate: type I error and power refer to the trial
+decision, while sensitivity and specificity refer to the donor-level borrowing
+decision.
+
+\paragraph{Design-based operating characteristics.} Type I error requires a
+null that does not depend on the realised truth. We therefore embed the
+simulation in a standard single-arm oncology design testing
+$H_0\!:\theta \le 0.20$ against $H_1\!:\theta > 0.20$, declaring success when the
+posterior probability of $H_1$ exceeds $0.975$. Operating characteristics are
+evaluated in two worlds: a null world in which $\theta_0 = 0.20$ exactly, where
+the rejection rate is the type I error, and an alternative world in which
+$\theta_0 = 0.35$, where it is the power. Pinning $\theta_0$ is done by shifting
+the query and all donors by a common offset on the logit scale, so that every
+exchangeability relationship in the donor pool is preserved and only the
+location changes. Both worlds are swept across increasing prior-data conflict.
+
+We note that a Bayesian test of a point null with a flat prior does not attain
+its nominal level exactly at these sample sizes because the binomial is
+discrete. We therefore report the no-borrowing rejection rate alongside the
+nominal $0.025$ as the achievable reference level.
+
+\subsection{External control arm scenario}
+\label{sec:ecmethods}
+The same machinery applies when the borrowing target is a control arm rather
+than a treatment arm. In this scenario the current trial randomises to a
+treatment arm ($n = 40$--$70$) and a small internal control arm ($n = 15$--$30$);
+candidates are historical control arms. A proportion of external controls share
+the internal control's true rate, and the remainder are displaced by a
+systematic logit drift representing population or temporal shift. Borrowing
+augments the internal control to form a hybrid control, and the estimand is the
+treatment effect $\theta_{\mathrm{trt}} - \theta_{\mathrm{ctl}}$, with success
+declared when $P(\theta_{\mathrm{trt}} > \theta_{\mathrm{ctl}} \mid \text{data})
+> 0.975$. Because both posteriors are evaluated on a common grid, the law of the
+difference is obtained exactly as the discrete cross-correlation of the two
+densities rather than by Monte Carlo.
+
+The failure mode of interest is directional: external controls that are
+systematically \emph{worse} than the internal control drag the hybrid control
+downward, inflate the apparent treatment effect, and raise type I error. We
+therefore sweep the drift in both directions and report type I error, power,
+bias of the hybrid control rate, and the false-positive rate of borrowing
+non-comparable external controls.
+
+\subsection{Evaluation without expert borrowability labels}
+Expert borrowability labels were unavailable. Evaluation therefore used
+internal retrospective and simulation evidence:
+\begin{enumerate}[nosep,leftmargin=2em]
+\item held-out beta-binomial predictive NLL;
+\item true-date temporal (subset and leakage-free rolling-origin) NLL;
+\item simulation operating characteristics;
+\item paired Stage~1 backend benchmarking;
+\item borrowing baseline head-to-head comparisons;
+\item feature ablation and section-weight sensitivity;
+\item software verification through focused and full unit-test runs.
+\end{enumerate}
+All results are interpreted as retrospective predictive calibration or
+simulation evidence. They do not establish expert-level borrowability of
+individual candidates. Table~\ref{tab:datasets} summarizes the evaluation
+datasets, sample sizes, train/test splitting, leakage status, and endpoint
+scope of each analysis so that the different evidence layers are not conflated.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Evaluation datasets and evidence layers. ``Leakage-free'' marks
+analyses in which no evaluated model saw the scored query during fitting;
+``model-development'' marks the retrospective head-to-head, in which closed-form
+priors are leakage-free by construction but the learned rows include queries
+that contributed to model development. All primary analyses use objective
+response rate (ORR) pseudo-queries; the multi-endpoint check is a
+borrowing-layer analysis only.}
+\label{tab:datasets}
+\begin{tabular}{p{0.235\textwidth}p{0.135\textwidth}p{0.30\textwidth}p{0.19\textwidth}}
+\toprule
+Analysis & Size & Split / leakage status & Endpoint scope \\
+\midrule
+Paired Stage~1 retrieval benchmark & 1{,}470 common queries & Query outcome hidden from retrieval/rerank; paired on common query IDs & ORR \\
+Borrowing head-to-head + calibration & 1{,}407 queries & Retrospective model-development; closed-form rows leakage-free, learned rows include development queries & ORR \\
+Two-head training & 80\%/20\% split (seed 20260603) & Fit on 80\%, scored on held-out 20\% & ORR \\
+Leakage-free rolling-origin forward & train 629/810/1{,}017; future folds 785/604/397 & Train-on-past / test-on-future at cutoffs 2020/2021/2022-12-31; per-fold retraining & ORR \\
+Operating-characteristics simulation & 6 scenarios (500 iter) + conflict/$\lamz$ sweeps (5{,}000 iter) & Known-truth simulation (no real-data leakage) & Simulated binary endpoint \\
+Sham-borrowing negative controls & 1{,}407 queries $\times$ 3 conditions & Label-free negative control (real vs unrelated-donor vs rate-permuted history) & ORR \\
+Multi-endpoint borrowing-layer check & ORR/CR/PR 300, DCR 38, DLT 300, discontinuation 20 & Leave-one-trial-out pooled robust-MAP; borrowing layer only, not full pipeline & 4 binary families \\
+Extraction-quality audit & 7{,}173 trials (26{,}066 arm rows) & Automated consistency checks + synthetic round-trip; manual data-entry spot check & All extracted counts \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Predictive scoring metric.} For a pseudo-query with held-out
+treatment-arm outcome $(y_0, n_0)$ and a mixture prior with components indexed
+by $k$ (the weak component with $\alpha_0 = \beta_0 = 1$ and the historical
+components), the beta-binomial predictive probability is
+\begin{equation}
+P(y_0 \mid n_0) = \sum_k \lambda_k\,\binom{n_0}{y_0}\,
+\frac{B(y_0+\alpha_k,\ n_0-y_0+\beta_k)}{B(\alpha_k,\beta_k)},
+\end{equation}
+where $B$ is the beta function. The reported predictive NLL is
+$-\log P(y_0 \mid n_0)$, averaged over pseudo-queries and computed in log space.
+The primary quantitative evaluation throughout is this prior-predictive,
+held-out predictive scoring; posterior summaries reported elsewhere (for
+example, the predicted response rates in the worked examples) are illustrative
+and are not the basis of the quantitative comparisons.
+Calibration diagnostics (Section~\ref{sec:calib-results}) use the randomized probability integral
+transform appropriate for discrete beta-binomial predictions, empirical
+$50/80/95\%$ credible-interval coverage, and a reliability slope.
+
+\paragraph{Evaluation protocol and leakage.} Learned two-head models were
+trained on an $80\%$ split of the pseudo-queries (seed $20260603$) and evaluated
+on the held-out remainder for model development. The borrowing head-to-head and
+calibration comparisons (Sections~\ref{sec:headtohead-results}
+and~\ref{sec:calib-results}) report
+every method on the common set of $1{,}407$ ORR pseudo-queries so that all
+priors are scored on identical queries; closed-form priors require no fitting
+and are leakage-free by construction, whereas the learned rows in these
+retrospective comparisons include queries that contributed to model
+development. The leakage-free generalization estimate for the learned models is
+therefore the rolling-origin forward validation in Section~\ref{sec:forward-results}, in which a
+two-head DeepSets model is retrained on past-only data at each cutoff and scored
+only on strictly future trials.
+
+\subsection{Software verification and evidence-package status}
+The mixture-prior utilities are implemented as a pure-Python statistical
+module, while the broader pipeline contains trial parsing, retrieval,
+reranking, Bayesian analysis, mixture-prior construction, SAM adaptation, and
+Web Agent output. Fresh local verification passed 22 focused mixture-prior
+unit tests and 142 unit tests under full discovery, plus 65 additional
+label-free evidence-module tests. Large runtime artifacts, model checkpoints,
+and local ClinicalTrials.gov exports are excluded from version control and
+require local regeneration or separate release archiving. Although the
+implementation plan records fail-first test steps, complete historical RED
+logs were not retained and should not be claimed as a complete
+test-driven-development audit chain.
+
+% ---------------------------------------------------------------------
+\section{Results}
+
+\subsection{SECRET pool improved paired Stage 1 retrieval metrics}
+\label{sec:retrieval}
+The paired Stage~1 benchmark compared hashing and SECRET pool retrieval on
+1{,}470 common ORR pseudo-queries using the same candidate budget. SECRET pool
+increased reranked component-readiness from $0.5450$ to $0.6361$ (paired delta
+$0.0912$; bootstrap CI $0.0799$ to $0.1018$) and reranked endpoint-match score
+from $2.2281$ to $3.3327$ (paired delta $1.1047$; CI $1.0600$ to $1.1503$).
+Endpoint-and-result readiness at the top-$k$ level was unchanged in this
+comparison.
+
+\subsection{Borrowing baseline comparisons}
+\label{sec:headtohead-results}
+The borrowing baseline comparison used 1{,}407 ORR pseudo-query examples,
+computed with the genuine two-head DeepSets checkpoint (the same evaluation
+reported in Section~\ref{sec:calib-results}; Figure~\ref{fig:nll}). The weak-only prior had mean NLL $3.1933$
+and the rule mixture baseline $3.1800$. The trained two-head mixture model
+achieved mean NLL $3.0562$ (delta $-0.1238$ relative to rule); the
+conflict-adapted rule baseline achieved $2.9755$ (delta $-0.2045$); and the
+same SAM adapter applied to the trained two-head prior achieved $2.9328$
+(delta $-0.2472$). MAP-like and power-prior-like baselines had higher NLLs
+($3.2793$ and $3.3124$, respectively). The full head-to-head ranking, including
+a tuned RBesT-style robust meta-analytic-predictive prior, is given in
+Table~\ref{tab:headtohead}. These results suggest that calibrated
+mixture allocation and explicit prior-data conflict adaptation improve
+retrospective predictive performance; they do not show that individual
+historical candidates are expert-approved for borrowing. Because the learned
+rows in this comparison include queries that contributed to model development,
+this head-to-head is retrospective model-development evidence; the leakage-free
+estimate for the learned priors is the rolling-origin forward evaluation
+(Section~\ref{sec:forward-results}).
+
+\begin{table}[htbp]
+\centering
+\caption{Borrowing-prior head-to-head: held-out beta-binomial predictive NLL
+(lower is better) and empirical 95\% credible-interval coverage on 1{,}407
+leakage-controlled ORR pseudo-queries (a retrospective, model-development
+comparison). Among the evaluated priors, the two-head DeepSets mixture prior
+with the SAM conflict adapter had the lowest NLL and favorable calibration,
+ahead of the best-tuned robust-MAP prior. Coverage alone does not define
+calibration: a diffuse prior such as weak-only can achieve high interval
+coverage while remaining uninformative.}
+\label{tab:headtohead}
+\begin{tabular}{llrr}
+\toprule
+Method & Family & Mean NLL & 95\% coverage \\
+\midrule
+\textbf{two\_head\_sam} & learned + SAM & \textbf{2.9328} & 0.988 \\
+rule\_sam & rule + SAM & 2.9755 & 0.986 \\
+two\_head & learned & 3.0562 & 0.972 \\
+robust\_map ($w{=}0.5$) & robust-MAP & 3.1348 & 0.979 \\
+rule & rule & 3.1800 & 0.948 \\
+weak\_only & none & 3.1933 & 0.984 \\
+commensurate\_like & classical & 3.1982 & 0.940 \\
+map\_like & classical & 3.2793 & 0.924 \\
+power\_prior\_like & classical & 3.3124 & 0.916 \\
+robust\_map ($w{=}0.9$) & robust-MAP & 3.4784 & 0.897 \\
+\bottomrule
+\end{tabular}
+\end{table} Point-prediction
+metrics should be interpreted more cautiously than count-level predictive
+likelihood: the current ORR point-prediction correlation was low, indicating
+the model is better viewed as a borrowing-weight calibration model than as an
+ORR regression model.
+
+To answer whether a standard robust prior would suffice, the head-to-head in
+Table~\ref{tab:headtohead} also includes a tuned robust
+meta-analytic-predictive (MAP) prior [5] in the style of the RBesT tools [15]
+(a robustified mixture of a pooled MAP
+component and a vague component). Its best-tuned configuration reached held-out
+NLL $3.135$ --- better than naive rule ($3.180$) and weak-only ($3.193$)
+borrowing but clearly worse than the conflict-adapted mixture priors --- and it
+was sensitive to its robustification weight, degrading to $3.32$ and $3.48$ at
+higher weights as a single pooled MAP over-borrowed from homogeneously treated
+historical evidence.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F1_headtohead_nll}
+  \caption{\textbf{Borrowing-prior head-to-head.} (a)~Held-out beta-binomial
+  predictive NLL (lower is better) for each borrowing prior on 1{,}407 ORR
+  pseudo-queries; the two-head + SAM mixture prior is lowest ($2.933$), ahead
+  of a tuned RBesT-style robust meta-analytic-predictive (MAP) prior (best
+  $3.135$). (b)~Empirical 95\% credible-interval coverage per method.}
+  \label{fig:nll}
+\end{figure}
+
+\subsection{Leakage-free rolling-origin forward evaluation}
+\label{sec:forward-results}
+To move beyond retrospective temporal-subset scoring, we evaluated held-out
+predictive NLL
+under rolling-origin, train-on-past/test-on-future splits defined by true
+primary completion dates (cutoffs 2020-12-31, 2021-12-31, 2022-12-31;
+evaluation restricted to the future fold, with 785, 604, and 397 held-out
+trials respectively; Figure~\ref{fig:forward}). Closed-form priors require no fitting, so their
+future-fold NLL is a genuinely leakage-free forward evaluation. The rule-SAM
+mixture prior improved future-fold NLL over the rule baseline by $-0.1775$,
+$-0.1784$, and $-0.1736$ nats at the three cutoffs, with paired bootstrap 95\%
+confidence intervals $[-0.2023,-0.1524]$, $[-0.2092,-0.1489]$, and
+$[-0.2082,-0.1368]$; all intervals exclude zero. Averaged across cutoffs,
+held-out NLL was $2.923$ for rule-SAM, $3.100$ for rule, and $3.113$ for
+weak-only, while map-like and power-prior-like baselines were worse ($3.27$ and
+$3.29$), and 95\% interval coverage on the future fold remained near nominal
+($0.96$--$0.99$). The trained two-head and two-head-SAM priors achieved the
+lowest future-fold NLL ($2.984$ and $2.880$, with per-cutoff improvements over
+rule of approximately $-0.10$ to $-0.24$); because each cutoff was scored with
+a two-head DeepSets model retrained on past-only (date at or before the cutoff)
+data, these learned-model rows are now leakage-free as well, with all
+per-cutoff improvements retaining paired bootstrap 95\% confidence intervals
+that exclude zero (Table~\ref{tab:forward}). Non-leakage-controlled date-based
+subsets (annual cutoffs 2019--2022) showed the same ordering, with two-head-SAM
+improving mean NLL over the rule baseline by $-0.247$ to $-0.259$ nats.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F2_forward_validation}
+  \caption{\textbf{Leakage-free rolling-origin forward evaluation.}
+  (a)~Aggregated future-fold NLL across three train-on-past / test-on-future
+  cutoffs; two-head + SAM is lowest ($2.880$). (b)~Per-cutoff improvement over
+  the rule baseline with paired bootstrap 95\% confidence intervals, all
+  excluding zero. Learned-model rows use two-head DeepSets models retrained on
+  past-only data at each cutoff.}
+  \label{fig:forward}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Rolling-origin forward evaluation (leakage-free). Held-out NLL on the
+future fold under train-on-past / test-on-future evaluation (cutoffs
+2020/2021/2022-12-31), averaged across cutoffs. Learned rows use two-head
+DeepSets models retrained on past-only data at each cutoff, so all methods are
+leakage-free.}
+\label{tab:forward}
+\begin{tabular}{lrrc}
+\toprule
+Method & Future-fold NLL & Mean 95\% cov. & Leakage-free \\
+\midrule
+\textbf{two\_head\_sam} & \textbf{2.8799} & 0.996 & yes \\
+rule\_sam & 2.9232 & 0.991 & yes \\
+two\_head & 2.9836 & 0.977 & yes \\
+rule & 3.0997 & 0.961 & yes \\
+weak\_only & 3.1125 & 0.995 & yes \\
+commensurate\_like & 3.1374 & 0.942 & yes \\
+map\_like & 3.2741 & 0.912 & yes \\
+power\_prior\_like & 3.2909 & 0.904 & yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Predictive calibration diagnostics}
+\label{sec:calib-results}
+We assessed calibration against the real held-out outcome using the
+probability integral transform (PIT), interval coverage, and a reliability
+slope, rather than a single mean NLL (Figure~\ref{fig:calib}). On the 1{,}407 ORR pseudo-queries the
+two-head-SAM prior showed the most favorable calibration diagnostics among the
+evaluated priors, with mean held-out NLL $2.933$, PIT Kolmogorov--Smirnov
+distance to uniformity $0.146$, empirical 95\% credible-interval coverage
+$0.988$, and reliability slope $1.28$; rule-SAM was similar (KS $0.196$, slope
+$1.27$). These diagnostics are improved but not perfect: the reliability slope
+exceeds unity and the PIT is not exactly uniform, so we describe this as
+improved calibration rather than achieved calibration. By contrast, the weak-only and
+non-conflict-adapted priors were systematically optimistic (weak-only PIT mean
+$0.32$, KS $0.29$; 50\% intervals covered only $0.44$). Conflict adaptation
+both lowered NLL and moved the PIT mean and coverage toward nominal
+(Table~\ref{tab:calib}).
+
+\begin{table}[htbp]
+\centering
+\caption{Predictive calibration diagnostics against the real held-out outcome:
+PIT Kolmogorov--Smirnov distance to uniformity (smaller is better), empirical
+coverage of 50/80/95\% credible intervals, and the reliability slope (the slope
+of observed on predicted response rate across binned predictions; $1.0$ =
+perfectly calibrated). Among the evaluated priors, the two-head + SAM prior
+shows the most favorable diagnostics, though not perfect calibration; the
+weak-only and classical priors are systematically optimistic.}
+\label{tab:calib}
+\begin{tabular}{lrrrrrr}
+\toprule
+Method & Mean NLL & PIT KS & Cov50 & Cov80 & Cov95 & Reliab.\ slope \\
+\midrule
+\textbf{two\_head\_sam} & \textbf{2.933} & \textbf{0.146} & 0.596 & 0.878 & 0.988 & \textbf{1.28} \\
+rule\_sam & 2.976 & 0.196 & 0.525 & 0.825 & 0.986 & 1.27 \\
+two\_head & 3.056 & 0.146 & 0.525 & 0.822 & 0.972 & 0.33 \\
+rule & 3.180 & 0.199 & 0.444 & 0.738 & 0.948 & 0.20 \\
+weak\_only & 3.193 & 0.289 & 0.438 & 0.776 & 0.984 & -- \\
+map\_like & 3.279 & 0.237 & 0.403 & 0.702 & 0.924 & 0.11 \\
+power\_prior\_like & 3.312 & 0.224 & 0.397 & 0.689 & 0.916 & 0.05 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F3_calibration}
+  \caption{\textbf{Predictive calibration.} (a)~PIT uniformity, (b)~reliability
+  curve (predicted vs.\ observed response rate), (c)~50/80/95\% interval
+  coverage, and (d)~reliability slope, comparing the two-head + SAM prior
+  against rule + SAM, the two-head prior without SAM, and the weak-only prior.
+  Conflict adaptation improves selected calibration diagnostics --- the
+  reliability slope rises from $0.33$ for two-head alone to $1.28$ with SAM
+  (values above $1.0$ indicate remaining miscalibration) --- and two-head + SAM
+  shows the most favorable diagnostics among the compared priors (lowest PIT-KS
+  $0.146$, near-nominal coverage).}
+  \label{fig:calib}
+\end{figure}
+
+\subsection{Sham-borrowing negative controls}
+\label{sec:sham-results}
+Because expert labels are unavailable, we used sham-borrowing negative
+controls as a label-free discrimination test: holding each query outcome
+fixed, the historical evidence was replaced by (a)~an unrelated donor query's
+history and (b)~rate-permuted history that preserves information size but
+scrambles the borrowed rate (Figure~\ref{fig:sham}). The weak-only prior is invariant across
+conditions by construction. For every borrowing method, held-out NLL relative
+to weak-only was better on real matched history than on sham history; for the
+rule mixture, borrowing helped on real history (delta $-0.013$) but not on
+unrelated ($+0.030$) or rate-permuted ($+0.003$) history, so borrowing the
+wrong evidence was worse than not borrowing. The SAM adapter responded to sham
+history by increasing its trigger rate (from $0.394$ on real to $0.426$ on
+unrelated history) and stripping historical mass; its assigned historical mass
+separated real from sham history only weakly (mass-based AUC $0.52$ versus
+exactly $0.50$ for fixed-weight methods, i.e.\ close to chance). These
+label-free controls indicate that the method reduced historical influence under
+constructed sham-history corruption; they do not establish clinical
+non-comparability of any historical evidence (Table~\ref{tab:sham}).
+
+\begin{table}[htbp]
+\centering
+\caption{Sham-borrowing negative controls. Held-out NLL change relative to no
+borrowing when the query outcome is held fixed but the historical evidence is
+real versus corrupted (an unrelated donor's history or rate-permuted history);
+negative means borrowing helps. The fixed-weight rule prior is harmed by
+borrowing the wrong evidence, whereas the SAM adapter raises its trigger rate
+and protects predictive performance.}
+\label{tab:sham}
+\begin{tabular}{llrrr}
+\toprule
+Method & Condition & $\Delta$NLL vs weak & Hist.\ mass & SAM trigger \\
+\midrule
+\textbf{two\_head\_sam} & real & \textbf{$-0.2605$} & 0.636 & 0.394 \\
+two\_head\_sam & unrelated donor & $-0.2362$ & 0.616 & 0.426 \\
+two\_head\_sam & rate-permuted & $-0.1753$ & 0.640 & 0.399 \\
+rule & real & $-0.0133$ & 0.738 & 0.000 \\
+rule & unrelated donor & \textbf{$+0.0300$} & 0.738 & 0.000 \\
+rule & rate-permuted & $+0.0031$ & 0.738 & 0.000 \\
+weak\_only & (any) & 0.0000 & 0.000 & 0.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F5_sham_controls}
+  \caption{\textbf{Sham-borrowing negative controls.} Change in held-out NLL
+  relative to no borrowing when the historical evidence is real, drawn from an
+  unrelated donor query, or rate-permuted; the SAM-adapted priors remain
+  negative while the fixed-weight rule prior becomes positive on sham history,
+  suggesting sensitivity to constructed sham-history corruption rather than
+  validated withholding of clinically non-comparable evidence.}
+  \label{fig:sham}
+\end{figure}
+
+\subsection{Operating characteristics and conflict detection}
+\label{sec:oc-results}
+Operating characteristics were estimated under six scenarios (exchangeable
+historical evidence; mild and strong optimistic conflict; mild pessimistic
+conflict; mixture historical conflict; and heterogeneous historical evidence).
+Under exchangeability the weak-only, rule, rule-SAM, and fixed-discount methods
+showed low empirical type~I error (coverage $0.9424$--$0.9693$); under strong
+optimistic conflict the fixed-weight methods gained power but at the cost of
+bias and reduced coverage, whereas rule-SAM raised its SAM trigger rate to
+$0.4545$, indicating that the conflict adapter responded more often under
+stronger prior-data disagreement. We extended this six-scenario simulation into
+a continuous prior-data-conflict sweep with Monte Carlo standard errors
+(Figure~\ref{fig:oc}). As the historical-versus-current logit
+shift increased from $0$ (exchangeable) to $1.5$ (strong conflict),
+fixed-weight priors showed rising empirical type~I error and bias and falling
+coverage, whereas SAM-adapted priors mitigated this by increasing their
+trigger rate and reducing historical mass. Treating SAM downweighting as a
+continuous conflict score, the area under the conflict-detection ROC curve
+(conflicted versus exchangeable replicates) increased monotonically with
+conflict magnitude, from approximately $0.54$ at a logit shift of $0.5$ to
+$0.74$ at a shift of $1.5$. A companion sweep over the weak-prior mass $\lamz$
+traced the power-versus-type-I/coverage tradeoff and supports a default near
+$\lamz = 0.2$. These sweeps are reported with Monte Carlo standard errors at
+the harness default of 5{,}000 iterations.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F4_oc_safety_and_detection}
+  \caption{\textbf{Operating characteristics and conflict detection.}
+  (a)~Empirical type~I error (with Monte Carlo standard errors) and interval
+  coverage as prior-data conflict increases; (b)~conflict-detection ROC-AUC
+  rising with conflict magnitude to $0.74$.}
+  \label{fig:oc}
+\end{figure}
+
+\subsection{Robustness and data-quality checks}
+\label{sec:robustness}
+Several checks probed whether the conclusions are fragile. A deterministic
+feature-weight proxy over the nine-feature borrowability schema found that
+dropping endpoint, follow-up, or result-quality features increased mean NLL
+modestly, confirming these dimensions carry outcome-predictive signal, while
+dropping information size reduced mean NLL; this is a transparency and
+sensitivity analysis rather than a full retraining ablation of the two-head
+model. We further examined whether the hand-set Stage~2 borrowability dimension
+weights are defensible by tuning them against held-out beta-binomial NLL under
+nested temporal cross-validation and by mapping an NLL-versus-weight sensitivity
+surface. Data-driven tuning improved future-fold NLL over the default weights by
+only about $0.012$--$0.014$ nats, and the held-out NLL was essentially flat in a
+neighborhood of the defaults (absolute change below $0.01$ nats across a
+$0.25\times$ to $3\times$ perturbation of each weight), so the main conclusions
+are insensitive to the specific Stage~2 weight values; in this ORR held-out
+setting the follow-up and endpoint-match dimensions carried the most
+outcome-predictive signal, likely reflecting the low variance of disease and
+regimen match within the retrieved candidate pool rather than clinical
+unimportance. Under bootstrap resampling of the pseudo-query set, the aggregate
+quantities of the two-head-SAM prior were stable, with narrow 95\%
+confidence intervals for mean historical mass ($0.636$, $[0.622,0.650]$), mean
+posterior mean ($0.322$, $[0.309,0.335]$), and mean held-out NLL ($2.933$,
+$[2.866,3.007]$). A leave-one-historical-component-out analysis showed that
+removing any single donor shifted the posterior mean by a median of only
+$0.001$ and a 90th percentile of $0.015$ on the rate scale. The priors are
+therefore not driven by one or two influential historical records. Finally,
+because every prior is built from extracted arm-level counts, we audited the
+data quality of those observations across all 7{,}173 indexed trials (26{,}066
+arm-level result rows). Only 56\% of raw rows were valid binary observations;
+the remainder failed arithmetic or schema consistency checks, including
+impossible count-over-denominator values (21.4\%), non-integer counts
+(33.1\%), rates outside the unit interval (20.7\%), and time-to-event
+endpoints parsed as binary counts (15.6\%). A conservative admission rule
+(accepting only rows with an integer count between zero and the denominator),
+validated by a synthetic round-trip test that correctly accepted all valid and
+rejected all invalid injected cases, removes these rows before prior
+construction, so priors are built only on the clean subset.
+
+\subsection{Exploratory multi-endpoint borrowing-layer check}
+\label{sec:multiendpoint}
+To probe behavior beyond ORR, we ran the borrowing-plus-calibration analysis on
+additional binary endpoint families extracted directly from registry counts,
+using leave-one-trial-out pooled robust-MAP borrowing
+(Figure~\ref{fig:multiendpoint}). As an exploratory borrowing-layer check, NLL
+reductions relative to no borrowing were observed in each family examined:
+objective response ($-0.149$), disease control rate ($-0.040$), dose-limiting
+toxicity ($-0.656$), and treatment discontinuation ($-0.135$), with 95\%
+coverage remaining near nominal throughout; the disease-control-rate ($n=38$)
+and treatment-discontinuation ($n=20$) families are small and correspondingly
+underpowered. This exploratory analysis suggests that the beta-binomial
+borrowing layer can be evaluated on other selected binary endpoint families,
+but it does not establish endpoint-general performance of the full retrieval and
+two-head pipeline, whose per-endpoint application requires per-endpoint
+pseudo-query construction and remains future work
+(Table~\ref{tab:multiendpoint}).
+
+\begin{table}[htbp]
+\centering
+\caption{Exploratory multi-endpoint borrowing-layer check. Leave-one-trial-out
+pooled robust-MAP borrowing versus no borrowing on four binary endpoint
+families extracted from registry counts; negative $\Delta$NLL means borrowing
+improves held-out prediction, with coverage near nominal throughout. The
+disease-control-rate and treatment-discontinuation families are small
+($n=38$ and $n=20$). This is a borrowing-layer check, not the full retrieval
+and two-head pipeline.}
+\label{tab:multiendpoint}
+\begin{tabular}{lrrrrr}
+\toprule
+Endpoint family & Trials & Weak NLL & Borrow NLL & $\Delta$NLL & 95\% cov. \\
+\midrule
+ORR/CR/PR & 300 & 2.915 & 2.766 & \textbf{$-0.149$} & 0.987 \\
+Disease control rate & 38 & 2.935 & 2.895 & $-0.040$ & 0.974 \\
+Dose-limiting toxicity & 300 & 1.624 & 0.968 & \textbf{$-0.656$} & 0.997 \\
+Treatment discontinuation & 20 & 2.240 & 2.105 & $-0.135$ & 1.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F6_multi_endpoint}
+  \caption{\textbf{Exploratory multi-endpoint borrowing-layer check.} Weak-only
+  versus borrowing held-out NLL and their difference for four binary endpoint
+  families (ORR/CR/PR, disease control rate, dose-limiting toxicity, treatment
+  discontinuation); NLL is reduced (negative $\Delta$NLL) in each family,
+  though the disease-control-rate and discontinuation families are small. This
+  is a borrowing-layer check, not the full retrieval and two-head pipeline.}
+  \label{fig:multiendpoint}
+\end{figure}
+
+\subsection{Worked case studies: two held-out predictions}
+\label{sec:casestudies}
+To make the pipeline concrete we walk through two leakage-controlled
+pseudo-queries end to end, in each of which endpoint-compatible historical
+evidence sharpens the held-out prediction: a small trial with moderate response
+and a single-arm trial with low response.
+
+\paragraph{Case 1 (moderate response, small trial).} NCT02551432, a completed single-arm Phase~2
+trial of pembrolizumab plus paclitaxel in relapsed/refractory small-cell lung
+cancer, had its objective response held out and hidden from retrieval,
+reranking, and feature construction (true outcome 6 of 26, observed ORR
+$0.231$). Using only the query's design and clinical text, Stage~1--2 admitted
+three endpoint-compatible single-arm historical arms with usable result tables
+(information sizes ${\approx}2$, $5$, and $8$ patients). The two-head DeepSets
+model kept the weak-prior mass at its default ($\lamz = 0.20$) and distributed
+the remaining mass approximately evenly across the three donors, whereas the
+rule prior tilted its weights toward the larger donor. As Table~\ref{tab:case}
+shows, without borrowing the weak-only prior sits at the uninformative $0.500$
+and predicts poorly (NLL $3.296$); the rule prior pulls only to $0.392$ (NLL
+$3.005$); and the two-head prior borrows more decisively, assigning more
+historical mass and yielding the lowest held-out NLL ($2.866$) in this single
+retrospective example (its predicted rate $0.241$ is close to the observed
+$0.231$, but we treat the NLL rather than the point estimate as the primary
+comparison). SAM
+did not trigger, because the borrowed history was concordant with the observed
+low response, so two-head and two-head-SAM coincide, illustrating that SAM
+intervenes only under prior-data conflict. This is a single retrospective
+illustration, not a clinical endorsement: the donors were selected for endpoint
+compatibility and result usability rather than adjudicated exchangeability, and
+one favorable case does not establish borrowability.
+
+\begin{table}[htbp]
+\centering
+\caption{Worked case study (NCT02551432, held-out ORR $6/26 = 0.231$). Predicted
+response rate and held-out beta-binomial NLL for each prior on this single query.
+Borrowing from endpoint-compatible historical arms moves the prediction from the
+uninformative $0.500$ onto the observed $0.231$, with the two-head prior most
+accurate.}
+\label{tab:case}
+\begin{tabular}{lrrc}
+\toprule
+Prior & Predicted ORR & Held-out NLL & 95\% interval covers truth \\
+\midrule
+Weak-only (no borrowing) & 0.500 & 3.296 & yes \\
+Rule prior & 0.392 & 3.005 & yes \\
+\textbf{Two-head + SAM} & \textbf{0.241} & \textbf{2.866} & yes \\
+\textit{Observed (held out)} & \textit{0.231} & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Case 2 (low response, single-arm).} A second, independent example is
+NCT03046953, a completed single-arm Phase~2 trial of avelumab in relapsed or
+refractory peripheral T-cell lymphoma, with its objective response held out
+(true outcome 5 of 32, observed ORR $0.156$). Using only the query's design and
+clinical text, Stage~1--2 admitted five endpoint-compatible historical arms
+carrying usable result tables. Here the held-out response is low, and borrowing
+again improves the prediction (Table~\ref{tab:case2}): the weak-only prior sits
+at the uninformative $0.500$ and predicts poorly (NLL $3.50$); the rule prior
+borrows toward the low historical rate ($\approx 0.21$, NLL $3.14$); and the
+two-head + SAM prior borrows most decisively, achieving the lowest held-out NLL
+($2.70$) --- an improvement of about $0.80$ nats over no borrowing. As in the
+head-to-head comparison, the gain here is primarily one of calibrated sharpness
+rather than a large shift in the point estimate: the two-head historical
+allocation concentrates the predictive distribution near the observed low rate.
+SAM did not trigger, because the low-response history was consistent with the
+observed outcome, so the two-head and two-head-SAM priors coincide.
+
+\begin{table}[htbp]
+\centering
+\caption{Second worked case study (NCT03046953, held-out ORR $5/32 = 0.156$).
+Predicted response rate and held-out beta-binomial NLL for each prior on this
+single query. Borrowing from five endpoint-compatible historical arms sharpens
+the prediction toward the low observed rate, with the two-head + SAM prior
+achieving the lowest NLL.}
+\label{tab:case2}
+\begin{tabular}{lrrc}
+\toprule
+Prior & Predicted ORR & Held-out NLL & 95\% interval covers truth \\
+\midrule
+Weak-only (no borrowing) & 0.500 & 3.50 & yes \\
+Rule prior & 0.21 & 3.14 & yes \\
+\textbf{Two-head + SAM} & \textbf{0.20} & \textbf{2.70} & yes \\
+\textit{Observed (held out)} & \textit{0.156} & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Read together, the two case studies show the method's intended behavior when
+historical evidence is compatible: borrowing is taken up and sharpens the
+held-out prediction, at both moderate ($6/26$) and low ($5/32$) observed
+response, without over-borrowing. Neither query triggered the SAM conflict
+adapter, because in both the retrieved history was consistent with the outcome;
+the complementary behavior --- withholding borrowing when history conflicts with
+the data, so that borrowing does no harm --- is what the sham-borrowing negative
+controls (Section~\ref{sec:sham-results}) and the operating-characteristics
+sweeps (Section~\ref{sec:oc-results}) quantify in aggregate.
+
+\subsection{Gold-standard simulation: operating characteristics}
+\label{sec:goldsim-results}
+
+The data-generating mechanism produced the intended structure. Across the five
+estimation scenarios, between $8\%$ and $43\%$ of donors were genuinely
+exchangeable, trap donors (surface-similar but not exchangeable) accounted for
+$19\%$ to $66\%$, and hidden gems for $2\%$ to $15\%$, from $24{,}000$ candidates
+per scenario. Surface similarity and borrowability were thus substantially
+decoupled by construction, which is the property the simulation exists to test.
+
+Table~\ref{tab:design-oc} reports the design-based operating characteristics.
+With no prior-data conflict, the two-head prior with the prospective signal
+attained a type I error of $0.025$ (MCSE $0.004$), against a nominal $0.025$ and
+a no-borrowing reference of $0.037$; its power was $0.587$ versus $0.536$ without
+borrowing, so borrowing bought roughly five percentage points of power while
+holding the type I error at nominal. Full pooling and the power prior were
+unusable in this design, with type I error of $0.584$ and $0.484$ respectively at
+zero conflict, rising above $0.90$ under strong conflict.
+
+The trade-off appears as conflict grows. At a historical-versus-current logit
+shift of $1.0$, type I error was $0.070$ (MCSE $0.006$) for the two-head prior
+with prospective signal, $0.068$ without it, $0.056$ for the fixed-discount
+ablation, $0.050$ for the rule mixture and $0.047$ for robust-MAP; power at the
+same shift was $0.625$, $0.630$, $0.644$, $0.635$ and $0.609$. The learned prior
+therefore borrows more aggressively than the rule and robust-MAP baselines and
+pays for it in type I error under conflict, without a compensating power gain
+over the fixed-discount ablation. We report this as a genuine limitation rather
+than presenting the learned variant as uniformly preferable.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Design-based operating characteristics from the gold-standard
+simulation ($2000$ replicates per cell). Single-arm design testing
+$H_0\!:\theta \le 0.20$ at the one-sided $0.025$ level. Type I error is the
+rejection rate in the null world ($\theta_0 = 0.20$); power is the rejection
+rate in the alternative world ($\theta_0 = 0.35$). Columns are the
+historical-versus-current logit shift. Monte Carlo standard errors are at most
+$0.011$. UIP-JS uses the current trial's outcome and is not available at design
+time.}
+\label{tab:design-oc}
+\begin{tabular}{lcccccc}
+\hline
+ & \multicolumn{3}{c}{Type I error} & \multicolumn{3}{c}{Power} \\
+Method & $0.0$ & $0.5$ & $1.0$ & $0.0$ & $0.5$ & $1.0$ \\
+\hline
+No borrowing                    & 0.037 & 0.029 & 0.034 & 0.536 & 0.544 & 0.561 \\
+Rule mixture                    & 0.029 & 0.030 & 0.050 & 0.556 & 0.609 & 0.635 \\
+Rule + SAM                      & 0.030 & 0.030 & 0.048 & 0.555 & 0.600 & 0.603 \\
+Two-head (no prospective)       & 0.026 & 0.038 & 0.068 & 0.588 & 0.634 & 0.630 \\
+Two-head + prospective          & 0.025 & 0.037 & 0.070 & 0.587 & 0.631 & 0.625 \\
+Two-head + prospective + SAM    & 0.029 & 0.038 & 0.068 & 0.588 & 0.623 & 0.599 \\
+Two-head + pro., fixed discount & 0.027 & 0.032 & 0.056 & 0.573 & 0.620 & 0.643 \\
+Robust-MAP ($w=0.5$)            & 0.037 & 0.035 & 0.047 & 0.575 & 0.603 & 0.609 \\
+Robust-MAP ($w=0.9$)            & 0.042 & 0.046 & 0.070 & 0.614 & 0.666 & 0.703 \\
+UIP-Dirichlet                   & 0.064 & 0.100 & 0.142 & 0.674 & 0.748 & 0.788 \\
+UIP-JS (uses outcome)           & 0.050 & 0.048 & 0.069 & 0.625 & 0.670 & 0.721 \\
+Power prior ($a_0=0.3$)         & 0.484 & 0.701 & 0.863 & 0.861 & 0.917 & 0.970 \\
+Full pooling                    & 0.584 & 0.777 & 0.904 & 0.880 & 0.930 & 0.974 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F8_design_oc}
+  \caption{\textbf{Design-based operating characteristics.} Type I error (left,
+  null world $\theta_0 = 0.20$) and power (right, alternative world
+  $\theta_0 = 0.35$) against increasing prior-data conflict. The dashed red line
+  is the nominal $0.025$; the dotted grey line is the no-borrowing rejection
+  rate, which is the level actually achievable given binomial discreteness at
+  these sample sizes. Full pooling and the power prior are omitted from the
+  panel because their type I error ($0.48$ to $0.90$) is off scale.}
+  \label{fig:design-oc}
+\end{figure}
+
+Scenario S1, in which almost all donors are exchangeable, was included
+specifically to give the simple pooled competitors a favourable setting. The
+learned prior still attained the lowest RMSE there ($0.0575$ versus $0.0726$
+without borrowing and $0.0667$ for robust-MAP), while full pooling and the power
+prior achieved worse RMSE ($0.1272$, $0.1132$) with coverage collapsing to
+$0.271$ and $0.486$; their apparent efficiency comes at the cost of validity even
+when their exchangeability assumption is close to satisfied.
+
+\subsection{What the prospective conflict signal does and does not do}
+\label{sec:prospective-results}
+
+The ablation gave a clear and initially unwelcome answer. Adding the prospective
+set-level conflict signal changed the borrowing-discrimination ROC-AUC by
+$+0.016$, $+0.007$, $+0.007$, $-0.000$ and $+0.005$ across the five scenarios ---
+negligible relative to Monte Carlo error --- and did not improve type I error. On
+the outcome the signal was designed to improve, it does essentially nothing.
+
+The reason is structural and worth stating plainly. The signal measures a
+donor's deviation from the consensus of the remaining donors, so it can only
+detect \emph{heterogeneity within} the candidate set. When prior-data conflict
+displaces the whole set uniformly, the consensus moves with it and no donor
+appears deviant. Under conflict the ROC-AUC of every design-time method fell
+below chance ($0.445$ in scenario S4), because surface features actively mislead
+when the entire retrieved history is biased. Detecting that situation requires
+the current outcome: UIP-JS, which computes its weights against the current
+data, attained $0.839$ in the same scenario. We regard this as the honest
+boundary of design-time borrowing rather than as a deficiency of the specific
+signal, and it is why the outcome-dependent SAM layer is retained as a
+complementary second line of defence.
+
+The signal does, however, do something else, which the ESS response curve
+(Figure~\ref{fig:ess-response}) makes visible. Without it, the learned discount
+head is inert: the fitted per-source discount had median $1.000$ with standard
+deviation $0.002$, and the resulting per-source ESS was flat across donors at
+every true distance from the query rate ($43.7$, $43.9$, $44.1$, $43.8$ across
+distance bins). With the signal, the discount spans its full range (median
+$0.953$, standard deviation $0.427$) and the per-source ESS declines
+monotonically with true distance ($34.9$, $31.3$, $24.2$, $20.3$). The
+explanation is that the nine reranking dimensions describe design similarity
+only; none carries information about outcome-space discrepancy, so a discount
+head conditioned on them alone has nothing to learn from and collapses to a
+constant. The set-level signal supplies exactly that missing information, and
+correlates $+0.35$ with the true distance $|\theta_k - \theta_0|$ while never
+touching the query outcome.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F9_ess_response}
+  \caption{\textbf{Does the learned discount head adapt to true comparability?}
+  Learned per-source effective sample size, binned by the donor's true distance
+  $|\theta_k - \theta_0|$ from the query rate, in two scenarios. A flat line
+  means the discount head is inert. Without the prospective set-level conflict
+  signal the head learns a near-constant discount; with it, the borrowed
+  information declines monotonically as donors become less comparable. The
+  fixed-discount ablation is flat by construction and is shown for reference.}
+  \label{fig:ess-response}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F10_discrimination}
+  \caption{\textbf{Borrowing-decision discrimination.} ROC-AUC for identifying
+  genuinely exchangeable donors against the parameter-level gold standard, by
+  scenario. Under prior-data conflict (S4) every design-time method falls below
+  chance, because surface features mislead when the whole retrieved history is
+  displaced; only UIP-JS, which uses the current trial's outcome, remains
+  informative. Error bars are Monte Carlo standard errors.}
+  \label{fig:discrimination}
+\end{figure}
+
+The defensible claim is therefore narrower than the one we set out to make: the
+prospective signal does not improve donor ranking, but it is what makes the
+learned per-source ESS discount function at all. The two proposed increments are
+coupled, and neither stands alone.
+
+\subsection{External control arm}
+\label{sec:ec-results}
+
+Table~\ref{tab:ec} and Figure~\ref{fig:ec} report the hybrid-control scenario.
+When external controls were substantially worse than the internal control
+(logit drift $-1.2$) and there was no true treatment effect, using the internal
+control alone gave a type I error of $0.014$ (MCSE $0.003$), reflecting the
+conservatism of a small control arm under a flat prior. Every borrowing method
+increased it. Full pooling reached $0.211$ and the power prior $0.150$ --- an
+eight- and six-fold inflation over the internal-only analysis --- with the hybrid
+control rate biased downward by $-0.044$ and $-0.039$. The two-head prior with
+the prospective signal held type I error to $0.032$ while borrowing an effective
+$56$ patients; the fixed-discount ablation reached $0.025$ with an effective $23$.
+
+Robust-MAP achieved the lowest type I error among borrowing methods ($0.015$),
+but its false-positive rate for borrowing non-comparable external controls was
+$1.000$: it does not discriminate at all, and its safety comes entirely from
+borrowing very little (effective sample size $7.7$). The two-head prior had a
+false-positive rate of $0.56$ while borrowing seven times as much information.
+UIP-JS achieved the best discrimination ($0.19$) but, again, only by using the
+current outcome.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{External control arm, null world (no true treatment effect), external
+controls displaced downward by a logit drift of $-1.2$; $2000$ replicates.
+Type I error is the rate of declaring superiority. FPR is the proportion of
+non-comparable external controls that were nonetheless borrowed. Control bias is
+the posterior mean of the hybrid control rate minus its true value; a negative
+value means the borrowed controls dragged the control estimate down, which is
+what inflates the apparent treatment effect.}
+\label{tab:ec}
+\begin{tabular}{lccccc}
+\hline
+Method & Type I error & (MCSE) & Control bias & Prior ESS & FPR \\
+\hline
+Internal control only            & 0.014 & (0.003) & $+0.028$ & 0.0   & 0.00 \\
+Rule mixture                     & 0.021 & (0.003) & $+0.003$ & 18.9  & 0.61 \\
+Two-head (no prospective)        & 0.028 & (0.004) & $-0.004$ & 61.7  & 0.55 \\
+Two-head + prospective           & 0.032 & (0.004) & $-0.007$ & 55.9  & 0.56 \\
+Two-head + prospective + SAM     & 0.032 & (0.004) & $-0.004$ & 53.8  & 0.56 \\
+Two-head + pro., fixed discount  & 0.025 & (0.004) & $-0.002$ & 22.7  & 0.51 \\
+Robust-MAP ($w=0.5$)             & 0.015 & (0.003) & $+0.010$ & 7.7   & 1.00 \\
+UIP-Dirichlet                    & 0.035 & (0.004) & $-0.016$ & 16.7  & 1.00 \\
+UIP-JS (uses outcome)            & 0.066 & (0.006) & $+0.000$ & 9.4   & 0.19 \\
+Power prior ($a_0=0.3$)          & 0.150 & (0.008) & $-0.039$ & 228.1 & 1.00 \\
+Full pooling                     & 0.211 & (0.009) & $-0.044$ & 760.5 & 1.00 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F11_external_control}
+  \caption{\textbf{External control arm operating characteristics.} Type I
+  error (left), power (centre) and bias of the hybrid control rate (right) as
+  the external controls drift away from the internal control. Negative drift
+  means the borrowed controls are worse than the internal control, which biases
+  the treatment effect upward. The dashed red line in the left panel is the
+  nominal $0.025$.}
+  \label{fig:ec}
+\end{figure}
+
+The practical reading is that in the external-control setting the quantity that
+governs type I error inflation is how much is borrowed at least as much as how
+well donors are selected, and that no design-time method in this comparison
+removed the inflation. This is consistent with regulatory caution about external
+controls [8] and with the causal framing of recent reviews [18].
+
+We had also planned a worked external-control case study on real registry data,
+mirroring the two ORR case studies. It is not reported here. Constructing it
+requires arm-level control outcomes, and auditing the corpus for that purpose
+uncovered the endpoint-unit defect described in
+Section~\ref{sec:limitations-data}, which affects a subset of arm-level rate
+extractions. We judged it wrong to build a new worked example on an extraction
+path we had just found to be unreliable, and have deferred it until the
+corrected extraction has been re-run end to end.
+
+% ---------------------------------------------------------------------
+\section{Discussion}
+
+This study presents an explainable methodology prototype for moving from
+oncology trial similarity to Bayesian historical borrowability. The central
+contribution is not a new text-retrieval model alone, but a pipeline that
+links retrieval, candidate-level borrowability features, endpoint observation
+extraction, beta-binomial mixture components, retrospective calibration,
+prior-data conflict adaptation, and simulation operating-characteristics
+evaluation. This addresses a common gap in historical-borrowing workflows:
+retrieved historical trials are often treated as similar before the
+statistical consequences of borrowing are assessed.
+
+The results support several bounded observations. First, retrieval backend
+choice affected downstream ORR candidate readiness. Second, in retrospective
+ORR pseudo-query evaluations, mixture-prior calibration and SAM-style conflict
+adaptation were associated with lower held-out predictive NLL than weak-only or
+rule-based borrowing, with improved --- though not perfect --- calibration
+diagnostics (better PIT uniformity and near-nominal coverage), not merely lower
+average loss. Third, in three rolling-origin splits the per-fold-retrained
+learned and closed-form conflict-adapted priors retained lower future-fold NLL,
+and exceeded a tuned RBesT-style robust meta-analytic-predictive prior in this
+setting, consistent with candidate-specific weighting adding value over a single
+pooled robust prior. Fourth, sham-history negative controls and known-truth
+simulations indicated conflict sensitivity --- the SAM adapter reduced
+historical influence under constructed sham-history corruption and increased its
+trigger rate with conflict magnitude --- but these label-free analyses do not
+establish clinical exchangeability or expert borrowability.
+
+The simulation study complements retrospective calibration by examining
+operating characteristics under controlled exchangeability and conflict
+scenarios. Optimistic historical conflict increased apparent power but also
+increased bias and reduced coverage; the SAM-style adapter showed higher
+trigger rates under stronger conflict, supporting its role as a transparent
+sensitivity mechanism. These findings are consistent with the broader
+principle that historical borrowing should be evaluated not only for
+predictive fit but also for conflict behavior and decision operating
+characteristics [5,~10,~11].
+
+\subsection{A defect in endpoint-unit handling, and what it affects}
+\label{sec:limitations-data}
+
+While auditing the corpus in preparation for the external-control case study we
+found a defect in how arm-level outcome rows were converted into rates. The
+extraction divided the reported value by the arm denominator unconditionally.
+That is correct when ClinicalTrials.gov reports an outcome as a participant
+count, but not when it reports the same outcome as a percentage or a proportion,
+which it frequently does for objective response rate. A row reading $26.0$ with
+denominator $31$ under the unit ``Percentage of Participants'' denotes an ORR of
+$0.26$, whereas the extraction produced $0.839$.
+
+We report the scope precisely. Of $3319$ arm-level ORR rows in the corpus,
+$2040$ are reported in percentage units and $846$ in participant counts; $804$
+rows ($24.2\%$) were assigned a rate above $1$, which is self-evidently
+impossible, while the remainder of the affected rows produced values inside
+$(0,1)$ that look plausible and are correspondingly more dangerous. Within the
+$116$ pseudo-queries that contributed mixture components, we could locate the
+originating row for $93$; of these, $9$ change under corrected unit handling and
+$8$ change by more than $0.10$ in absolute rate, the largest error being $0.579$.
+The held-out query outcome is the reference against which predictive NLL,
+calibration and coverage are computed, so the aggregate real-data results in
+Sections~\ref{sec:headtohead-results} onward are affected to that extent.
+
+Three things are not affected. The two worked case studies
+(Section~\ref{sec:casestudies}) draw on rows reported in participant units
+($6/26$ and $5/32$) and are correct as printed. The gold-standard simulation and
+the external-control simulation do not touch this extraction path at all. And
+the direction of the defect is not systematically favourable to our method: it
+perturbs the held-out truth for a minority of queries in both directions.
+
+We have implemented unit-aware extraction that dispatches on the reported unit
+and refuses to convert rows whose unit is missing or unrecognised (29 rows),
+rather than guessing. The corrected extraction has not been propagated through
+the full retrospective pipeline in this revision because the upstream raw
+records were not available in the analysis environment; the audit table
+identifying every affected query is released with the code. Readers should treat
+the real-data aggregates as provisional pending that re-run, and the simulation
+results, which are unaffected, as the load-bearing evidence for the borrowing
+layer.
+
+We record this in the main text rather than a supplement because a defect that
+silently produces plausible-looking numbers is precisely the kind that a reader
+cannot detect from reported results alone.
+
+\subsection{Limitations}
+First, no expert borrowability labels were available; the evaluation cannot
+establish that any individual retrieved historical trial is clinically
+appropriate for borrowing. The reranking scores, compatibility gates, effective
+sample-size discounts, and mixture weights are heuristic and unvalidated;
+retrospective predictive calibration is not clinical validation, and expert
+clinical and statistical review together with external validation are
+prerequisites for any decision-informing use. Results should be interpreted as
+retrospective predictive-calibration, negative-control, simulation operating-characteristics,
+and internal-validation evidence rather than expert adjudication or regulatory
+qualification. Second, rolling-origin forward validation is leakage-free for
+the closed-form priors, and the learned two-head and two-head-SAM forward rows
+are now leakage-free as well, having been rescored with two-head DeepSets
+models retrained on past-only data at each cutoff; these per-fold models were
+trained on 629, 810, and 1{,}017 past-only examples; the training code now
+fixes the random seed ($20260603$, matching the primary two-head fit), so the
+per-cutoff refits are reproducible up to minor cross-platform numerical
+differences. Third, automated extraction from ClinicalTrials.gov may introduce errors
+in endpoint mapping, arm identification, eligibility interpretation, date
+parsing, and result-usability assessment; the extraction-quality audit
+quantifies this (about 44\% of raw arm-level rows are not valid binary
+observations) and shows that an admission rule which passed a synthetic
+round-trip check removes them before prior construction, but extraction error in
+the admitted subset is not eliminated.
+Fourth, the ORR borrowing benefit was observed on additional binary endpoint
+families only at the borrowing-and-calibration-layer level; applying the full
+retrieval and two-head pipeline to progression-free survival at fixed time
+points and other endpoints remains to be demonstrated. Fifth, the SECRET-style
+backend is a deterministic section-based minimum viable product, and
+Trial2Vec-style retrieval remains optional. Finally, simulation scenarios
+simplify oncology-trial complexity and should be viewed as stress tests rather
+than substitutes for protocol-specific operating-characteristics studies.
+
+\subsection{Regulatory and practical implications}
+Historical borrowing for decision-informing trials requires pre-specification
+of evidence selection, prior construction, conflict assessment, and
+operating-characteristics evaluation. These expectations are made explicit in
+the FDA draft guidance on Bayesian methodology in drug and biologic trials
+[16,~17], which calls for pre-specified success criteria and decision
+thresholds, justified priors with quantified influence (for example, effective
+sample size), simulation-based operating characteristics including type~I error,
+prior sensitivity and prior-data-conflict analyses, and reproducible
+computation; the ICH~E9(R1) estimand framework [9] and the external-controls
+guidance [8], together with causal-inference framings of external borrowing
+[18], impose related requirements. The present framework instantiates several
+of these elements retrospectively: transparent, auditable candidate features; an
+explicit separation of the mixture weight $\lambda_i$ from the
+effective-sample-size discount $a_i$ with reported ESS; simulation operating
+characteristics with Monte Carlo standard errors and a prior-data-conflict
+sweep; a prior-sensitivity and weight-tuning analysis; a SAM-style conflict
+adapter; and a pinned, reproducible evidence package. We emphasize that this is
+a retrospective methodological \emph{alignment with}, not a demonstration of
+\emph{compliance under}, that guidance. Any use in a real trial would require
+disease-specific expert review, endpoint-specific validation, protocol-level
+pre-specification, and formal operating-characteristics evaluation tailored to
+the intended decision. The repository should be used as a reproducible
+methodology prototype and calibration evidence package, not a clinical borrowing
+recommendation system.
+
+% ---------------------------------------------------------------------
+\section{Conclusion}
+We developed a reproducible methodology prototype for oncology trial retrieval
+and Bayesian historical borrowing that distinguishes retrievability from
+borrowability. The evidence package combines paired retrieval benchmarking,
+held-out predictive NLL, calibration diagnostics, leakage-free rolling-origin
+forward validation, sham-borrowing negative controls, operating-characteristics
+conflict sweeps with conflict-detection ROC, a robust meta-analytic-predictive
+baseline comparison, weight-sensitivity and stability analyses, an
+extraction-quality audit, and multi-endpoint replication, all without expert
+borrowability labels. Across these analyses the two-head DeepSets mixture prior
+with the SAM conflict adapter had the lowest predictive NLL and the most
+favorable calibration diagnostics among the evaluated priors and outperformed a
+tuned robust-MAP prior in the retrospective ORR setting, while negative controls
+and known-truth simulation indicated conflict sensitivity, reducing historical
+influence under constructed sham-history and simulated conflict. These
+retrospective and simulation analyses do not establish expert borrowability or
+clinical decision validity; individual borrowing decisions remain dependent on
+expert clinical and statistical review, external validation, and
+protocol-specific operating-characteristics evaluation.
+
+% ---------------------------------------------------------------------
+\section*{Data and Code Availability}
+{\sloppy
+The analysis uses ClinicalTrials.gov trial records and result tables; raw trial
+records and associated protocol or statistical-analysis-plan PDFs are not
+redistributed. Code for the full pipeline together with lightweight summary
+tables and manuscript figures is archived at
+\href{https://doi.org/}{DOI: to be assigned on Zenodo release}. A release
+manifest (\texttt{RELEASE\_MANIFEST.md}), a reproduction guide
+(\texttt{docs/rep\-ro\-du\-ci\-bi\-li\-ty.md}), an evidence guide
+(\texttt{docs/EVIDENCE\_GUIDE.md}), and a pinned environment
+(\texttt{requirements.lock.txt}) are included in the archive.
+\par}
+
+\section*{Acknowledgements}
+[To be completed by the authors.]
+
+\section*{Conflicts of Interest}
+[To be completed by the authors.]
+
+% ---------------------------------------------------------------------
+\begin{thebibliography}{99}
+\small
+% Bibliographic metadata verified against publisher/arXiv/Federal Register
+% records (2026-07). Full author lists for ref14 (SECRET), ref17 (Ji), and
+% ref18 (Zhu et al.) transcribed from the arXiv/ACL records (verified 2026-07-13);
+% all titles, venues, and identifiers below are verified.
+\bibitem{ref1} Pocock SJ. The combination of randomized and historical controls
+in clinical trials. \emph{J Chronic Dis}. 1976;29(3):175--188.
+doi:10.1016/0021-9681(76)90044-8.
+\bibitem{ref2} Viele K, Berry S, Neuenschwander B, et al. Use of historical
+control data for assessing treatment effects in clinical trials. \emph{Pharm
+Stat}. 2014;13(1):41--54. doi:10.1002/pst.1589.
+\bibitem{ref3} Ibrahim JG, Chen M-H. Power prior distributions for regression
+models. \emph{Statist Sci}. 2000;15(1):46--60. doi:10.1214/ss/1009212673.
+\bibitem{ref4} Neuenschwander B, Capkun-Niggli G, Branson M, Spiegelhalter DJ.
+Summarizing historical information on controls in clinical trials. \emph{Clin
+Trials}. 2010;7(1):5--18. doi:10.1177/1740774509356002.
+\bibitem{ref5} Schmidli H, Gsteiger S, Roychoudhury S, O'Hagan A, Spiegelhalter
+D, Neuenschwander B. Robust meta-analytic-predictive priors in clinical trials
+with historical control information. \emph{Biometrics}. 2014;70(4):1023--1032.
+doi:10.1111/biom.12242.
+\bibitem{ref6} Hobbs BP, Carlin BP, Mandrekar SJ, Sargent DJ. Hierarchical
+commensurate and power prior models for adaptive incorporation of historical
+information in clinical trials. \emph{Biometrics}. 2011;67(3):1047--1056.
+doi:10.1111/j.1541-0420.2011.01564.x.
+\bibitem{ref7} Morita S, Thall PF, M\"uller P. Determining the effective sample
+size of a parametric prior. \emph{Biometrics}. 2008;64(2):595--602.
+doi:10.1111/j.1541-0420.2007.00888.x.
+\bibitem{ref8} U.S. Food and Drug Administration. Considerations for the Design
+and Conduct of Externally Controlled Trials for Drug and Biological Products.
+Draft Guidance for Industry. Silver Spring, MD: FDA; February 2023.
+\bibitem{ref9} International Council for Harmonisation. ICH E9(R1): Addendum on
+Estimands and Sensitivity Analysis in Clinical Trials to the Guideline on
+Statistical Principles for Clinical Trials. Geneva: ICH; 2019.
+\bibitem{ref10} O'Hagan A, Pericchi L. Bayesian heavy-tailed models and conflict
+resolution: a review. \emph{Braz J Probab Stat}. 2012;26(4):372--401.
+doi:10.1214/11-BJPS164.
+\bibitem{ref11} Yang P, Zhao Y, Nie L, Vallejo J, Yuan Y. SAM: self-adapting
+mixture prior to dynamically borrow information from historical data in clinical
+trials. \emph{Biometrics}. 2023;79(4):2857--2868. doi:10.1111/biom.13927.
+\bibitem{ref12} Wang Z, Sun J. Trial2Vec: zero-shot clinical trial document
+similarity search using self-supervision. In: \emph{Findings of the Association
+for Computational Linguistics: EMNLP 2022}. 2022:6377--6390.
+doi:10.18653/v1/2022.findings-emnlp.476. arXiv:2206.14719.
+\bibitem{ref13} Alsentzer E, Murphy J, Boag W, et al. Publicly available
+clinical BERT embeddings. In: \emph{Proceedings of the 2nd Clinical Natural
+Language Processing Workshop (NAACL-HLT)}. 2019:72--78.
+doi:10.18653/v1/W19-1909.
+\bibitem{ref14} Das T, Shafquat A, Beigi M, Aptekar J, Sun J. SECRET:
+semi-supervised clinical trial document similarity search. In: \emph{Proceedings
+of the 63rd Annual Meeting of the Association for Computational Linguistics
+(ACL 2025)}. 2025. arXiv:2505.10780.
+\bibitem{ref15} Weber S, Li Y, Seaman JW III, Kakizume T, Schmidli H. Applying
+meta-analytic-predictive priors with the R Bayesian evidence synthesis tools.
+\emph{J Stat Softw}. 2021;100(19):1--32. doi:10.18637/jss.v100.i19.
+\bibitem{ref16} U.S. Food and Drug Administration. Use of Bayesian Methodology
+in Clinical Trials of Drug and Biological Products. Draft Guidance for Industry.
+Silver Spring, MD: FDA; January 2026. Availability announced in \emph{Fed
+Regist}. 2026 Jan 12 (FR Doc.\ 2026-00325).
+\bibitem{ref17} Ji Y. Regulatory expectations for Bayesian methods in
+drug and biologic clinical trials: a practical perspective on FDA's 2026 draft
+guidance. arXiv:2601.14701; 2026.
+\bibitem{ref18} Zhu K, Izem R, Yang P, Yuan Y, Pang H, van der Laan M, Nie L,
+Emir B, Mishra-Kalyani P, Lee H, Yang S. Externally controlled trials: a
+review of design and borrowing through a causal lens. arXiv:2605.03282; 2026.
+
+\bibitem{ref19} Jin H, Yin G. Unit information prior for adaptive information
+borrowing from multiple historical datasets. \emph{Statistics in Medicine}
+2021;40(25):5657--5672.
+
+\bibitem{ref20} Wang C, Li H, Chen WC, Lu N, Tiwari R, Xu Y, Yue LQ.
+Propensity score-integrated power prior approach for incorporating real-world
+evidence in single-arm clinical studies. \emph{Journal of Biopharmaceutical
+Statistics} 2019;29(5):731--748.
+
+\bibitem{ref21} Wang C, Lu N, Chen WC, Li H, Tiwari R, Xu Y, Yue LQ.
+Propensity score-integrated composite likelihood approach for incorporating
+real-world evidence in single-arm clinical studies. \emph{Journal of
+Biopharmaceutical Statistics}; 2020.
+
+\bibitem{ref22} Schwartz H. Dynamic borrowing from historical controls via the
+synthetic prior with covariates in randomized clinical trials.
+\emph{Statistics in Medicine} 2026. doi:10.1002/sim.70567.
+
+\bibitem{ref23} Callegaro A, Luo W, Karkada N, Zahaf T. Dynamic borrowing of
+historical controls adjusting for covariates in vaccine efficacy clinical
+trials. \emph{Pharmaceutical Statistics} 2024. doi:10.1002/pst.2384.
+
+\bibitem{ref24} Zaheer M, Kottur S, Ravanbakhsh S, P\'oczos B, Salakhutdinov R,
+Smola AJ. Deep sets. In: \emph{Advances in Neural Information Processing
+Systems 30}; 2017:3391--3401.
+
+\bibitem{ref25} Morris TP, White IR, Crowther MJ. Using simulation studies to
+evaluate statistical methods. \emph{Statistics in Medicine}
+2019;38(11):2074--2102.
+\end{thebibliography}
+
+% =====================================================================
+\appendix
+\section{Terminology}
+\begin{longtable}{p{0.24\textwidth} p{0.50\textwidth} p{0.18\textwidth}}
+\toprule
+\textbf{Term} & \textbf{Definition} & \textbf{Notes} \\
+\midrule
+\endhead
+Historical borrowing & Use of historical trial evidence to construct or inform
+a prior for a new trial. & Not a synonym for ``trial matching''. \\
+Borrowability & Suitability of a historical trial to contribute prior evidence
+after clinical, endpoint, result, and conflict dimensions. & Distinct from text
+similarity. \\
+Stage~1 retrieval & High-recall retrieval of candidate historical trials. &
+Hashing, ClinicalBERT, Trial2Vec-style, SECRET-style. \\
+SECRET pool & Section-weighted candidate pool for borrowability-relevant
+retrieval. & Deterministic, section based. \\
+Stage~2 reranker & Explainable candidate reranking on borrowability features. &
+Not an expert decision. \\
+Endpoint observation & Extracted pair $(y_i,n_i)$ from a candidate endpoint. &
+Builds beta-binomial components. \\
+Effective sample-size discount & Candidate discount $a_i$ inside the beta
+component. & Distinct from mixture weight. \\
+Mixture weight & Candidate component weight $\lambda_i$. & Normalized with
+weak-prior weight $\lamz$. \\
+SAM adapter & Prior-data conflict adapter used as sensitivity analysis. & Not a
+regulatory qualification. \\
+\bottomrule
+\end{longtable}
+
+% The Claim--Evidence Map has been moved to the Supplementary Material
+% (supplement.tex, Table~S1) as a cross-check aid, per pre-submission review.
+% A full claim-to-evidence table with the boundary of each claim is provided
+% there.
+
+\end{document}

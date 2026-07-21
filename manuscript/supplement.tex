@@ -1,0 +1,88 @@
+% =====================================================================
+%  Supplementary Material for
+%  "Retrospective predictive calibration of oncology trial similarity
+%   for Bayesian historical borrowing"
+%
+%  Standalone document. Compile with:
+%     latexmk -pdf supplement.tex
+%  Moved out of the main manuscript 2026-07-12 (pre-submission cleanup):
+%  the Claim--Evidence Map is an internal cross-check aid and is provided
+%  here as supplementary material rather than in the main appendix.
+% =====================================================================
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+\title{Supplementary Material:\\
+Retrospective predictive calibration of oncology trial similarity
+for Bayesian historical borrowing}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+
+\section{Claim--Evidence Map}
+
+This table maps each principal claim in the main text to its supporting
+evidence and the boundary of that evidence. It is a cross-check aid: every
+``Status'' entry states the setting in which the claim is supported (for
+example, retrospective ORR, leakage-free, simulation, or borrowing-layer only)
+and does not assert clinical or regulatory validity. Numeric values match the
+regenerated evidence artifacts (borrowing head-to-head $N=1{,}407$; conflict
+detection from the 5{,}000-iteration operating-characteristics sweep).
+
+\begin{longtable}{p{0.32\textwidth} p{0.39\textwidth} p{0.19\textwidth}}
+\toprule
+\textbf{Claim} & \textbf{Evidence} & \textbf{Status} \\
+\midrule
+\endhead
+SECRET pool improves Stage~1 retrieval metrics over hashing. & Paired benchmark
+over 1{,}470 ORR pseudo-queries with bootstrap CIs. & Supported (ORR). \\
+Trained two-head calibration improves held-out NLL over rule. & $3.0562$ vs
+$3.1800$ mean NLL. & Supported (retrospective ORR). \\
+SAM conflict adaptation improves NLL and responds to conflict. & Two-head-SAM
+$2.9328$, rule-SAM $2.9755$; simulation trigger rates. & Supported as
+sensitivity evidence. \\
+Conflict-adapted borrowing shows lower future-fold NLL in three rolling-origin
+splits. & Leakage-free rolling-origin: rule-SAM $-0.174$ to $-0.178$;
+per-fold-retrained two-head-SAM $-0.19$ to $-0.24$ nats (CIs exclude 0). &
+Supported (leakage-free) for closed-form and learned models. \\
+Priors are well calibrated, not merely lower loss. & PIT KS $0.146$, 95\%
+coverage $0.988$ for two-head-SAM. & Supported (held-out ORR). \\
+Method reduces historical influence under constructed sham-history. & Sham
+controls: helps on real, not on sham; SAM triggers on sham. & Supported
+(label-free; not clinical non-comparability). \\
+SAM detects prior-data conflict. & Known-truth simulation: detection AUC rises
+to $0.74$ (5{,}000-iter run). & Supported (simulation). \\
+Learned prior outperforms a standard robust prior. & Two-head-SAM $2.933$ vs
+best robust-MAP $3.135$. & Supported (retrospective ORR). \\
+Conclusions insensitive to hand-set Stage~2 weights. & Tuning gains $\sim
+0.013$ nats; NLL flat ($|\Delta|<0.01$). & Supported. \\
+Priors not driven by individual records. & Narrow bootstrap CIs; leave-one-out
+shift median $0.001$, p90 $0.015$. & Supported. \\
+Borrowing-layer NLL reductions on selected other binary endpoints (exploratory).
+& Leave-one-trial-out improves NLL for ORR, DCR, DLT, discontinuation (small
+$n$). & Supported (borrowing-layer only; not full pipeline). \\
+Extracted observations are of measured quality. & 44\% raw rows invalid;
+admission rule (round-trip 8/8) removes them. & Supported. \\
+Reported two-head results use a genuine two-head model. & Checkpoint
+verification identified and excluded mislabeled model artifacts; the genuine
+two-head checkpoint was used throughout. & Supported. \\
+\bottomrule
+\end{longtable}
+
+\end{document}

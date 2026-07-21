@@ -62,3 +62,11 @@ docs/figures/
 # Keep lightweight manuscript evidence package
 !results/
 !results/**
+
+# Manuscript source lives in manuscript/ ; keep figure assets despite the
+# global *.pdf rule, but leave the regenerable compiled PDFs untracked.
+!manuscript/figures/*.pdf
+manuscript/manuscript_full_draft_pharm_stats.pdf
+manuscript/supplement.pdf
+*.bak
+*.tmp
