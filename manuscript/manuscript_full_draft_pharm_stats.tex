@@ -1539,6 +1539,28 @@ historical influence under constructed sham-history corruption and increased its
 trigger rate with conflict magnitude --- but these label-free analyses do not
 establish clinical exchangeability or expert borrowability.
 
+These findings locate the contribution against each of the three families
+surveyed in the Introduction. Relative to the statistical borrowing literature
+--- power priors, commensurate priors, MAP and robust-MAP constructions, and
+SAM [3,~4,~5,~6,~11] --- we do not take the historical set as given: the
+pipeline selects candidates and then weights them, and it separates the
+allocation decision (the mixture weight $\lambda_i$) from the information-size
+decision (the effective-sample-size discount $a_i$), which those methods
+typically conflate into a single quantity. Relative to constructions that apply
+one pooled weight to the whole historical set, candidate-specific two-head
+weighting outperformed a tuned robust-MAP prior in the retrospective ORR
+setting, which is the empirical form the argument for per-donor weights takes
+here; the closest precedent for per-source adaptive weights is the unit
+information prior of Jin and Yin [19], which we implement and evaluate directly
+rather than describe. Relative to machine-learning trial-outcome prediction, the
+reranker and the conservative clinical gate are inspectable feature by feature
+and the output is a calibrated prior distribution rather than a predicted
+label, so the borrowing decision can be audited at the level at which it is
+made. Relative to text-similarity retrieval [12,~13,~14], the pipeline adds the
+borrowability layer that similarity alone cannot supply, and --- the point on
+which we would rest the case --- submits that layer to predictive calibration
+rather than assuming it is correct.
+
 The simulation study complements retrospective calibration by examining
 operating characteristics under controlled exchangeability and conflict
 scenarios. Optimistic historical conflict increased apparent power but also
@@ -1604,24 +1626,37 @@ clinical and statistical review together with external validation are
 prerequisites for any decision-informing use. Results should be interpreted as
 retrospective predictive-calibration, negative-control, simulation operating-characteristics,
 and internal-validation evidence rather than expert adjudication or regulatory
-qualification. Second, rolling-origin forward validation is leakage-free for
+qualification. Second, and more fundamentally, the design-time layer is not
+sufficient on its own. Per-donor features computed before the current outcome is
+seen describe design similarity only, and are in principle unable to identify a
+prior--data conflict that displaces the entire retrieved set uniformly: the
+consensus of the remaining donors moves with the displacement, so no donor
+appears deviant. This is not a shortcoming of the particular signal we
+constructed but a property of any design-time criterion, and it is visible in
+the results --- under conflict (scenario~S4) the borrowing-discrimination
+ROC-AUC of every design-time method fell below chance ($0.445$), while UIP-JS,
+which computes its weights against the current data, attained $0.839$
+(Section~\ref{sec:prospective-results}). We therefore do not claim that
+prospective selection can stand alone, and retain the outcome-dependent SAM
+layer as a necessary second line of defence rather than as an optional
+sensitivity analysis. Third, rolling-origin forward validation is leakage-free for
 the closed-form priors, and the learned two-head and two-head-SAM forward rows
 are now leakage-free as well, having been rescored with two-head DeepSets
 models retrained on past-only data at each cutoff; these per-fold models were
 trained on 629, 810, and 1{,}017 past-only examples; the training code now
 fixes the random seed ($20260603$, matching the primary two-head fit), so the
 per-cutoff refits are reproducible up to minor cross-platform numerical
-differences. Third, automated extraction from ClinicalTrials.gov may introduce errors
+differences. Fourth, automated extraction from ClinicalTrials.gov may introduce errors
 in endpoint mapping, arm identification, eligibility interpretation, date
 parsing, and result-usability assessment; the extraction-quality audit
 quantifies this (about 44\% of raw arm-level rows are not valid binary
 observations) and shows that an admission rule which passed a synthetic
 round-trip check removes them before prior construction, but extraction error in
 the admitted subset is not eliminated.
-Fourth, the ORR borrowing benefit was observed on additional binary endpoint
+Fifth, the ORR borrowing benefit was observed on additional binary endpoint
 families only at the borrowing-and-calibration-layer level; applying the full
 retrieval and two-head pipeline to progression-free survival at fixed time
-points and other endpoints remains to be demonstrated. Fifth, the SECRET-style
+points and other endpoints remains to be demonstrated. Sixth, the SECRET-style
 backend is a deterministic section-based minimum viable product, and
 Trial2Vec-style retrieval remains optional. Finally, simulation scenarios
 simplify oncology-trial complexity and should be viewed as stress tests rather
