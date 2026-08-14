@@ -1,0 +1,35 @@
+# Pinned environment for reproducing the manuscript evidence package.
+# Captured 2026-07-12 from the project .venv (Python 3.12.13, macOS/darwin arm64)
+# used for the borrowing-baseline, OC-sweep, and ClinicalBERT retrieval runs.
+# Install with:  pip install -r requirements.lock.txt
+# Direct dependencies (see requirements.txt) are pinned here to exact versions
+# together with the load-bearing transitive dependencies of the torch /
+# transformers / FastAPI stack.
+
+# --- direct dependencies ---
+fastapi==0.136.1
+numpy==2.4.4
+pypdf==6.11.0
+python-multipart==0.0.29
+torch==2.11.0
+transformers==5.8.0
+uvicorn==0.47.0
+
+# --- load-bearing transitive dependencies ---
+certifi==2026.4.22
+filelock==3.29.0
+huggingface_hub==1.14.0
+packaging==26.2
+pydantic==2.13.4
+PyYAML==6.0.3
+regex==2026.4.4
+requests==2.33.1
+safetensors==0.7.0
+scipy==1.17.1
+starlette==1.0.0
+tokenizers==0.22.2
+tqdm==4.67.3
+
+# NOTE: Bio_ClinicalBERT weights (emilyalsentzer/Bio_ClinicalBERT) are loaded from
+# the local HuggingFace cache with local_files_only=True and are not pip-installable;
+# see docs/reproducibility.md for the model provenance.
