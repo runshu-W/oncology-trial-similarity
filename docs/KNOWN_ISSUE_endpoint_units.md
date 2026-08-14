@@ -1,7 +1,20 @@
 # Known issue: endpoint-unit handling when converting outcomes to rates
 
-**Status:** open. Diagnosed and quantified; fix deliberately not applied
-piecemeal (see "Why this is not yet fixed").
+**Status:** code fixed (2026-08-14); artifact regeneration pending.
+All four call sites now dispatch on the reported unit via
+`pipeline/fix_endpoint_units.py` and refuse to guess when the unit is missing
+or unrecognised (`tests/test_endpoint_units.py` pins the behaviour, including
+the NCT01178944 worst case: 26.0 under "percentage of participants" with
+denominator 31 now converts to 8/31 ≈ 0.258, not 0.839). Because the corpus
+`trial_summaries.jsonl` retains the `unit` field for all 26,603 arm-level rows,
+the downstream artifacts (lambda examples, head-to-head NLL, forward
+validation, calibration diagnostics) can be regenerated from the existing
+corpora without returning to the raw ClinicalTrials.gov export. Until that
+re-run is done, the archived retrospective aggregates and the manuscript's
+real-data tables still reflect the defective conversion and remain
+"provisional" as stated in the manuscript.
+
+Original write-up (pre-fix) follows for the record.
 
 ## The defect
 

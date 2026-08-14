@@ -10,7 +10,7 @@ from unittest import mock
 import numpy as np
 
 
-pipeline = importlib.import_module("docs.oncology_trial_similarity_pipeline")
+pipeline = importlib.import_module("pipeline.oncology_trial_similarity_pipeline")
 
 
 def load_trial2vec_builder_module(module_name: str = "build_trial2vec_index"):
@@ -327,7 +327,7 @@ class Stage1BackendTests(unittest.TestCase):
 
 class SecretRetrievalTests(unittest.TestCase):
     def test_secret_sections_include_required_qa_fields_and_bounded_excerpts(self) -> None:
-        secret = importlib.import_module("docs.secret_retrieval")
+        secret = importlib.import_module("pipeline.secret_retrieval")
         summary = {
             "nct_id": "NCTSECRET",
             "brief_title": "Neoadjuvant HER2 breast cancer trial",
@@ -369,7 +369,7 @@ class SecretRetrievalTests(unittest.TestCase):
         self.assertIn("protocol excerpt", sections["eligibility"].lower())
 
     def test_secret_index_search_uses_section_weights_and_returns_evidence(self) -> None:
-        secret = importlib.import_module("docs.secret_retrieval")
+        secret = importlib.import_module("pipeline.secret_retrieval")
         query_vectors = {
             section: np.array([1.0, 0.0], dtype=np.float32)
             for section in secret.SECRET_SECTIONS
@@ -437,7 +437,7 @@ class SecretRetrievalTests(unittest.TestCase):
         self.assertEqual(data["eligibility"].shape[0], 1)
 
     def test_secret_summary_uses_borrowing_relevance_result_quantities(self) -> None:
-        secret = importlib.import_module("docs.secret_retrieval")
+        secret = importlib.import_module("pipeline.secret_retrieval")
         loaded_summary = {
             "nct_id": "NCT1",
             "results": {"has_posted_results": True, "denominators": [{"arm": "Experimental"}]},
@@ -512,7 +512,7 @@ class SecretRetrievalTests(unittest.TestCase):
                 encoding="utf-8",
             )
             secret_path = index_dir / "secret_embeddings.npz"
-            secret = importlib.import_module("docs.secret_retrieval")
+            secret = importlib.import_module("pipeline.secret_retrieval")
             arrays = {
                 section: np.zeros((1, 2048), dtype=np.float32)
                 for section in secret.SECRET_SECTIONS

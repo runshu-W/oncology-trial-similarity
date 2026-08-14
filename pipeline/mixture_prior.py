@@ -6,6 +6,39 @@ import math
 from typing import Any
 
 
+def _load_fix_endpoint_units() -> Any:
+    """Load the unit-aware endpoint conversion helpers.
+
+    Mirrors the loader pattern used by the main pipeline module so that this
+    module keeps working whether it is imported as part of the ``pipeline``
+    package or loaded directly from its file path.
+    """
+    if __package__:
+        try:
+            from . import fix_endpoint_units as package_fix_endpoint_units
+
+            return package_fix_endpoint_units
+        except ImportError:
+            pass
+
+    import importlib.util
+    from pathlib import Path
+
+    sibling_path = Path(__file__).with_name("fix_endpoint_units.py")
+    spec = importlib.util.spec_from_file_location(
+        "_mixture_prior_fix_endpoint_units",
+        sibling_path,
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load endpoint-unit module from {sibling_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+fix_endpoint_units = _load_fix_endpoint_units()
+
+
 def _validate_integer(name: str, value: int) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{name} must be an integer")
@@ -103,7 +136,18 @@ def _canonical_endpoint_key(
     return None
 
 
-def _selected_treatment_observation(rows: Any) -> tuple[float, float, float] | None:
+def _selected_treatment_observation(
+    rows: Any,
+    unit: Any = None,
+) -> tuple[float, float, float] | None:
+    """Return (responders, denominator, rate) for the first usable treatment arm.
+
+    ``row["count"]`` is the value in the registry's reported unit, so the
+    outcome-level ``unit`` decides the conversion (participant counts pass
+    through; percentage/proportion units reconstruct the responder count).
+    Rows whose unit is missing or unrecognised, or whose implied rate falls
+    outside [0, 1], are skipped rather than guessed at.
+    """
     if not isinstance(rows, list):
         return None
 
@@ -128,10 +172,17 @@ def _selected_treatment_observation(rows: Any) -> tuple[float, float, float] | N
         denominator = _optional_finite_number(row.get("denominator"))
         if count is None or denominator is None:
             continue
-        if count < 0 or denominator <= 0 or count > denominator:
+        if denominator <= 0:
             continue
 
-        return count, denominator, count / denominator
+        try:
+            responders, n, _ = fix_endpoint_units.responders_from_row(
+                unit, count, denominator
+            )
+        except fix_endpoint_units.UnitError:
+            continue
+
+        return float(responders), float(n), (responders / n) if n else 0.0
 
     return None
 
@@ -242,7 +293,9 @@ def components_from_reranked_rows(
             if candidate_key != target_endpoint_key:
                 continue
 
-            selected_observation = _selected_treatment_observation(quantity.get("arm_results"))
+            selected_observation = _selected_treatment_observation(
+                quantity.get("arm_results"), unit=quantity.get("unit")
+            )
             if selected_observation is not None:
                 selected_quantity = quantity
                 break

@@ -607,10 +607,24 @@ def build_training_example_from_pipeline_result(
     if query is None:
         raise ValueError(f"query_summary does not contain endpoint {endpoint_key}")
 
+    # `treatment_count` / `treatment_denominator` come from
+    # `query_endpoint_observations`, which performs unit-aware conversion of
+    # the registry row (see pipeline/fix_endpoint_units.py): for
+    # percentage-reported outcomes `treatment_count` is the reconstructed
+    # responder count, not the raw reported value. The held-out query rate
+    # used in every retrospective loss therefore derives from corrected
+    # (responders, denominator) pairs.
     count = query.get("treatment_count")
     denominator = query.get("treatment_denominator")
     if count is None or denominator is None:
         raise ValueError(f"query endpoint {endpoint_key} is missing treatment count/denominator")
+    count = int(round(float(count)))
+    denominator = int(round(float(denominator)))
+    if not 0 <= count <= denominator:
+        raise ValueError(
+            f"query endpoint {endpoint_key} has inconsistent responders/denominator "
+            f"({count}/{denominator}) after unit-aware conversion"
+        )
 
     rows = result.get("reranked_top_matches") or result.get("reranked_top10") or []
     mixture = mixture_prior.components_from_reranked_rows(

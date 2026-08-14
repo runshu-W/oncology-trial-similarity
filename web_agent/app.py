@@ -15,7 +15,17 @@ from fastapi.staticfiles import StaticFiles
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = PROJECT_ROOT.parent
-PIPELINE_PATH = PROJECT_ROOT / "docs" / "oncology_trial_similarity_pipeline.py"
+# The pipeline moved from docs/ to pipeline/ in the five-section
+# reorganisation; keep the legacy path as a fallback for older checkouts
+# (e.g. the trial2vec-secret-mixture-prior worktree).
+PIPELINE_PATH_CANDIDATES = (
+    PROJECT_ROOT / "pipeline" / "oncology_trial_similarity_pipeline.py",
+    PROJECT_ROOT / "docs" / "oncology_trial_similarity_pipeline.py",
+)
+PIPELINE_PATH = next(
+    (path for path in PIPELINE_PATH_CANDIDATES if path.exists()),
+    PIPELINE_PATH_CANDIDATES[0],
+)
 STATIC_DIR = PROJECT_ROOT / "web_agent" / "static"
 DEFAULT_INDEX_DIR = WORKSPACE_ROOT / "artifacts" / "oncology_trial_similarity_clinicalbert"
 

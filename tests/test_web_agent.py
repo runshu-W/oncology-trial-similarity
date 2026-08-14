@@ -100,6 +100,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "title": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Drug", "count": 12, "denominator": 40},
                                 {"arm": "Placebo Comparator", "count": 6, "denominator": 40},
@@ -122,6 +123,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "endpoint": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Arm", "count": 10, "denominator": 50},
                             ],
@@ -141,6 +143,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "endpoint": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Treatment Arm", "count": 18, "denominator": 60},
                             ],
@@ -187,6 +190,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "title": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Drug", "count": 12, "denominator": 40},
                             ],
@@ -208,6 +212,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "endpoint": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Arm", "count": 10, "denominator": 50},
                             ],
@@ -227,6 +232,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "endpoint": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Treatment Arm", "count": 18, "denominator": 60},
                             ],
@@ -272,6 +278,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "title": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Drug", "count": 0, "denominator": 10},
                             ],
@@ -293,6 +300,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "endpoint": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Arm", "count": 45, "denominator": 50},
                             ],
@@ -320,6 +328,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "title": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Drug", "count": 0, "denominator": 10},
                             ],
@@ -341,6 +350,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "endpoint": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Arm", "count": 45, "denominator": 50},
                             ],
@@ -381,6 +391,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "title": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Drug", "count": 12, "denominator": 40},
                             ],
@@ -402,6 +413,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "endpoint": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [
                                 {"arm": "Experimental Arm", "count": 10, "denominator": 50},
                             ],
@@ -460,6 +472,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "title": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [],
                         }
                     ]
@@ -473,6 +486,7 @@ class WebAgentTests(unittest.TestCase):
                         {
                             "endpoint": "Objective Response Rate",
                             "endpoint_family": "ORR/CR/PR",
+                            "unit": "Participants",
                             "arm_results": [{"arm": "Experimental", "count": 15, "denominator": 50}],
                         }
                     ],
@@ -495,10 +509,30 @@ class WebAgentTests(unittest.TestCase):
             {"arm": "Experimental: Drug X", "count": 10, "denominator": 20},
         ]
 
-        selected, observation = app_module.pipeline.select_arm_observation(rows, "treatment")
+        selected, observation = app_module.pipeline.select_arm_observation(
+            rows, "treatment", unit="Participants"
+        )
 
         self.assertEqual(selected["arm"], "Experimental: Drug X")
         self.assertEqual(observation["count"], 10.0)
+
+    def test_arm_observation_converts_percentage_units(self) -> None:
+        rows = [{"arm": "Experimental: Drug X", "count": 26.0, "denominator": 31}]
+
+        selected, observation = app_module.pipeline.select_arm_observation(
+            rows, "treatment", unit="Percentage of Participants"
+        )
+
+        self.assertEqual(selected["arm"], "Experimental: Drug X")
+        self.assertEqual(observation["count"], 8.0)
+        self.assertEqual(observation["denominator"], 31.0)
+        self.assertAlmostEqual(observation["rate"], 8.0 / 31.0)
+        self.assertTrue(observation.get("count_reconstructed_from_unit"))
+
+    def test_arm_observation_refuses_rows_without_unit(self) -> None:
+        rows = [{"arm": "Experimental: Drug X", "count": 10, "denominator": 20}]
+
+        self.assertIsNone(app_module.pipeline.select_arm_observation(rows, "treatment"))
 
     def test_endpoint_score_requires_matched_endpoint_denominator(self) -> None:
         query = {
@@ -564,6 +598,7 @@ class WebAgentTests(unittest.TestCase):
                 {
                     "endpoint": "Objective Response Rate",
                     "endpoint_family": "ORR/CR/PR",
+                    "unit": "Participants",
                     "arm_results": [{"arm": "Experimental", "count": 10, "denominator": 20}],
                 }
             ],

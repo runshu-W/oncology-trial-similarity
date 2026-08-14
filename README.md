@@ -104,13 +104,15 @@ python3 test_simulation.py && python3 test_autodiff.py
 
 Pure NumPy, no PyTorch or SciPy. Full study runs in a few minutes.
 
-> **Known issue.** Endpoint-unit handling when converting outcome rows to rates
-> is defective at four call sites in `pipeline/` and affects a minority of
-> held-out ORR values in the retrospective aggregates. Diagnosed, quantified and
-> tooled, but not yet fixed, because a piecemeal fix would make the codebase
-> internally inconsistent and a correct one needs a pipeline re-run from the raw
-> exports. See `docs/KNOWN_ISSUE_endpoint_units.md`. The simulations and the
-> case-study runner are unaffected.
+> **Known issue (code fixed, re-run pending).** Endpoint-unit handling when
+> converting outcome rows to rates was defective at four call sites in
+> `pipeline/`. All four sites now dispatch on the reported unit via
+> `pipeline/fix_endpoint_units.py` (behaviour pinned by
+> `tests/test_endpoint_units.py`), but the archived retrospective aggregates
+> were produced before the fix and remain provisional until the affected
+> artifacts are regenerated from the stored corpora. See
+> `docs/KNOWN_ISSUE_endpoint_units.md`. The simulations and the case-study
+> runner are unaffected.
 
 ## Quick Start
 

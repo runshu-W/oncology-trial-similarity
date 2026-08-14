@@ -138,6 +138,7 @@ class MixturePriorComponentTests(unittest.TestCase):
                 {
                     "endpoint": "Objective Response Rate",
                     "endpoint_family": "ORR/CR/PR",
+                    "unit": "Participants",
                     "arm_results": [{"arm": "Experimental", "count": 10, "denominator": 40}],
                 }
             ],
@@ -161,6 +162,7 @@ class MixturePriorComponentTests(unittest.TestCase):
                     {
                         "endpoint": "Objective Response Rate",
                         "endpoint_family": "ORR/CR/PR",
+                        "unit": "Participants",
                         "arm_results": [{"arm": "Experimental", "count": 20, "denominator": 50}],
                     }
                 ],
@@ -179,6 +181,7 @@ class MixturePriorComponentTests(unittest.TestCase):
                     {
                         "endpoint": "Objective Response Rate",
                         "endpoint_family": "ORR/CR/PR",
+                        "unit": "Participants",
                         "arm_results": [{"arm": "Experimental", "count": 8, "denominator": 40}],
                     }
                 ],
@@ -243,10 +246,38 @@ class MixturePriorComponentTests(unittest.TestCase):
             [
                 {"arm": "Standard of Care", "count": 1, "denominator": 20},
                 {"arm": "Experimental", "count": 12, "denominator": 30},
-            ]
+            ],
+            unit="Participants",
         )
 
         self.assertEqual(observation, (12.0, 30.0, 0.4))
+
+    def test_selected_treatment_observation_converts_percentage_units(self) -> None:
+        observation = mixture_prior._selected_treatment_observation(
+            [{"arm": "Experimental", "count": 26.0, "denominator": 31}],
+            unit="Percentage of Participants",
+        )
+
+        self.assertIsNotNone(observation)
+        responders, denominator, rate = observation
+        self.assertEqual(responders, 8.0)
+        self.assertEqual(denominator, 31.0)
+        self.assertAlmostEqual(rate, 8.0 / 31.0)
+
+    def test_selected_treatment_observation_refuses_missing_unit(self) -> None:
+        observation = mixture_prior._selected_treatment_observation(
+            [{"arm": "Experimental", "count": 12, "denominator": 30}]
+        )
+
+        self.assertIsNone(observation)
+
+    def test_selected_treatment_observation_drops_impossible_count_rows(self) -> None:
+        observation = mixture_prior._selected_treatment_observation(
+            [{"arm": "Experimental", "count": 45, "denominator": 30}],
+            unit="Participants",
+        )
+
+        self.assertIsNone(observation)
 
     def test_dor_quantity_is_ignored_for_orr_endpoint(self) -> None:
         row = self._component_row(
@@ -270,6 +301,7 @@ class MixturePriorComponentTests(unittest.TestCase):
                     "endpoint": "Progression-free survival",
                     "endpoint_family": "PFS",
                     "time_frame": "6 months",
+                    "unit": "Participants",
                     "arm_results": [{"arm": "Experimental", "count": 18, "denominator": 50}],
                 }
             ]

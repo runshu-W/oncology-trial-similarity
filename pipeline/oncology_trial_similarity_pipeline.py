@@ -71,6 +71,30 @@ def _load_secret_retrieval() -> Any:
 secret_retrieval = _load_secret_retrieval()
 
 
+def _load_fix_endpoint_units() -> Any:
+    if __package__:
+        try:
+            from . import fix_endpoint_units as package_fix_endpoint_units
+
+            return package_fix_endpoint_units
+        except ImportError:
+            pass
+
+    sibling_path = Path(__file__).with_name("fix_endpoint_units.py")
+    spec = importlib.util.spec_from_file_location(
+        "_oncology_trial_similarity_fix_endpoint_units",
+        sibling_path,
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load endpoint-unit module from {sibling_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+fix_endpoint_units = _load_fix_endpoint_units()
+
+
 DEFAULT_DB_ROOT = Path(
     "/Users/wang/PHD/clinic.gov/Oncology_All_Trials/Oncology_All_Trials"
 )
@@ -253,6 +277,11 @@ def extract_outcomes(results_posted: dict[str, Any]) -> list[dict[str, Any]]:
     for outcome in outcomes:
         if not isinstance(outcome, dict):
             continue
+        # The unit of measure decides how a reported value converts into a
+        # rate ("Participants" is a responder count; "Percentage of
+        # Participants" is already a percentage), so it must be read before
+        # the arm-level rows are converted below.
+        unit = clean_text(outcome.get("Unit of Measure"))
         table = outcome.get("Data Table", [])
         measurements = []
         denominators = []
@@ -293,7 +322,19 @@ def extract_outcomes(results_posted: dict[str, Any]) -> list[dict[str, Any]]:
             if denominator is not None:
                 result["denominator"] = denominator
                 if "count" in result and denominator:
-                    result["proportion"] = round(float(result["count"]) / float(denominator), 6)
+                    # Unit-aware conversion: `count` is the value in the
+                    # reported unit, not necessarily a responder count.
+                    # Refuse to guess (leave proportion unset) when the unit
+                    # is missing/unrecognised or implies a rate outside [0,1].
+                    try:
+                        result["proportion"] = round(
+                            fix_endpoint_units.rate_from_row(
+                                unit, result["count"], denominator
+                            ),
+                            6,
+                        )
+                    except fix_endpoint_units.UnitError:
+                        pass
             arm_results.append(result)
         extracted.append(
             {
@@ -302,7 +343,7 @@ def extract_outcomes(results_posted: dict[str, Any]) -> list[dict[str, Any]]:
                 "description": clean_text(outcome.get("Description")),
                 "time_frame": clean_text(outcome.get("Time Frame")),
                 "population_description": clean_text(outcome.get("Population Description")),
-                "unit": clean_text(outcome.get("Unit of Measure")),
+                "unit": unit,
                 "param_type": clean_text(outcome.get("Param Type")),
                 "denominators": denominators,
                 "measurements": measurements,
@@ -1692,25 +1733,47 @@ def arm_role(arm: str) -> str:
     return "treatment"
 
 
-def endpoint_observation_from_row(row: dict[str, Any]) -> dict[str, float] | None:
-    count = to_float(row.get("count"))
+def endpoint_observation_from_row(
+    row: dict[str, Any],
+    unit: str | None = None,
+) -> dict[str, float] | None:
+    """Convert one arm-level outcome row into a (count, denominator, rate) observation.
+
+    ``row["count"]`` holds the value in the registry's reported unit, so the
+    outcome-level unit decides the conversion: participant-count units keep the
+    value as a responder count, percentage/proportion units reconstruct the
+    responder count as ``round(rate * n)``. Rows whose unit is missing or
+    unrecognised, or whose implied rate falls outside [0, 1], are dropped
+    rather than guessed at (see ``pipeline/fix_endpoint_units.py``).
+    """
+    value = to_float(row.get("count"))
     denominator = to_float(row.get("denominator"))
-    if count is None or denominator is None or denominator <= 0 or count < 0 or count > denominator:
+    if value is None or denominator is None or denominator <= 0:
         return None
-    return {
-        "count": count,
-        "denominator": denominator,
-        "rate": count / denominator,
+    try:
+        responders, n, reconstructed = fix_endpoint_units.responders_from_row(
+            unit, value, denominator
+        )
+    except fix_endpoint_units.UnitError:
+        return None
+    observation: dict[str, float] = {
+        "count": float(responders),
+        "denominator": float(n),
+        "rate": (responders / n) if n else 0.0,
     }
+    if reconstructed:
+        observation["count_reconstructed_from_unit"] = True
+    return observation
 
 
 def select_arm_observation(
     arm_results: list[dict[str, Any]],
     desired_role: str = "treatment",
+    unit: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, float]] | None:
     usable = []
     for row in arm_results:
-        observation = endpoint_observation_from_row(row)
+        observation = endpoint_observation_from_row(row, unit=unit)
         if observation is not None:
             usable.append((row, observation))
     if not usable:
@@ -1733,7 +1796,9 @@ def query_endpoint_observations(query_summary: dict[str, Any]) -> dict[str, dict
         )
         if endpoint_key is None or endpoint_key in observations:
             continue
-        treatment = select_arm_observation(endpoint.get("arm_results", []), "treatment")
+        treatment = select_arm_observation(
+            endpoint.get("arm_results", []), "treatment", unit=endpoint.get("unit")
+        )
         item = {
             "endpoint": endpoint.get("title", ""),
             "endpoint_family": endpoint_key,
@@ -1749,7 +1814,9 @@ def query_endpoint_observations(query_summary: dict[str, Any]) -> dict[str, dict
                     "treatment_rate": round(treatment_obs["rate"], 6),
                 }
             )
-            control = select_arm_observation(endpoint.get("arm_results", []), "control")
+            control = select_arm_observation(
+                endpoint.get("arm_results", []), "control", unit=endpoint.get("unit")
+            )
             if control is not None:
                 control_row, control_obs = control
                 item.update(
@@ -1781,7 +1848,9 @@ def historical_endpoint_observations(
             )
             if candidate_key != endpoint_key:
                 continue
-            selected = select_arm_observation(quantity.get("arm_results", []), "treatment")
+            selected = select_arm_observation(
+                quantity.get("arm_results", []), "treatment", unit=quantity.get("unit")
+            )
             if selected is None:
                 continue
             row, observation = selected
