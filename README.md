@@ -156,14 +156,14 @@ Large runtime artifacts are intentionally ignored by Git. The public, lightweigh
 
 ## Current Result Highlights
 
-Current lightweight results are generated from ORR pseudo-queries without expert borrowability labels.
+Current lightweight results are generated from ORR pseudo-queries without expert borrowability labels. All borrowing-layer numbers below come from the corrected-units re-run of 2026-08-14 (`docs/rerun_unitfix_2026-08-14.md`; tables in `results/tables/rerun_unitfix/`).
 
-- SECRET pool improved paired Stage 1 component-readiness over hashing by 0.0912 with a bootstrap CI of [0.0799, 0.1018].
+- SECRET pool improved paired Stage 1 component-readiness over hashing by 0.0912 with a bootstrap CI of [0.0799, 0.1018] (retrieval metrics are unaffected by the endpoint-unit correction).
 - SECRET pool improved reranked endpoint-match score over hashing by 1.1047 with a bootstrap CI of [1.0600, 1.1503].
-- In the borrowing baseline head-to-head table, `two_head_trained` achieved mean NLL 3.0181 versus rule mean NLL 3.1620.
-- `rule_sam` achieved mean NLL 2.9721, highlighting the importance of prior-data conflict adaptation.
-- True-date temporal NLL summaries show `two_head_trained` and `rule_sam` improvements across multiple date-based and rolling-origin subsets.
-- Simulation operating-characteristics results cover exchangeable, optimistic conflict, pessimistic conflict, mixture conflict, and heterogeneous historical scenarios using 500 iterations and 400 deterministic template examples.
+- In the borrowing baseline head-to-head on 1,407 corrected examples, `two_head_sam` achieved mean NLL 2.7938 and the trained `two_head` 2.8957, versus 2.9006 for `rule_sam` and 3.0100 for `rule`.
+- The best-tuned robust-MAP baseline reached 3.0019, behind every conflict-adapted mixture prior.
+- Leakage-free rolling-origin forward validation (per-fold retraining at cutoffs 2020/2021/2022-12-31): `two_head_sam` improved future-fold NLL over `rule` by −0.198 to −0.203 nats with paired bootstrap 95% CIs excluding zero.
+- The gold-standard borrowability simulation (2,000 replicates per cell, conflict grid 0–1.5) and the external-control scenario supply the known-truth operating characteristics; they never touched the defective extraction path.
 
 See `results/README.md` for the file-level guide.
 

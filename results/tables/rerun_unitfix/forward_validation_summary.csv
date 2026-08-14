@@ -1,0 +1,9 @@
+method,n_folds,mean_nll_across_folds,mean_coverage95,leakage_free
+two_head_sam,3,2.755825,0.997724,True
+rule_sam,3,2.851679,0.997724,True
+two_head,3,2.868176,0.970741,True
+rule,3,2.956287,0.97018,True
+commensurate_like,3,2.968815,0.968329,True
+weak_only,3,3.093918,0.997724,True
+map_like,3,3.156196,0.940791,True
+power_prior_like,3,3.160098,0.940791,True

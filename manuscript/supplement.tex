@@ -8,6 +8,9 @@
 %  Moved out of the main manuscript 2026-07-12 (pre-submission cleanup):
 %  the Claim--Evidence Map is an internal cross-check aid and is provided
 %  here as supplementary material rather than in the main appendix.
+%  Updated 2026-08-14 to the corrected-units re-run: all real-data values
+%  match the regenerated evidence artifacts (see the endpoint-unit
+%  subsection of the main text).
 % =====================================================================
 \documentclass[11pt]{article}
 
@@ -41,47 +44,60 @@ This table maps each principal claim in the main text to its supporting
 evidence and the boundary of that evidence. It is a cross-check aid: every
 ``Status'' entry states the setting in which the claim is supported (for
 example, retrospective ORR, leakage-free, simulation, or borrowing-layer only)
-and does not assert clinical or regulatory validity. Numeric values match the
-regenerated evidence artifacts (borrowing head-to-head $N=1{,}407$; conflict
-detection from the 5{,}000-iteration operating-characteristics sweep).
+and does not assert clinical or regulatory validity. All real-data values
+correspond to the corrected-units re-run on $N=1{,}407$ leakage-controlled ORR
+pseudo-queries; simulation values are unaffected by the endpoint-unit
+correction.
 
 \begin{longtable}{p{0.32\textwidth} p{0.39\textwidth} p{0.19\textwidth}}
 \toprule
 \textbf{Claim} & \textbf{Evidence} & \textbf{Status} \\
 \midrule
 \endhead
-SECRET pool improves Stage~1 retrieval metrics over hashing. & Paired benchmark
-over 1{,}470 ORR pseudo-queries with bootstrap CIs. & Supported (ORR). \\
-Trained two-head calibration improves held-out NLL over rule. & $3.0562$ vs
-$3.1800$ mean NLL. & Supported (retrospective ORR). \\
+Trained two-head calibration improves held-out NLL over rule. & $2.8957$ vs
+$3.0100$ mean NLL. & Supported (retrospective ORR). \\
 SAM conflict adaptation improves NLL and responds to conflict. & Two-head-SAM
-$2.9328$, rule-SAM $2.9755$; simulation trigger rates. & Supported as
+$2.7938$, rule-SAM $2.9006$; simulation conflict behaviour. & Supported as
 sensitivity evidence. \\
 Conflict-adapted borrowing shows lower future-fold NLL in three rolling-origin
-splits. & Leakage-free rolling-origin: rule-SAM $-0.174$ to $-0.178$;
-per-fold-retrained two-head-SAM $-0.19$ to $-0.24$ nats (CIs exclude 0). &
-Supported (leakage-free) for closed-form and learned models. \\
-Priors are well calibrated, not merely lower loss. & PIT KS $0.146$, 95\%
-coverage $0.988$ for two-head-SAM. & Supported (held-out ORR). \\
-Method reduces historical influence under constructed sham-history. & Sham
-controls: helps on real, not on sham; SAM triggers on sham. & Supported
-(label-free; not clinical non-comparability). \\
-SAM detects prior-data conflict. & Known-truth simulation: detection AUC rises
-to $0.74$ (5{,}000-iter run). & Supported (simulation). \\
-Learned prior outperforms a standard robust prior. & Two-head-SAM $2.933$ vs
-best robust-MAP $3.135$. & Supported (retrospective ORR). \\
-Conclusions insensitive to hand-set Stage~2 weights. & Tuning gains $\sim
-0.013$ nats; NLL flat ($|\Delta|<0.01$). & Supported. \\
-Priors not driven by individual records. & Narrow bootstrap CIs; leave-one-out
-shift median $0.001$, p90 $0.015$. & Supported. \\
-Borrowing-layer NLL reductions on selected other binary endpoints (exploratory).
-& Leave-one-trial-out improves NLL for ORR, DCR, DLT, discontinuation (small
-$n$). & Supported (borrowing-layer only; not full pipeline). \\
-Extracted observations are of measured quality. & 44\% raw rows invalid;
-admission rule (round-trip 8/8) removes them. & Supported. \\
-Reported two-head results use a genuine two-head model. & Checkpoint
-verification identified and excluded mislabeled model artifacts; the genuine
-two-head checkpoint was used throughout. & Supported. \\
+splits. & Leakage-free rolling-origin: rule-SAM $-0.100$ to $-0.109$;
+per-fold-retrained two-head-SAM $-0.198$ to $-0.203$ nats (bootstrap 95\% CIs
+exclude 0). & Supported (leakage-free) for closed-form and learned models. \\
+Priors show improved (not perfect) calibration, not merely lower loss. & PIT KS
+$0.177$, 95\% coverage $0.996$, reliability slope $1.36$ for two-head-SAM. &
+Supported (held-out ORR). \\
+Learned prior outperforms a standard robust prior. & Two-head-SAM $2.794$ vs
+best robust-MAP $3.002$; robust-MAP degrades to $3.100$ at higher
+robustification weights. & Supported (retrospective ORR). \\
+Borrowing improves design-based operating characteristics without conflict. &
+Gold-standard simulation: type I error $0.025$ vs $0.037$ no-borrowing; power
+$0.587$ vs $0.536$; full pooling $0.584$. & Supported (simulation). \\
+Under strong conflict the learned prior degrades and is not the safest. & Type
+I error $0.070$ vs rule $0.050$ and robust-MAP $0.047$, without compensating
+power gain. & Supported (simulation; reported as a limitation). \\
+Design-time signals cannot detect uniform whole-set conflict. & Scenario S4:
+every design-time method below chance (ROC-AUC $0.445$); outcome-dependent
+UIP-JS $0.839$. & Supported (simulation; structural limitation). \\
+The prospective signal does not improve discrimination but is necessary for
+the discount head to respond. & Ablation: ROC-AUC change $-0.000$ to $+0.016$;
+without $g_i$ the fitted discount is constant (SD $0.002$) and borrowed
+information is flat across donors. & Supported (simulation ablation). \\
+Adaptive borrowing protects type I error with drifted external controls. &
+External-control scenario: pooling $0.211$, internal-only $0.014$, learned
+prior $0.032$. & Supported (simulation). \\
+Extracted observations are of measured quality. & About 44\% of raw arm rows
+are not valid binary observations; the admission rule (synthetic round-trip
+8/8) removes them before prior construction. & Supported (July audit;
+pre-correction corpus). \\
+The endpoint-unit defect is quantified and corrected, and results were
+regenerated. & $804/3{,}319$ arm-level ORR rows provably wrong pre-correction;
+all four call sites fixed; $1{,}470 \to 1{,}407$ examples; full re-run with
+fixed seeds and pinned environment. & Supported (correction documented in
+main text). \\
+Reported two-head results use genuine, freshly trained checkpoints. & Corrected
+re-run trained the primary and per-fold models from scratch (seed $20260603$);
+attached predictions match training-run NLL rows to within $10^{-4}$. &
+Supported. \\
 \bottomrule
 \end{longtable}
 

@@ -47,13 +47,26 @@ These results are retrospective predictive calibration and simulation evidence w
 The `gold_standard_*` files come from a simulation in which the correct
 borrowing decision is known by construction, and are the load-bearing evidence
 for the borrowing layer. The remaining files are retrospective evidence on real
-registry text; note the open defect documented in
-`docs/KNOWN_ISSUE_endpoint_units.md`, which affects a minority of held-out ORR
-values feeding the retrospective aggregates but does not touch the simulations.
+registry text.
+
+**Corrected-units re-run (2026-08-14).** The endpoint-unit defect documented in
+`docs/KNOWN_ISSUE_endpoint_units.md` was fixed at code level and the full
+retrospective borrowing evaluation was regenerated on unit-corrected data; the
+manuscript reports those corrected numbers. The corrected tables live in
+`tables/rerun_unitfix/` (head-to-head, robust-MAP, forward validation,
+calibration) and the manuscript figures rebuilt from them in
+`figures/final_v3_unitfix/`; see `docs/rerun_unitfix_2026-08-14.md` for the
+old-vs-new comparison and reproduction commands. Legacy tables elsewhere in
+`tables/` predate the correction: the `gold_standard_*` and paired Stage-1
+retrieval files are unaffected by the defect, while the pre-correction
+borrowing aggregates (`borrowing_baseline_summary.csv`,
+`temporal_borrowing_nll_table.csv`, and related `.tex` tables) are retained
+for the audit trail only and are superseded by `tables/rerun_unitfix/`.
 
 To regenerate this directory from local artifacts, run:
 
 ```bash
 python scripts/build_manuscript_evidence_package.py
 python simulation/gold_standard/build_outputs.py
+python pipeline/build_main_figures_rerun.py   # corrected F1-F3
 ```

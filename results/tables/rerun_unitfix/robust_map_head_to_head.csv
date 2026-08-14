@@ -1,0 +1,12 @@
+method,family,n,mean_nll,coverage95,mean_ess
+two_head_sam,learned,1407,2.793791,0.996446,
+two_head,learned,1407,2.895679,0.974414,
+rule_sam,other,1407,2.900569,0.995025,
+robust_map_w0.5,robust_map,1407,3.001875,0.986496,32.7067
+rule,other,1407,3.009967,0.971571,
+commensurate_like,other,1407,3.032517,0.964463,
+robust_map_w0.8,robust_map,1407,3.040416,0.96162,32.7067
+robust_map_w0.9,robust_map,1407,3.099594,0.937456,32.7067
+weak_only,other,1407,3.164051,0.994314,
+map_like,other,1407,3.221931,0.945274,
+power_prior_like,other,1407,3.226863,0.942431,
