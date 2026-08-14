@@ -86,9 +86,10 @@ tests.
 
 \noindent\textbf{Results.} In borrowing baseline comparisons on objective
 response rate (ORR) pseudo-queries, the trained two-head mixture model achieved
-mean negative log-likelihood (NLL) $3.0562$ versus $3.1800$ for the rule-based
-mixture; the conflict-adapted rule baseline achieved $2.9755$, and the same SAM
-adapter applied to the trained two-head prior achieved $2.9328$. Under
+mean negative log-likelihood (NLL) $2.8957$ versus $3.0100$ for the rule-based
+mixture and $2.9006$ for the conflict-adapted rule baseline; the same SAM
+adapter applied to the trained two-head prior achieved $2.7938$, the lowest of
+all evaluated priors. Under
 leakage-free forward validation---models trained only on trials completed before
 a cutoff date and scored on strictly later trials---across three cutoffs, the
 conflict-adapted priors showed lower future-fold NLL with paired bootstrap
@@ -121,9 +122,11 @@ component, each of which has close precedents. The retrospective and simulation
 analyses reported here do not establish expert borrowability of individual
 historical trials or clinical decision validity, and do not replace expert
 clinical and statistical review, prospective validation, or protocol-specific
-operating-characteristics evaluation. An endpoint-unit defect affecting a
-minority of real-data held-out outcomes is documented in the text; the
-simulation results are unaffected by it.
+operating-characteristics evaluation. An endpoint-unit defect discovered while
+auditing the extraction was corrected and the full real-data evaluation was
+re-run on unit-corrected data; the defect, its measured scope, and the effect
+of the correction are documented in the text, and the simulation results were
+never affected by it.
 
 \vspace{0.5em}
 \noindent\textbf{Keywords:} Bayesian historical borrowing; mixture prior;
@@ -726,7 +729,7 @@ Analysis & Size & Split / leakage status & Endpoint scope \\
 \midrule
 Borrowing head-to-head + calibration & 1{,}407 queries & Retrospective model-development; closed-form rows leakage-free, learned rows include development queries & ORR \\
 Two-head training & 80\%/20\% split (seed 20260603) & Fit on 80\%, scored on held-out 20\% & ORR \\
-Leakage-free rolling-origin forward & train 629/810/1{,}017; future folds 785/604/397 & Train-on-past / test-on-future at cutoffs 2020/2021/2022-12-31; per-fold retraining & ORR \\
+Leakage-free rolling-origin forward & train 632/813/1{,}017; future folds 775/594/390 & Train-on-past / test-on-future at cutoffs 2020/2021/2022-12-31; per-fold retraining & ORR \\
 Gold-standard \& external-control simulation & 2{,}000 replicates per cell & Known-truth simulation (no real-data leakage) & Simulated binary endpoint \\
 Extraction-quality audit & 7{,}173 trials (26{,}066 arm rows) & Automated consistency checks + synthetic round-trip; manual data-entry spot check & All extracted counts \\
 \bottomrule
@@ -779,9 +782,13 @@ only on strictly future trials.
 The mixture-prior utilities are implemented as a pure-Python statistical
 module, while the broader pipeline contains trial parsing, retrieval,
 reranking, Bayesian analysis, mixture-prior construction, SAM adaptation, and
-Web Agent output. Fresh local verification passed 22 focused mixture-prior
-unit tests and 142 unit tests under full discovery, plus 65 additional
-label-free evidence-module tests. Large runtime artifacts, model checkpoints,
+Web Agent output. Fresh verification of the corrected-units revision passed
+113 unit tests in the torch-free suite, including 25 focused mixture-prior
+tests and 17 endpoint-unit regression tests; the torch-dependent training path
+was exercised end-to-end by the corrected-units re-run itself (primary fit plus
+three past-only fold refits, with an internal consistency check matching
+attached model predictions to the training-run NLL rows to within $10^{-4}$).
+Large runtime artifacts, model checkpoints,
 and local ClinicalTrials.gov exports are excluded from version control and
 require local regeneration or separate release archiving. Although the
 implementation plan records fail-first test steps, complete historical RED
@@ -896,13 +903,14 @@ non-comparable external controls.
 \label{sec:headtohead-results}
 The borrowing baseline comparison used 1{,}407 ORR pseudo-query examples,
 computed with the genuine two-head DeepSets checkpoint (the same evaluation
-reported in Section~\ref{sec:calib-results}; Figure~\ref{fig:nll}). The weak-only prior had mean NLL $3.1933$
-and the rule mixture baseline $3.1800$. The trained two-head mixture model
-achieved mean NLL $3.0562$ (delta $-0.1238$ relative to rule); the
-conflict-adapted rule baseline achieved $2.9755$ (delta $-0.2045$); and the
-same SAM adapter applied to the trained two-head prior achieved $2.9328$
-(delta $-0.2472$). MAP-like and power-prior-like baselines had higher NLLs
-($3.2793$ and $3.3124$, respectively). The full head-to-head ranking, including
+reported in Section~\ref{sec:calib-results}; Figure~\ref{fig:nll}). The weak-only prior had mean NLL $3.1641$
+and the rule mixture baseline $3.0100$. The trained two-head mixture model
+achieved mean NLL $2.8957$ (delta $-0.1143$ relative to rule), narrowly ahead
+of the conflict-adapted rule baseline at $2.9006$ (delta $-0.1094$); the same
+SAM adapter applied to the trained two-head prior achieved $2.7938$
+(delta $-0.2162$), the lowest of all evaluated priors. MAP-like and
+power-prior-like baselines had higher NLLs
+($3.2219$ and $3.2269$, respectively). The full head-to-head ranking, including
 a tuned RBesT-style robust meta-analytic-predictive prior, is given in
 Table~\ref{tab:headtohead}. These results suggest that calibrated
 mixture allocation and explicit prior-data conflict adaptation improve
@@ -928,16 +936,16 @@ coverage while remaining uninformative.}
 \toprule
 Method & Family & Mean NLL & 95\% coverage \\
 \midrule
-\textbf{two\_head\_sam} & learned + SAM & \textbf{2.9328} & 0.988 \\
-rule\_sam & rule + SAM & 2.9755 & 0.986 \\
-two\_head & learned & 3.0562 & 0.972 \\
-robust\_map ($w{=}0.5$) & robust-MAP & 3.1348 & 0.979 \\
-rule & rule & 3.1800 & 0.948 \\
-weak\_only & none & 3.1933 & 0.984 \\
-commensurate\_like & classical & 3.1982 & 0.940 \\
-map\_like & classical & 3.2793 & 0.924 \\
-power\_prior\_like & classical & 3.3124 & 0.916 \\
-robust\_map ($w{=}0.9$) & robust-MAP & 3.4784 & 0.897 \\
+\textbf{two\_head\_sam} & learned + SAM & \textbf{2.7938} & 0.996 \\
+two\_head & learned & 2.8957 & 0.974 \\
+rule\_sam & rule + SAM & 2.9006 & 0.995 \\
+robust\_map ($w{=}0.5$) & robust-MAP & 3.0019 & 0.986 \\
+rule & rule & 3.0100 & 0.972 \\
+commensurate\_like & classical & 3.0325 & 0.964 \\
+robust\_map ($w{=}0.9$) & robust-MAP & 3.0996 & 0.937 \\
+weak\_only & none & 3.1641 & 0.994 \\
+map\_like & classical & 3.2219 & 0.945 \\
+power\_prior\_like & classical & 3.2269 & 0.942 \\
 \bottomrule
 \end{tabular}
 \end{table} Point-prediction
@@ -951,20 +959,20 @@ Table~\ref{tab:headtohead} also includes a tuned robust
 meta-analytic-predictive (MAP) prior [5] in the style of the RBesT tools [15]
 (a robustified mixture of a pooled MAP
 component and a vague component). Its best-tuned configuration reached held-out
-NLL $3.135$ --- better than naive rule ($3.180$) and weak-only ($3.193$)
-borrowing but clearly worse than the conflict-adapted mixture priors --- and it
-was sensitive to its robustification weight, degrading to $3.32$ and $3.48$ at
-higher weights as a single pooled MAP over-borrowed from homogeneously treated
-historical evidence.
+NLL $3.002$ --- marginally better than naive rule ($3.010$) and clearly better
+than weak-only ($3.164$) borrowing, but worse than every conflict-adapted
+mixture prior --- and it was sensitive to its robustification weight, degrading
+to $3.040$ and $3.100$ at higher weights as a single pooled MAP over-borrowed
+from homogeneously treated historical evidence.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{F1_headtohead_nll}
   \caption{\textbf{Borrowing-prior head-to-head.} (a)~Held-out beta-binomial
   predictive NLL (lower is better) for each borrowing prior on 1{,}407 ORR
-  pseudo-queries; the two-head + SAM mixture prior is lowest ($2.933$), ahead
+  pseudo-queries; the two-head + SAM mixture prior is lowest ($2.794$), ahead
   of a tuned RBesT-style robust meta-analytic-predictive (MAP) prior (best
-  $3.135$). (b)~Empirical 95\% credible-interval coverage per method.}
+  $3.002$). (b)~Empirical 95\% credible-interval coverage per method.}
   \label{fig:nll}
 \end{figure}
 
@@ -975,32 +983,33 @@ predictive NLL under rolling-origin, train-on-past/test-on-future splits---each
 model sees only trials completed on or before a cutoff date and is scored on
 strictly later trials, so no future information can leak into fitting---defined
 by true primary completion dates (cutoffs 2020-12-31, 2021-12-31, 2022-12-31;
-evaluation restricted to the future fold, with 785, 604, and 397 held-out
+evaluation restricted to the future fold, with 775, 594, and 390 held-out
 trials respectively; Figure~\ref{fig:forward}). Closed-form priors require no fitting, so their
 future-fold NLL is a genuinely leakage-free forward evaluation. The rule-SAM
-mixture prior improved future-fold NLL over the rule baseline by $-0.1775$,
-$-0.1784$, and $-0.1736$ nats at the three cutoffs, with paired bootstrap 95\%
-confidence intervals $[-0.2023,-0.1524]$, $[-0.2092,-0.1489]$, and
-$[-0.2082,-0.1368]$; all intervals exclude zero. Averaged across cutoffs,
-held-out NLL was $2.923$ for rule-SAM, $3.100$ for rule, and $3.113$ for
-weak-only, while map-like and power-prior-like baselines were worse ($3.27$ and
-$3.29$), and 95\% interval coverage on the future fold remained near nominal
-($0.96$--$0.99$). The trained two-head and two-head-SAM priors achieved the
-lowest future-fold NLL ($2.984$ and $2.880$, with per-cutoff improvements over
-rule of approximately $-0.10$ to $-0.24$); because each cutoff was scored with
+mixture prior improved future-fold NLL over the rule baseline by $-0.1086$,
+$-0.1049$, and $-0.1004$ nats at the three cutoffs, with paired bootstrap 95\%
+confidence intervals $[-0.1313,-0.0880]$, $[-0.1267,-0.0833]$, and
+$[-0.1275,-0.0752]$; all intervals exclude zero. Averaged across cutoffs,
+held-out NLL was $2.852$ for rule-SAM, $2.956$ for rule, and $3.094$ for
+weak-only, while map-like and power-prior-like baselines were worse ($3.156$ and
+$3.160$), and 95\% interval coverage on the future fold remained near nominal
+($0.94$--$1.00$). The trained two-head and two-head-SAM priors achieved the
+lowest future-fold NLL ($2.868$ and $2.756$, with per-cutoff improvements over
+rule of $-0.073$ to $-0.101$ without the SAM adapter and $-0.198$ to $-0.203$
+with it); because each cutoff was scored with
 a two-head DeepSets model retrained on past-only (date at or before the cutoff)
-data, these learned-model rows are now leakage-free as well, with all
+data, these learned-model rows are leakage-free as well, with all
 per-cutoff improvements retaining paired bootstrap 95\% confidence intervals
 that exclude zero (Table~\ref{tab:forward}). Non-leakage-controlled date-based
 subsets (annual cutoffs 2019--2022) showed the same ordering, with two-head-SAM
-improving mean NLL over the rule baseline by $-0.247$ to $-0.259$ nats.
+improving mean NLL over the rule baseline by $-0.215$ to $-0.219$ nats.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{F2_forward_validation}
   \caption{\textbf{Leakage-free rolling-origin forward evaluation.}
   (a)~Aggregated future-fold NLL across three train-on-past / test-on-future
-  cutoffs; two-head + SAM is lowest ($2.880$). (b)~Per-cutoff improvement over
+  cutoffs; two-head + SAM is lowest ($2.756$). (b)~Per-cutoff improvement over
   the rule baseline with paired bootstrap 95\% confidence intervals, all
   excluding zero. Learned-model rows use two-head DeepSets models retrained on
   past-only data at each cutoff.}
@@ -1019,14 +1028,14 @@ leakage-free.}
 \toprule
 Method & Future-fold NLL & Mean 95\% cov. & Leakage-free \\
 \midrule
-\textbf{two\_head\_sam} & \textbf{2.8799} & 0.996 & yes \\
-rule\_sam & 2.9232 & 0.991 & yes \\
-two\_head & 2.9836 & 0.977 & yes \\
-rule & 3.0997 & 0.961 & yes \\
-weak\_only & 3.1125 & 0.995 & yes \\
-commensurate\_like & 3.1374 & 0.942 & yes \\
-map\_like & 3.2741 & 0.912 & yes \\
-power\_prior\_like & 3.2909 & 0.904 & yes \\
+\textbf{two\_head\_sam} & \textbf{2.7558} & 0.998 & yes \\
+rule\_sam & 2.8517 & 0.998 & yes \\
+two\_head & 2.8682 & 0.971 & yes \\
+rule & 2.9563 & 0.970 & yes \\
+commensurate\_like & 2.9688 & 0.968 & yes \\
+weak\_only & 3.0939 & 0.998 & yes \\
+map\_like & 3.1562 & 0.941 & yes \\
+power\_prior\_like & 3.1601 & 0.941 & yes \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1037,14 +1046,15 @@ We assessed calibration against the real held-out outcome using the
 probability integral transform (PIT), interval coverage, and a reliability
 slope, rather than a single mean NLL (Figure~\ref{fig:calib}). On the 1{,}407 ORR pseudo-queries the
 two-head-SAM prior showed the most favorable calibration diagnostics among the
-evaluated priors, with mean held-out NLL $2.933$, PIT Kolmogorov--Smirnov
-distance to uniformity $0.146$, empirical 95\% credible-interval coverage
-$0.988$, and reliability slope $1.28$; rule-SAM was similar (KS $0.196$, slope
-$1.27$). These diagnostics are improved but not perfect: the reliability slope
+evaluated priors, with mean held-out NLL $2.794$, PIT Kolmogorov--Smirnov
+distance to uniformity $0.177$ (essentially tied with the two-head prior alone
+at $0.175$), empirical 95\% credible-interval coverage
+$0.996$, and reliability slope $1.36$; rule-SAM was similar (KS $0.243$, slope
+$1.30$). These diagnostics are improved but not perfect: the reliability slope
 exceeds unity and the PIT is not exactly uniform, so we describe this as
 improved calibration rather than achieved calibration. By contrast, the weak-only and
 non-conflict-adapted priors were systematically optimistic (weak-only PIT mean
-$0.32$, KS $0.29$; 50\% intervals covered only $0.44$). Conflict adaptation
+$0.29$, KS $0.33$; 50\% intervals covered only $0.44$). Conflict adaptation
 both lowered NLL and moved the PIT mean and coverage toward nominal
 (Table~\ref{tab:calib}).
 
@@ -1062,13 +1072,13 @@ weak-only and classical priors are systematically optimistic.}
 \toprule
 Method & Mean NLL & PIT KS & Cov50 & Cov80 & Cov95 & Reliab.\ slope \\
 \midrule
-\textbf{two\_head\_sam} & \textbf{2.933} & \textbf{0.146} & 0.596 & 0.878 & 0.988 & \textbf{1.28} \\
-rule\_sam & 2.976 & 0.196 & 0.525 & 0.825 & 0.986 & 1.27 \\
-two\_head & 3.056 & 0.146 & 0.525 & 0.822 & 0.972 & 0.33 \\
-rule & 3.180 & 0.199 & 0.444 & 0.738 & 0.948 & 0.20 \\
-weak\_only & 3.193 & 0.289 & 0.438 & 0.776 & 0.984 & -- \\
-map\_like & 3.279 & 0.237 & 0.403 & 0.702 & 0.924 & 0.11 \\
-power\_prior\_like & 3.312 & 0.224 & 0.397 & 0.689 & 0.916 & 0.05 \\
+\textbf{two\_head\_sam} & \textbf{2.794} & 0.177 & 0.622 & 0.915 & 0.996 & \textbf{1.36} \\
+two\_head & 2.896 & \textbf{0.175} & 0.576 & 0.869 & 0.974 & 0.77 \\
+rule\_sam & 2.901 & 0.243 & 0.532 & 0.856 & 0.995 & 1.30 \\
+rule & 3.010 & 0.245 & 0.485 & 0.807 & 0.972 & 0.68 \\
+weak\_only & 3.164 & 0.331 & 0.443 & 0.794 & 0.994 & -- \\
+map\_like & 3.222 & 0.346 & 0.389 & 0.689 & 0.945 & 0.45 \\
+power\_prior\_like & 3.227 & 0.338 & 0.399 & 0.680 & 0.942 & 0.42 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1081,10 +1091,11 @@ power\_prior\_like & 3.312 & 0.224 & 0.397 & 0.689 & 0.916 & 0.05 \\
   coverage, and (d)~reliability slope, comparing the two-head + SAM prior
   against rule + SAM, the two-head prior without SAM, and the weak-only prior.
   Conflict adaptation improves selected calibration diagnostics --- the
-  reliability slope rises from $0.33$ for two-head alone to $1.28$ with SAM
+  reliability slope rises from $0.77$ for two-head alone to $1.36$ with SAM
   (values above $1.0$ indicate remaining miscalibration) --- and two-head + SAM
-  shows the most favorable diagnostics among the compared priors (lowest PIT-KS
-  $0.146$, near-nominal coverage).}
+  shows the most favorable diagnostics overall among the compared priors
+  (PIT-KS $0.177$, essentially tied with two-head alone at $0.175$;
+  near-nominal coverage).}
   \label{fig:calib}
 \end{figure}
 
@@ -1478,7 +1489,7 @@ principle that historical borrowing should be evaluated not only for
 predictive fit but also for conflict behavior and decision operating
 characteristics [5,~10,~11].
 
-\subsection{A defect in endpoint-unit handling, and what it affects}
+\subsection{A defect in endpoint-unit handling: discovery, scope, and correction}
 \label{sec:limitations-data}
 
 While auditing the corpus in preparation for the external-control case study we
@@ -1488,36 +1499,56 @@ That is correct when ClinicalTrials.gov reports an outcome as a participant
 count, but not when it reports the same outcome as a percentage or a proportion,
 which it frequently does for objective response rate. A row reading $26.0$ with
 denominator $31$ under the unit ``Percentage of Participants'' denotes an ORR of
-$0.26$, whereas the extraction produced $0.839$.
+$0.26$, whereas the defective extraction produced $0.839$.
 
 We report the scope precisely. Of $3319$ arm-level ORR rows in the corpus,
 $2040$ are reported in percentage units and $846$ in participant counts; $804$
 rows ($24.2\%$) were assigned a rate above $1$, which is self-evidently
 impossible, while the remainder of the affected rows produced values inside
 $(0,1)$ that look plausible and are correspondingly more dangerous. Within the
-$116$ pseudo-queries that contributed mixture components, we could locate the
-originating row for $93$; of these, $9$ change under corrected unit handling and
-$8$ change by more than $0.10$ in absolute rate, the largest error being $0.579$.
-The held-out query outcome is the reference against which predictive NLL,
-calibration and coverage are computed, so the aggregate real-data results in
-Sections~\ref{sec:headtohead-results} onward are affected to that extent.
+pre-correction borrowing dataset, $9$ of $93$ locatable query outcomes changed
+under corrected handling, $8$ of them by more than $0.10$ in absolute rate, the
+largest by $0.579$. The
+held-out query outcome is the reference against which predictive NLL,
+calibration and coverage are computed, and historical component observations
+$(y_i, n_i)$ enter every prior directly, so the pre-correction real-data
+aggregates were contaminated on both sides: pre-correction training examples
+contained fractional ``responder counts'' (percentage values passed through
+unconverted, such as $52.3$ of $65$), proportion-reported query outcomes
+truncated to zero by integer casting, and percentage rows silently dropped
+whenever the reported value exceeded the denominator.
 
-Three things are not affected. The two worked case studies
+The conversion was corrected at all four call sites to dispatch on the
+reported unit of measure, reconstructing responder counts for
+percentage-reported rows as $\mathrm{round}(\text{rate} \times n)$ (an error of
+at most half a participant, flagged in the data) and refusing to convert rows
+whose unit is missing or unrecognised ($29$ rows) rather than guessing. Because
+the stored corpus retains the reported unit for every arm-level row, and
+because the unit conversion enters neither Stage~1 retrieval nor Stage~2
+reranking scores, the full downstream evaluation was regenerated from the
+stored pipeline results without re-running retrieval: the same $1{,}470$
+leakage-controlled pseudo-queries now yield $1{,}407$ usable examples
+(previously $1{,}414$; some queries lost their only convertible row under
+strict unit handling while previously dropped percentage rows re-entered). All
+real-data numbers reported in this manuscript --- the head-to-head, robust-MAP,
+calibration, and forward-validation analyses --- come from the corrected
+re-run, executed with the same seeds and pinned environment.
+
+The correction moved NLL levels down for every method (the held-out reference
+outcomes are cleaner) while preserving the method ordering and every
+qualitative conclusion; the one ordering change is that the trained two-head
+prior now narrowly outperforms the conflict-adapted rule baseline, where the
+pre-correction order was reversed. Forward-validation improvements remained
+stable with all paired bootstrap confidence intervals excluding zero. Three
+things were never affected. The two worked case studies
 (Section~\ref{sec:casestudies}) draw on rows reported in participant units
 ($6/26$ and $5/32$) and are correct as printed. The gold-standard simulation and
 the external-control simulation do not touch this extraction path at all. And
-the direction of the defect is not systematically favourable to our method: it
-perturbs the held-out truth for a minority of queries in both directions.
-
-We have implemented unit-aware extraction that dispatches on the reported unit
-and refuses to convert rows whose unit is missing or unrecognised (29 rows),
-rather than guessing. The corrected extraction has not been propagated through
-the full retrospective pipeline in this revision because the upstream raw
-records were not available in the analysis environment; the audit table
-identifying every affected query is released with the code. Readers should treat
-the real-data aggregates as provisional pending that re-run, and the simulation
-results, which are unaffected, as the load-bearing evidence for the borrowing
-layer.
+the direction of the defect was not systematically favourable to our method: it
+perturbed the held-out truth for a minority of queries in both directions. The
+audit table identifying every affected query, the pre-correction artifacts, and
+the corrected regeneration scripts are released with the code so the effect of
+the correction is itself reproducible.
 
 We record this in the main text rather than a supplement because a defect that
 silently produces plausible-looking numbers is precisely the kind that a reader
@@ -1548,9 +1579,9 @@ prospective selection can stand alone, and retain the outcome-dependent SAM
 layer as a necessary second line of defence rather than as an optional
 sensitivity analysis. Third, rolling-origin forward validation is leakage-free for
 the closed-form priors, and the learned two-head and two-head-SAM forward rows
-are now leakage-free as well, having been rescored with two-head DeepSets
+are leakage-free as well, having been rescored with two-head DeepSets
 models retrained on past-only data at each cutoff; these per-fold models were
-trained on 629, 810, and 1{,}017 past-only examples; the training code now
+trained on 632, 813, and 1{,}017 past-only examples; the training code now
 fixes the random seed ($20260603$, matching the primary two-head fit), so the
 per-cutoff refits are reproducible up to minor cross-platform numerical
 differences. Fourth, automated extraction from ClinicalTrials.gov may introduce errors
