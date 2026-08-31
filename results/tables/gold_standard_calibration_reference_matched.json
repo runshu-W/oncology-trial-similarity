@@ -1,0 +1,45 @@
+{
+ "reference_worst_case": 0.038,
+ "methods": {
+  "weak_only": {
+   "tau_ref": 0.975,
+   "worst_at_tau_ref": 0.038,
+   "power_at_tau_ref": 0.536
+  },
+  "eb_only": {
+   "tau_ref": 0.975,
+   "worst_at_tau_ref": 0.032,
+   "power_at_tau_ref": 0.4975
+  },
+  "rule_sam": {
+   "tau_ref": 0.9825,
+   "worst_at_tau_ref": 0.038,
+   "power_at_tau_ref": 0.498
+  },
+  "two_head_pro_sam": {
+   "tau_ref": 0.9885,
+   "worst_at_tau_ref": 0.0375,
+   "power_at_tau_ref": 0.476
+  },
+  "selective": {
+   "tau_ref": null,
+   "worst_at_tau_ref": null,
+   "power_at_tau_ref": null
+  },
+  "selective_sam": {
+   "tau_ref": 0.99,
+   "worst_at_tau_ref": 0.037,
+   "power_at_tau_ref": 0.462
+  },
+  "selective_cap50": {
+   "tau_ref": 0.979,
+   "worst_at_tau_ref": 0.037,
+   "power_at_tau_ref": 0.5185
+  },
+  "selective_cap50_sam": {
+   "tau_ref": 0.979,
+   "worst_at_tau_ref": 0.0375,
+   "power_at_tau_ref": 0.5205
+  }
+ }
+}

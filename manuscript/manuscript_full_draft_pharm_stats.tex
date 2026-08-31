@@ -91,6 +91,19 @@ which are therefore assessed by known-truth simulation operating
 characteristics instead.
 
 \noindent\textbf{Results.} On unit-corrected ORR pseudo-queries the selective
+prior's evidence is reported in two tiers. The \emph{primary analysis} ---
+donor availability enforced by a registry-availability proxy (results-first-posted
+before each query's start date) on an audit-validated strict-ORR estimand ---
+shows no demonstrated predictive gain on decision-time-available data:
+availability is scarce (from $2\%$ of development-era queries to $31\%$ in
+the latest window), the availability-consistently trained selective model is
+significantly \emph{worse} than the availability-consistent EB reference
+where borrowing engages (engaged subgroup $+0.173$, CI $[+0.037,+0.324]$,
+$n=119$; pooled $+0.035$, CI $[+0.007,+0.067]$) because the as-of-cutoff
+training pools are thin, and the well-trained canonical model under the same
+filters is only neutral ($-0.002$, CI $[-0.015,+0.010]$). All remaining
+real-data results are a \emph{hypothetical full-information upper bound}
+(every posted result treated as available). In that upper bound the selective
 prior achieved held-out NLL $2.8716$ on a $20\%$ held-out split, versus
 $2.9012$ for the EB reference (paired $\Delta$ $-0.0295$, bootstrap $95\%$ CI
 $[-0.0722,+0.0109]$) and $2.9297$ for the fixed-budget two-head predecessor
@@ -105,18 +118,11 @@ same-window comparison confirms the training-size reading). A $2 \times 2$
 factorial attributes the architectural gain to the interaction: neither the
 EB anchor alone ($+0.0002$ vs EB) nor learnable borrowing on a flat anchor
 ($+0.0413$) helps --- only their combination ($-0.0266$). Results are stable
-over five training seeds, and the pre-registered five-seed ensemble prior
-exceeds the EB reference on the pooled forward windows ($2.8084$ vs
-$2.8440$; $\Delta$ $-0.0356$, CI $[-0.0670,-0.0059]$), with the window-3
-lead surviving Bonferroni adjustment. These
-forward gains presuppose that donor results existed to be borrowed: under a
-strict registry-availability replay (donor results posted before each query's
-start date) most queries retain no usable donor --- rising from $2\%$
-availability in the development era to $31\%$ in the latest window --- the
-pooled advantage over EB disappears ($\Delta$ $-0.001$, CI
-$[-0.017,+0.016]$), and the selective prior's contribution reduces to doing
-no harm; registry availability is rising steeply with calendar time, and
-registry posting understates what sponsors can read in the literature. The learned
+over five training seeds, and an exploratory five-seed ensemble prior
+exceeds the EB reference on the pooled upper-bound forward windows ($2.8084$
+vs $2.8440$; $\Delta$ $-0.0356$, CI $[-0.0670,-0.0059]$), with the window-3
+lead surviving Bonferroni adjustment; restricting the upper-bound tier to
+the strict-ORR estimand preserves the pattern. The learned
 total borrowing behaved as design-time triage: mean borrowed mass was $0.31$
 when the candidate set carried little usable endpoint information and $0.59$
 when it was information-rich (Spearman $+0.59$ with a pre-specified
@@ -138,10 +144,17 @@ uniform whole-set conflict, however, the learnable total borrowing removes
 the cap that the fixed budget had provided: the standalone selective prior's
 type I error rose to $0.145$--$0.243$ at strong conflict, against $0.061$--$0.072$
 for the fixed-budget predecessor, $0.050$ for the rule, and $0.047$ for
-robust-MAP; the anchored SAM adapter restored control
-($0.070$ at the same shifts, $0.046$ at the strongest) while retaining the
-no-conflict power advantage, so the outcome-adaptive layer is a required
-companion of the selective prior, not an optional sensitivity analysis. Ablation showed that the prospective set-level conflict
+robust-MAP; the anchored SAM adapter mitigated --- but did not eliminate ---
+the inflation ($0.070$ at the same shifts, $2.8\times$ nominal) while
+retaining the no-conflict power advantage. Recalibrating complete designs
+over a pre-specified two-dimensional conflict grid shows the standalone
+selective prior cannot be rescued by any threshold; a borrowed-mass cap of
+$0.5$ is the most effective safety mechanism (worst-case $0.044$), and at a
+threshold matched to the no-borrowing reference's own worst case the capped
+selective + SAM design retains power $0.521$ versus $0.536$ without
+borrowing --- under strong grid-wide control, borrowing's net power benefit
+vanishes, and we claim pointwise mitigation only, not verified frequentist
+safety. Ablation showed that the prospective set-level conflict
 signal did not improve donor discrimination (ROC-AUC changes $-0.000$ to
 $+0.016$), but was necessary for the learned per-source borrowed-size
 discount to respond to comparability at all: without it the fitted discount was
@@ -153,19 +166,27 @@ In an external control arm scenario with controls
 drifted downward, full pooling inflated type I error to $0.210$ against $0.013$
 for internal-control-only analysis; the fixed-budget learned prior held it to
 $0.031$ while borrowing, and the selective prior learned to withhold external
-controls almost entirely, matching the EB-only reference ($0.018$).
+controls almost entirely, matching the EB-only reference ($0.018$) --- an
+outcome whose safety an anchor-misspecification battery shows to be the
+anchor's, not the method's (a $-0.4$-logit mis-centred anchor inflates type
+I error to $0.10$--$0.13$; control-rate heterogeneity alone lifts the
+correct anchor to $0.04$--$0.05$).
 
 \noindent\textbf{Conclusions.} The framework provides a reproducible
-methodology prototype and an EB-referenced, leakage-partitioned evaluation
-protocol for oncology historical borrowing. Its defensible contributions are a
+methodology prototype and an EB-referenced, leakage-partitioned,
+availability-tiered evaluation protocol for oncology historical borrowing.
+Its defensible contributions are a
 selective borrowing architecture whose per-query total borrowing is learned
 rather than fixed---significantly improving on fixed-budget candidate
-borrowing and yielding an interpretable design-time triage policy---and the
-finding, of independent cautionary value, that against a properly fitted
-marginal EB prior the average real-data benefit of candidate-level borrowing
-is modest and concentrated where retrieved candidate sets are
-information-rich; known-truth simulation shows when borrowing helps and when
-it harms. These analyses do not establish average superiority over marginal
+borrowing and yielding an interpretable design-time triage policy---and two
+findings of independent cautionary value: that predictive gains over a
+properly fitted marginal EB prior have not been demonstrated on
+decision-time-available data (they exist only in the hypothetical
+full-information upper bound, and an availability-consistently trained model
+is harmful where it borrows), and that against known-truth simulation the
+complete method achieves pointwise mitigation of conflict inflation but not
+strong type I control --- under grid-calibrated control, borrowing's net
+power benefit vanishes. These analyses do not establish average superiority over marginal
 priors, expert borrowability of individual historical trials, or clinical
 decision validity, and do not replace expert clinical and statistical review,
 prospective validation, or protocol-specific operating-characteristics
@@ -914,11 +935,34 @@ Borrowing head-to-head + calibration & held-out split 281; development set 1{,}4
 Selective / two-head training & 80\%/20\% split (seed 20260603) & Fit on 80\%; the 20\% is out-of-fit but not out-of-development (see provenance paragraph) & ORR \\
 Forward validation (outcome-fit temporal split) & disjoint windows 181/204/390 (train 632/813/1{,}017) & Each window $(c_k,c_{k+1}]$ scored once by the model and EB anchor refit on data $\le c_k$ & ORR \\
 Donor-availability analysis & same windows; as-of-cutoff pools 323/494/651 & Training queries and donors restricted to results posted by the cutoff; scoring donors to results posted before each query's start & ORR \\
+Primary analysis (proxy $\times$ strict) & strict windows 128/155/306; pools 221/336/444 & Registry-availability proxy intersected with the strict-ORR estimand; upper-bound analyses labelled hypothetical & strict ORR \\
 Gold-standard \& external-control simulation & 2{,}000 replicates per cell & Known-truth simulation (no real-data leakage) & Simulated binary endpoint \\
 Extraction-quality audit & 7{,}173 trials (26{,}603 primary-endpoint arm rows); expert audit 80 stratified rows & Automated consistency checks + synthetic round-trip ($8/8$) + six-item expert registry check (Section~\ref{sec:limitations-data}) & All extracted counts \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\paragraph{Endpoint canonicalisation and the primary estimand.} The expert
+audit (Section~\ref{sec:limitations-data}) showed that roughly one in five
+admitted ``ORR'' rows is a neighbouring binary response endpoint. The primary
+real-data estimand is therefore restricted to a \emph{strict-ORR} subset,
+selected by a rule-based endpoint canonicaliser over extracted endpoint
+titles: inclusion patterns for objective/overall/best-overall response and
+disease-appropriate $\ge$PR equivalents; exclusion patterns, checked first,
+for complete-response-only rates, clinical-benefit and disease-control rates,
+pathological response, composite and molecular remission, PFS-defined,
+landmark-restricted, and non-tumour endpoints; unmatched titles are excluded
+(conservative). Validated against the $74$ unambiguous expert-audited rows,
+the canonicaliser attains $98.6\%$ accuracy ($100\%$ sensitivity for strict
+ORR, $91.7\%$ specificity; its one false positive is an ORR-titled endpoint
+whose registry definition is progression-free survival at six months ---
+title--definition mismatches are invisible to a title-based rule and remain a
+documented residual). Applied to the corpus it retains $1{,}028/1{,}407$
+queries ($73.1\%$, consistent with the audit's design-weighted purity
+estimate) and $84.0\%$ of donor observations; the full
+binary-response-type corpus is retained as a sensitivity population. The
+canonicaliser is released with the code and its audit-validation is
+reproducible.
 
 \paragraph{Data-partition provenance.} Because this work has been revised
 against reviews, we state exactly what each partition has been exposed to
@@ -965,7 +1009,8 @@ probability integral transform (PIT; the value of the predictive cumulative
 distribution at the observed outcome, which is uniform on $[0,1]$ when
 predictions are calibrated), here in the randomized form appropriate for
 discrete beta-binomial predictions, together with empirical $50/80/95\%$
-credible-interval coverage and a reliability slope.
+prediction-interval coverage (equal-tailed intervals of the posterior
+predictive distribution for the outcome) and a reliability slope.
 
 \paragraph{Evaluation protocol and leakage.} Learned models and EB anchors
 were fitted on the $80\%$ training split of the pseudo-queries (seed
@@ -1039,9 +1084,12 @@ rather than one.
 \paragraph{Gold standard.} Borrowing correctness is defined at the parameter
 level, at two nested strengths, and never from realised counts. Each donor $k$
 carries a latent biological rate $\theta_k$ and a latent
-\emph{observation-process} rate $\theta^{\mathrm{obs}}_k = \theta_k +
-\mathrm{bias}_k$, where $\mathrm{bias}_k$ models endpoint-definition and
-reporting distortion; the donor's data are then drawn
+\emph{observation-process} rate $\theta^{\mathrm{obs}}_k =
+\mathrm{clip}(\theta_k + \mathrm{bias}_k;\, 0.01, 0.99)$, where
+$\mathrm{bias}_k$ models endpoint-definition and
+reporting distortion on the probability scale and the clip keeps the rate in
+$(0,1)$ (bias draws are small --- typical magnitude $\le 0.1$ --- so the clip
+binds rarely); the donor's data are then drawn
 $y_k \sim \mathrm{Bin}(n_k, \theta^{\mathrm{obs}}_k)$. The \emph{primary} label
 declares a donor borrowable when $|\theta_k - \theta_0| \le \epsilon = 0.05$
 --- parameter-level exchangeability of the latent rates. The \emph{secondary}
@@ -1241,13 +1289,54 @@ once, by the selective model, fixed-budget ablation, and EB anchors refit
 strictly on data completed on or before the window's left cutoff (past-only
 training sets of $632$, $813$, and $1{,}017$ queries;
 Figure~\ref{fig:forward}). Closed-form priors require no fitting and are
-free of outcome and fitting leakage by construction; what it does not yet
-enforce is donor-level availability at decision time (a donor completed before
+free of outcome and fitting leakage by construction; the split alone does not
+enforce donor-level availability at decision time (a donor completed before
 a cutoff may have posted results later), so we label it an outcome-fit
 temporal split without donor-availability control rather than leakage-free.
 Outcome-adaptive SAM rows are excluded here by
-the partition rule of Section~\ref{sec:eval}.
+the partition rule of Section~\ref{sec:eval}. Results are reported in two
+tiers, in order of evidential weight: first the \emph{primary analysis},
+which enforces the registry-availability proxy on the strict-ORR estimand;
+then the \emph{hypothetical full-information upper bound}, in which every
+posted result is treated as if it had been available at design time.
 
+\paragraph{Primary analysis: registry-availability proxy, strict-ORR
+estimand.} A donor observation is treated as usable for a query only if the
+donor's results-first-posted date precedes the query's start date. We call
+this a registry-availability \emph{proxy}, not a replay: results-first-posted
+is a trial-level date that does not establish that the specific endpoint row
+was posted in its current form (the stored records are current versions, not
+as-of-date snapshots --- the audit's most-shared donor, whose denominator
+reads $4/12$ in our snapshot and $4/13$ in today's registry across $307$
+examples, is a concrete instance), and it ignores results published in the
+literature before registry posting, a channel we have not implemented and
+therefore do not invoke. Availability under this proxy is scarce and
+time-graded: $4.2\%$ of gated candidate observations survive; the share of
+queries retaining any usable gated donor rises from $2\%$ (development era)
+through $8.8\%$ and $20.1\%$ to $31.3\%$ across the three windows, and from
+$0\%$ of pre-2015 starts to $36\%$ of 2023 starts. On the strict-ORR windows
+($n = 128/155/306$), with training also restricted to what was posted by
+each cutoff (pools $221/336/444$), the availability-consistently trained
+selective model shows \emph{no benefit and measurable harm}: pooled
+$\Delta$ versus the availability-consistent EB reference $+0.035$
+(CI $[+0.007, +0.067]$), concentrated entirely in the $119$ queries where
+borrowing engages ($+0.173$, CI $[+0.037, +0.324]$; win rate $38\%$) ---
+with training pools this thin, learned borrowing misfires. Substituting the
+anachronistically well-trained canonical models (fit on the full
+$632/813/1{,}017$ pools) under the same scoring filters is neutral at best
+(pooled $-0.002$, CI $[-0.015, +0.010]$; engaged subgroup $-0.011$, CI
+$[-0.072, +0.049]$), and the same holds without the strict-endpoint
+restriction ($-0.001$, CI $[-0.017, +0.016]$; available-donor subgroup
+$-0.003$, CI $[-0.072, +0.072]$). The primary conclusion of the real-data
+evaluation is therefore: \emph{no demonstrated predictive gain on
+decision-time-available data}, with harm where an availability-consistently
+trained model actually borrows; training-pool size is the binding
+constraint, and registry maturation is what would relax it.
+
+\paragraph{Hypothetical full-information upper bound.} The analyses below
+treat all posted results as available and are reported as an upper bound on
+what borrowing of registry results \emph{could} contribute as availability
+matures; none of them carries decision-time evidential weight.
 Pooled over the $775$ future trials (Table~\ref{tab:forward}), the selective
 prior achieved NLL $2.8175$ versus $2.8440$ for the past-fit EB reference
 (paired $\Delta$ $-0.0266$, $95\%$ CI $[-0.0591,+0.0064]$) and $2.8839$ for
@@ -1279,9 +1368,12 @@ $+0.0022$, CI $[-0.0281,+0.0345]$), though unstable across settings (it was
 
 \paragraph{Stability across seeds and the pre-registered ensemble.} All
 single-fit results above use one training seed, so we retrained every fit
-under four additional seeds and evaluated the seed-averaged mixture prior ---
-a step pre-registered, before any of it was run, as the one remaining
-mechanical lever, to be reported whichever way it came out. The architectural
+under four additional seeds and evaluated the seed-averaged mixture prior.
+The ensembling step was written down in advance, within this revision, as the
+one remaining mechanical lever, to be reported whichever way it came out;
+because that pre-specification is internal to the revision cycle rather than
+an independent prospective registration, we label every ensemble result
+\emph{exploratory}. The architectural
 gain is stable (pooled forward delta versus the fixed-budget predecessor
 between $-0.058$ and $-0.075$ across seeds), the triage policy is stable
 (borrowed-mass quartiles within $0.15$--$0.21 / 0.36$--$0.47 / 0.62$--$0.73$),
@@ -1290,27 +1382,34 @@ forward $-0.018$ to $-0.035$; test $-0.029$ to $-0.038$), with single-seed
 intervals crossing zero for four of five seeds. The five-seed ensemble prior
 performs better than the typical single seed: pooled forward NLL $2.8084$
 versus $2.8440$ for EB ($\Delta$ $-0.0356$, CI $[-0.0670,-0.0059]$ --- the
-single pre-specified aggregate test, now excluding zero), $-0.0755$
+single pre-specified aggregate test, now excluding zero, but exploratory in
+the sense above and confined to the upper-bound tier), $-0.0755$
 (CI $[-0.1051,-0.0442]$) versus the fixed-budget predecessor, and a window-3
 delta of $-0.0480$ whose Bonferroni-adjusted $98.33\%$ interval
 $[-0.0947,-0.0024]$ still excludes zero; the ensemble's test-split delta
 ($-0.0336$, CI $[-0.0755,+0.0070]$) remains inconclusive. We report the
-single-seed analysis as primary because it was specified first, and the
-ensemble as the pre-registered upgrade; both are subject to the
-availability scoping below. Marginal
+single-seed analysis first because it was specified first, and the ensemble
+as the exploratory upgrade; both live entirely in the upper-bound tier and
+neither carries decision-time evidential weight. Marginal
 references remain, in short, hard to beat: the selective model's demonstrated
 advantages over them are the significant most-recent-window win (which
-survives multiplicity adjustment under the ensemble), the pre-registered
+survives multiplicity adjustment under the exploratory ensemble), the
 ensemble's aggregate lead, the
 significant architectural improvement, and the triage behaviour
 of Section~\ref{sec:triage-results}, not an across-the-board dominance ---
-and none of it survives the strict registry-availability replay below.
+and none of it survives the registry-availability proxy of the primary
+analysis above. Restricting this upper-bound tier to the strict-ORR
+estimand preserves the pattern (retrained strict-subset pooled $\Delta$
+$-0.034$, CI $[-0.074,+0.007]$; frozen-model strict filtering $-0.033$,
+CI $[-0.068,+0.001]$), so endpoint contamination was not driving it.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{F2_forward_validation}
   \caption{\textbf{Forward validation on disjoint future
-  windows.} (a)~NLL pooled over the three disjoint windows ($n=775$) for
+  windows (hypothetical full-information upper bound; the
+  availability-consistent primary analysis shows no benefit).} (a)~NLL
+  pooled over the three disjoint windows ($n=775$) for
   design-time priors; the selective prior ($2.818$) and the disease-stratified
   EB reference ($2.815$) lead, the intercept EB reference is at $2.844$
   (dashed line), and the fixed-budget predecessor trails at $2.884$.
@@ -1322,11 +1421,14 @@ and none of it survives the strict registry-availability replay below.
 
 \begin{table}[htbp]
 \centering
-\caption{Forward validation on disjoint future windows (outcome-fit temporal split with past-only refits; donor availability at decision time not enforced,
-design-time priors only). NLL pooled over the three windows ($n=775$); paired
-delta versus the past-fit intercept-EB reference with bootstrap $95\%$ CI
-where the comparison is primary. Learned rows and EB anchors are refit on
-past-only data at each window's left cutoff.}
+\caption{Forward validation on disjoint future windows --- hypothetical
+full-information upper bound (outcome-fit temporal split with past-only
+refits; donor availability at decision time NOT enforced; see the primary
+analysis at the head of this subsection for the availability-consistent
+result, which shows no benefit). NLL pooled over the three windows
+($n=775$); paired delta versus the past-fit intercept-EB reference with
+bootstrap $95\%$ CI. The ensemble row is exploratory. Learned rows and EB
+anchors are refit on past-only data at each window's left cutoff.}
 \label{tab:forward}
 \begin{tabular}{lrl}
 \toprule
@@ -1349,36 +1451,22 @@ power\_prior\_like & 3.1737 & --- \\
 \end{tabular}
 \end{table}
 
-\paragraph{Donor availability at decision time.} The analysis above controls
-outcome and fitting leakage but not whether a donor's \emph{results} had been
-posted when they would have been needed, so we repeated it under two
-availability rules using the results-first-posted date of every trial in the
-corpus. Availability is scarce and strongly time-graded: under the strict
-design-time rule (donor results posted before the query trial's start date),
-only $4.2\%$ of gated candidate observations survive, and the fraction of
-queries retaining any usable gated donor rises from $2\%$ of
-development-era queries to $8.8\%$, $20.1\%$, and $31.3\%$ across the three
-forward windows --- and from $0\%$ of pre-2015 starts to $36\%$ of 2023
-starts --- reflecting the maturation of mandatory results posting. Under the
-analysis-time rule (everything an analyst could have used at each cutoff:
-training queries and donors restricted to results posted by the cutoff), the
-training pools shrink from $632/813/1{,}017$ to $323/494/651$ queries and the
-surviving donor observations to $27\%/36\%/45\%$; the EB anchors are almost
-unchanged ($\mathrm{Beta}(0.68,1.66)$ at the final cutoff). Retraining the
-selective model in this world and rescoring every forward query with the
-strict per-query donor rule leaves the scored sets unchanged but removes most
-borrowing opportunity, and the result is neutrality: pooled $\Delta$ versus
-the availability-consistent EB reference $-0.001$ (CI $[-0.017,+0.016]$), and
-$-0.003$ (CI $[-0.072,+0.072]$) within the $179$ queries that retained an
-available gated donor. Two readings follow, and we state both. The
-architectural comparisons of Table~\ref{tab:forward} measure what borrowing
-of registry-posted results \emph{could} contribute where such results exist
---- an increasingly realistic condition, and one that also understates
-availability insofar as sponsors read publications years before registry
-posting --- while under a strict registry-only replay of each query's design
-date, most of the aggregate advantage over EB is not yet realisable, and the
-selective prior's virtue reduces to doing no harm. Claims elsewhere in the
-paper are scoped accordingly.
+\paragraph{Availability-consistent detail (supporting the primary analysis).}
+The non-strict full-corpus version of the availability analysis gives the
+same picture as the primary analysis above and supplies its mechanics. Under
+the analysis-time rule (everything an analyst could have used at each
+cutoff: training queries and donors restricted to results posted by the
+cutoff), the training pools shrink from $632/813/1{,}017$ to $323/494/651$
+queries and the surviving donor observations to $27\%/36\%/45\%$; the EB
+anchors are almost unchanged ($\mathrm{Beta}(0.68,1.66)$ at the final
+cutoff). Retraining in this world and rescoring every forward query under
+the per-query proxy rule is neutral (pooled $\Delta$ vs the
+availability-consistent EB reference $-0.001$, CI $[-0.017,+0.016]$;
+available-donor subgroup $-0.003$, CI $[-0.072,+0.072]$, $n=179$). The
+upper-bound analyses of this subsection measure what borrowing of
+registry-posted results could contribute as availability matures; under the
+proxy they are not yet realisable, and claims throughout the paper are
+scoped accordingly.
 
 \paragraph{Dependence and unit-provenance sensitivity.} Queries are distinct
 registered trials but share donors ($12.7\%$ of forward query pairs share at
@@ -1389,9 +1477,15 @@ survive ($[-0.105,-0.030]$ and $[-0.089,-0.007]$), while the pooled
 selective-versus-EB interval remains zero-crossing ($[-0.062,+0.008]$),
 essentially as under query-level resampling; leaving out all queries touching
 any one of the ten most-shared donors moves the pooled delta between
-$-0.018$ and $-0.037$. (Connected components of the sharing graph are
-degenerate here --- one component holds $98\%$ of queries --- so we report
-the finer block scheme.) Separately, because $54\%$ of donor observations and
+$-0.018$ and $-0.037$. These block schemes are \emph{approximate}
+dependence adjustments, not exact ones: the sharing graph is so connected
+that coarser blockings degenerate (connected components put $98\%$ of
+queries in one block; unioning each query's top-two donors already yields a
+block holding $89\%$, whose resampled interval, $[-0.139,-0.017]$, we show
+for transparency but regard as unstable rather than evidential), so
+residual cross-block correlation through secondary shared donors remains
+possible and none of these intervals should be read as fully
+dependence-adjusted. Separately, because $54\%$ of donor observations and
 $49\%$ of query outcomes are reconstructed from percentage-reported values,
 we re-ran the comparison keeping only count-reported data: restricted to
 count-reported query outcomes the pooled delta is $-0.003$
@@ -1569,15 +1663,82 @@ is real. The fixed-discount ablation ($0.079$ at shift $1.0$) shows most of
 the inflation enters through the total-borrowing head rather than the
 discount head.
 
-Third, the anchored SAM adapter restores control while keeping the
+Third, the anchored SAM adapter mitigates --- but does not eliminate --- the
+inflation while keeping the
 no-conflict benefit: selective + SAM held type I error to $0.029/0.041/0.070/
 0.046$ across the conflict grid --- comparable to the fixed-budget + SAM
-variant --- with power $0.594$ at zero conflict, still above every
+variant, but still $2.8\times$ nominal at shift $1.0$ --- with power $0.594$
+at zero conflict, still above every
 non-selective controlled method. The outcome-adaptive layer is therefore not
 an optional sensitivity analysis for the selective architecture but a
 required companion: the selectivity that makes the prior efficient when
 borrowing is warranted is precisely what makes it exploitable by conflict
-that design-time features cannot see.
+that design-time features cannot see. What SAM provides is pointwise
+mitigation, not strong control, and we quantify that distinction next.
+
+\paragraph{Calibrated designs: the price of strong type I control.} Because a
+required companion must be judged as part of a complete design, we
+recalibrated the final decision threshold over a pre-specified two-dimensional
+conflict grid --- uniform shifts $0$--$1.5$ at full conflict \emph{and}
+partial-conflict cells in which only a fraction $f \in \{0.25, 0.5, 0.75\}$ of
+donors is displaced (partial conflict creates within-set heterogeneity and is
+easier: the standalone selective prior's worst partial-conflict cell reaches
+$0.112$, versus $0.243$ under uniform displacement) --- storing per-replicate
+posterior probabilities so that every design's rejection rate is available at
+any threshold. We also evaluated a capped variant that projects the selective
+prior onto a maximum borrowed mass of $0.5$. Three findings
+(Table~\ref{tab:calibrated}). First, the standalone selective prior is not
+rescuable by recalibration: no threshold in $[0.975, 0.9995]$ brings its
+worst-case type I error over the grid to $0.025$. Second, distinguish two
+targets. Against the literal nominal $0.025$ --- which even the no-borrowing
+reference does not attain over the grid ($0.038$, by binomial discreteness) ---
+calibration is punishing for every design: selective + SAM needs
+$\tau^{*} = 0.9945$ and drops to $0.388$ power. Against the
+\emph{reference-matched} target (worst-case no worse than no borrowing's own
+$0.038$), the capped selective + SAM design calibrates gently
+($\tau = 0.979$) and retains power $0.521$ versus the reference's $0.536$ ---
+borrowing costs $1.5$ points of no-conflict power as the premium for matching
+the reference's worst-case safety, and buys its benefits only where conflict
+is absent. Third, the cap is the single most effective safety mechanism in
+the comparison: uncalibrated worst-case type I error $0.044$ (capped, with or
+without SAM) versus $0.243$ (uncapped standalone) and $0.070$ (uncapped +
+SAM). We therefore do not describe the selective prior, with or without SAM,
+as having verified frequentist safety; the verified statements are the
+pointwise ones in Table~\ref{tab:design-oc} and the grid-calibrated ones in
+Table~\ref{tab:calibrated}, and a deployment that requires strong control
+over uniform-conflict scenarios should use the capped design at the
+reference-matched threshold and expect no net power benefit from borrowing.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Calibrated complete designs over the pre-specified two-dimensional
+conflict grid (uniform shifts $0$--$1.5$ plus partial-conflict cells,
+$f \in \{0.25,0.5,0.75\} \times$ shifts $\{0.5,1.0,1.5\}$; $2{,}000$
+replicates per cell). Worst-case type I error is the maximum over all null
+cells. $\tau^{*}$: smallest threshold with worst case $\le 0.025$ (none
+exists for the standalone selective prior); $\tau_{\mathrm{ref}}$: smallest
+threshold with worst case $\le$ the no-borrowing reference's $0.038$. Power
+is at zero conflict. The nominal $0.025$ is below what the flat-prior test
+itself attains over the grid, so the reference-matched column is the
+operative comparison.}
+\label{tab:calibrated}
+\begin{tabular}{lcccccc}
+\hline
+ & Worst T1 & \multicolumn{2}{c}{Calibrated to $0.025$} & \multicolumn{2}{c}{Reference-matched} \\
+Design & @$0.975$ & $\tau^{*}$ & Power & $\tau_{\mathrm{ref}}$ & Power \\
+\hline
+No borrowing              & 0.038 & 0.986  & 0.448 & 0.975  & 0.536 \\
+EB-only reference         & 0.032 & 0.9825 & 0.448 & 0.975  & 0.498 \\
+Rule + SAM                & 0.050 & 0.9895 & 0.426 & 0.9825 & 0.498 \\
+Two-head + pro.\ + SAM    & 0.070 & 0.9925 & 0.412 & 0.9885 & 0.476 \\
+Selective (standalone)    & 0.243 & ---    & ---   & ---    & ---   \\
+Selective + SAM           & 0.070 & 0.9945 & 0.388 & 0.990  & 0.462 \\
+Selective, cap $0.5$      & 0.044 & 0.988  & 0.428 & 0.979  & 0.519 \\
+Selective, cap $0.5$ + SAM& 0.044 & 0.9875 & 0.435 & 0.979  & 0.521 \\
+\hline
+\end{tabular}
+\end{table}
 
 \begin{table}[htbp]
 \centering
@@ -1589,28 +1750,32 @@ rejection rate in the null world ($\theta_0 = 0.20$); power is the rejection
 rate in the alternative world ($\theta_0 = 0.35$). Columns are the
 historical-versus-current logit shift. Monte Carlo standard errors are at most
 $0.011$. UIP-JS uses the current trial's outcome and is not available at design
-time.}
+time. Alternative-world rejection at high conflict shifts is partly borrowed
+bias rather than usable power (the same upward displacement that inflates the
+null rejection rate), so the high-shift power of the standalone selective
+prior ($0.836$ at shift $1.5$) should be read jointly with its null-world
+column, not as a benefit.}
 \label{tab:design-oc}
-\begin{tabular}{lccccccc}
+\begin{tabular}{lcccccccc}
 \hline
- & \multicolumn{4}{c}{Type I error} & \multicolumn{3}{c}{Power} \\
-Method & $0.0$ & $0.5$ & $1.0$ & $1.5$ & $0.0$ & $0.5$ & $1.0$ \\
+ & \multicolumn{4}{c}{Type I error} & \multicolumn{4}{c}{Power} \\
+Method & $0.0$ & $0.5$ & $1.0$ & $1.5$ & $0.0$ & $0.5$ & $1.0$ & $1.5$ \\
 \hline
-No borrowing                    & 0.037 & 0.029 & 0.034 & 0.028 & 0.536 & 0.544 & 0.561 \\
-EB-only reference               & 0.030 & 0.022 & 0.032 & 0.022 & 0.497 & 0.514 & 0.526 \\
-Rule mixture                    & 0.029 & 0.030 & 0.050 & 0.049 & 0.556 & 0.609 & 0.635 \\
-Rule + SAM                      & 0.030 & 0.030 & 0.048 & 0.042 & 0.555 & 0.600 & 0.603 \\
-Two-head + prospective          & 0.025 & 0.039 & 0.072 & 0.061 & 0.588 & 0.628 & 0.627 \\
-Two-head + pro.\ + SAM          & 0.029 & 0.040 & 0.070 & 0.051 & 0.588 & 0.622 & 0.600 \\
-Two-head + pro., fixed disc.    & 0.027 & 0.032 & 0.056 & 0.057 & 0.573 & 0.620 & 0.643 \\
-Selective (prospective)         & 0.024 & 0.056 & 0.145 & 0.243 & 0.613 & 0.700 & 0.766 \\
-Selective (no prospective)      & 0.026 & 0.046 & 0.110 & 0.185 & 0.599 & 0.685 & 0.752 \\
-Selective, fixed discount       & 0.025 & 0.035 & 0.079 & 0.108 & 0.586 & 0.656 & 0.734 \\
-Selective + SAM (anchored)      & 0.029 & 0.041 & 0.070 & 0.046 & 0.594 & 0.616 & 0.582 \\
-Robust-MAP ($w=0.5$)            & 0.037 & 0.035 & 0.047 & 0.043 & 0.575 & 0.603 & 0.609 \\
-UIP-JS (uses outcome)           & 0.050 & 0.048 & 0.069 & 0.081 & 0.625 & 0.670 & 0.721 \\
-Power prior ($a_0=0.3$)         & 0.484 & 0.701 & 0.863 & 0.936 & 0.861 & 0.917 & 0.970 \\
-Full pooling                    & 0.584 & 0.777 & 0.904 & 0.959 & 0.880 & 0.930 & 0.974 \\
+No borrowing                    & 0.037 & 0.029 & 0.034 & 0.028 & 0.536 & 0.544 & 0.561 & 0.546 \\
+EB-only reference               & 0.030 & 0.022 & 0.032 & 0.022 & 0.497 & 0.514 & 0.526 & 0.511 \\
+Rule mixture                    & 0.029 & 0.030 & 0.050 & 0.049 & 0.556 & 0.609 & 0.635 & 0.624 \\
+Rule + SAM                      & 0.030 & 0.030 & 0.048 & 0.042 & 0.555 & 0.600 & 0.603 & 0.579 \\
+Two-head + prospective          & 0.025 & 0.039 & 0.072 & 0.061 & 0.588 & 0.628 & 0.627 & 0.606 \\
+Two-head + pro.\ + SAM          & 0.029 & 0.040 & 0.070 & 0.051 & 0.588 & 0.622 & 0.600 & 0.571 \\
+Two-head + pro., fixed disc.    & 0.027 & 0.032 & 0.056 & 0.057 & 0.573 & 0.620 & 0.643 & 0.625 \\
+Selective (prospective)         & 0.024 & 0.056 & 0.145 & 0.243 & 0.613 & 0.700 & 0.766 & 0.836 \\
+Selective (no prospective)      & 0.026 & 0.046 & 0.110 & 0.185 & 0.599 & 0.685 & 0.752 & 0.821 \\
+Selective, fixed discount       & 0.025 & 0.035 & 0.079 & 0.108 & 0.586 & 0.656 & 0.734 & 0.782 \\
+Selective + SAM (anchored)      & 0.029 & 0.041 & 0.070 & 0.046 & 0.594 & 0.616 & 0.582 & 0.548 \\
+Robust-MAP ($w=0.5$)            & 0.037 & 0.035 & 0.047 & 0.043 & 0.575 & 0.603 & 0.609 & 0.596 \\
+UIP-JS (uses outcome)           & 0.050 & 0.048 & 0.069 & 0.081 & 0.625 & 0.670 & 0.721 & 0.737 \\
+Power prior ($a_0=0.3$)         & 0.484 & 0.701 & 0.863 & 0.936 & 0.861 & 0.917 & 0.970 & 0.991 \\
+Full pooling                    & 0.584 & 0.777 & 0.904 & 0.959 & 0.880 & 0.930 & 0.974 & 0.993 \\
 \hline
 \end{tabular}
 \end{table}
@@ -1754,6 +1919,56 @@ borrowed, which is itself the design-relevant behaviour, while its candidate
 \emph{ranking} remained the best among design-time methods (primary-label
 ROC-AUC $0.642$).
 
+\paragraph{Anchor misspecification: the EC safety is the anchor's, not the
+method's.} Because a prior that borrows nothing inherits the operating
+characteristics of its anchor, we stress-tested the anchor itself
+(Table~\ref{tab:ec-anchor}): mean shifted by $\pm 0.4$ on the logit scale,
+precision scaled $\times 4$ and $\times 1/4$, a flat $\mathrm{Beta}(1,1)$,
+and new worlds in which the true control rate is heterogeneous across
+replicates (SD $0.3$ on the logit scale). The selective prior's rows coincide
+with EB-only's everywhere, which is the point: its favourable EC behaviour is
+entirely the anchor's. A mis-centred anchor ($-0.4$ logit) inflates type I
+error to $0.104$--$0.126$ at every drift --- an informative background prior
+below the true control rate is exactly as dangerous as drifted external
+controls, with none of the visibility; an over-precise anchor reaches
+$0.033$ ($0.076$ under heterogeneity); and heterogeneity alone lifts even the
+correctly centred anchor to $0.041$--$0.049$, confirming that the
+homogeneous-control world flattered it. The only variant that is
+simultaneously safe in every cell (type I $\le 0.029$ including
+heterogeneity) and useful (power $0.433$ versus $0.237$ internal-only) is
+the deliberately \emph{weakened} anchor (precision $\times 1/4$). The
+constructive reading for hybrid-control designs is to down-weight the
+marginal anchor rather than trust its fitted precision; the cautionary
+reading is that ``the selective prior held type I error in the EC world''
+is a statement about one well-specified anchor in one homogeneous world,
+and we no longer present it as evidence of method-level safety.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{External-control anchor-misspecification battery ($2{,}000$
+replicates per cell). Type I error of the EB-only / selective prior (their
+rows coincide: the selective prior borrows essentially nothing here) under
+perturbed anchors, across the drift grid; ``het'' columns are new worlds
+with the true control rate heterogeneous across replicates (SD $0.3$,
+logit scale). Internal-only reference: $0.013$--$0.021$ across drifts
+($0.015$--$0.019$ under heterogeneity). Power is in the no-drift
+alternative world (heterogeneous-world power in parentheses).}
+\label{tab:ec-anchor}
+\begin{tabular}{lccccc}
+\hline
+Anchor variant & Worst T1 (drift grid) & T1 het $-0.8$ & T1 het $0.0$ & Power & \\
+\hline
+Canonical $\mathrm{Beta}(19.0,78.7)$ & 0.019 & 0.049 & 0.041 & 0.631 & (0.617) \\
+Mean $+0.4$ logit                    & 0.001 & 0.005 & 0.009 & 0.229 & (0.284) \\
+Mean $-0.4$ logit                    & 0.126 & 0.166 & 0.150 & 0.878 & (0.862) \\
+Precision $\times 4$                 & 0.033 & 0.076 & 0.072 & 0.730 & (0.704) \\
+Precision $\times 1/4$               & 0.021 & 0.029 & 0.022 & 0.433 & (0.459) \\
+Flat $\mathrm{Beta}(1,1)$            & 0.021 & 0.019 & 0.015 & 0.237 & (0.241) \\
+\hline
+\end{tabular}
+\end{table}
+
 Robust-MAP achieved a low type I error among borrowing methods ($0.015$),
 but its false-positive rate for borrowing non-comparable external controls was
 $1.000$: it does not discriminate at all, and its safety comes entirely from
@@ -1779,7 +1994,7 @@ what inflates the apparent treatment effect.}
 \label{tab:ec}
 \begin{tabular}{lccccc}
 \hline
-Method & Type I error & (MCSE) & Control bias & Prior ESS & FPR \\
+Method & Type I error & (MCSE) & Control bias & Nominal borrowed size & FPR \\
 \hline
 Internal control only            & 0.013 & (0.003) & $+0.028$ & 0.0   & 0.00 \\
 EB-only reference                & 0.018 & (0.003) & $-0.004$ & 0.0   & 0.00 \\
@@ -1811,8 +2026,13 @@ Full pooling                     & 0.210 & (0.009) & $-0.044$ & 760.5 & 1.00 \\
 
 The practical reading is that in the external-control setting the quantity that
 governs type I error inflation is how much is borrowed at least as much as how
-well donors are selected, and that no design-time method in this comparison
-removed the inflation. This is consistent with regulatory caution about external
+well donors are selected. Under the worst simulated drift ($-1.2$), every
+method that actually borrowed exceeded the internal-only rejection rate
+(pointwise, some cells elsewhere on the grid sit below $0.025$); methods that
+borrowed essentially nothing (EB-only, the selective prior) matched the
+reference --- safety by abstention, not by successful selection, and, as the
+anchor-misspecification battery below shows, safety that is only as good as
+the anchor. This is consistent with regulatory caution about external
 controls [8] and with the causal framing of recent reviews [18].
 
 We had also planned a worked external-control case study on real registry data,
@@ -1960,9 +2180,11 @@ stable across windows), and where it is low the forced-borrowing damage of
 the predecessor ($+0.148$ against EB) is eliminated to neutrality
 ($+0.003$); superiority where information is rich remains directional rather
 than demonstrated. Third, \emph{what could be borrowed and what had been
-posted are different populations}: under a strict registry-availability
-replay of each query's design date, most historical results were not yet
-posted, the pooled advantage over EB disappears, and the framework's
+posted are different populations}: under the registry-availability proxy at
+each query's design date, most historical results were not yet
+posted, predictive gains are undemonstrated (and the
+availability-consistently trained model is harmful where it borrows), and
+the framework's
 addressable population is best understood as growing with registry maturity
 --- $31\%$ of latest-window queries already have an available gated donor ---
 rather than as the whole retrospective corpus. Fourth, the known-truth
@@ -1972,10 +2194,29 @@ type-I-controlled power in our comparison, but its learnable total borrowing
 removes the fixed budget's accidental cap, its standalone type I error
 escapes under uniform whole-set conflict ($0.243$ at the strongest shift),
 its per-source discount response is flat, and control is restored only by
-the anchored SAM companion --- while in the external-control world, trained
+the anchored SAM companion, which itself mitigates rather than eliminates
+the inflation --- while in the external-control world, trained
 on a conflict-rich draw, the same head learns to withhold external controls
-almost entirely. These simulation analyses do not
+almost entirely, with operating characteristics that the
+anchor-misspecification battery shows belong to the anchor. These
+simulation analyses do not
 establish clinical exchangeability or expert borrowability.
+
+A fifth observation states the evidence boundary of the complete proposal
+explicitly, because its two components are validated in different systems
+that do not compose. The design-time selective component has a proper
+out-of-sample real-data evaluation --- whose primary, availability-consistent
+result is null-to-harmful --- but no standalone frequentist safety (its
+uncalibrated conflict inflation reaches $0.243$ and no threshold rescues
+it). The selective + SAM combination has known-truth simulation evidence ---
+best pointwise no-conflict power among controlled designs, but mitigation
+rather than strong control, and a vanishing net benefit once calibrated to
+grid-wide control --- and \emph{cannot} have the same real-data predictive
+evaluation, because SAM consults the outcome being scored. No single
+evidence stream currently supports both practical gain and inferential
+safety for the full method at once; we present the two partial validations
+side by side and do not combine them into a claim about the complete
+pipeline.
 
 These findings locate the contribution against each of the three families
 surveyed in the Introduction. Relative to the statistical borrowing literature
@@ -2079,14 +2320,24 @@ We record this in the main text rather than a supplement because a defect that
 silently produces plausible-looking numbers is precisely the kind that a reader
 cannot detect from reported results alone.
 
-\paragraph{Expert manual audit.} An expert audit of $80$ extracted
+\paragraph{Manual registry audit.} A manual audit of $80$ extracted
 observations --- $60$ donor observations from the forward windows and $20$
 query outcomes, stratified to oversample percentage-derived rows ($42$) and
-the ten most-shared donors, each checked against the live registry on six
+the ten most-shared donors (a census of that stratum), each checked against
+the live registry on six
 items --- completes the extraction-quality picture, and its two halves point
-in opposite directions. \emph{Numeric} integrity is high: arm identification
+in opposite directions. The audit was performed by a single author-auditor
+against the current registry records, without independent duplicate
+extraction or adjudication; we therefore describe it as a single-rater
+author audit rather than an expert panel, and report design-weighted
+corpus-level estimates (stratum sampling fractions applied; finite-population
+correction for the census stratum) alongside the raw sample rates.
+\emph{Numeric} integrity is high: raw sample rates --- arm identification
 $98.8\%$, numerator $97.5\%$, denominator $97.5\%$, analysis population
-$97.5\%$; all four simultaneously, $93.8\%$ ($95\%$ CI $86.2$--$97.3\%$). The
+$97.5\%$; all four simultaneously, $93.8\%$ ($95\%$ CI $86.2$--$97.3\%$)
+--- and design-weighted corpus-level estimates of the same joint numeric
+integrity: $93.5\%$ (CI $87.1$--$100\%$) for donor observations and
+$100\%$ (all $20$ audited) for query outcomes. The
 percentage-reconstruction path introduced by the unit correction was
 specifically vindicated where the borrowing gains concentrate: in the
 percentage-derived stratum, denominator and analysis-population agreement
@@ -2108,7 +2359,11 @@ conclusions are insensitive to every numeric error the audit found.
 
 The dominant discordance is \emph{semantic}, not numeric. Agreement that the
 extracted endpoint is strictly an objective response rate (CR+PR or a
-disease-appropriate equivalent) was $77.5\%$ ($62/80$; CI $67.2$--$85.3\%$),
+disease-appropriate equivalent) was $77.5\%$ in the sample ($62/80$; CI
+$67.2$--$85.3\%$); design-weighted, $75.9\%$ (CI $64.6$--$87.1\%$) of donor
+observations and $70.4\%$ (CI $52.7$--$88.1\%$) of query outcomes ---
+consistent with the canonicaliser's independent corpus-level rate of
+$73.1\%$ (Section~\ref{sec:eval}). Agreement was
 lower for count-reported rows ($60.7\%$) than percentage-reported ones
 ($83.3\%$): complete-response-only rates, clinical-benefit and pathological
 response rates, composite remission and molecular-response endpoints, and in
@@ -2157,19 +2412,29 @@ per-source discount response is flat, so nothing at the donor level
 compensates. We therefore do not claim that
 prospective selection can stand alone, and treat the outcome-dependent SAM
 layer, evaluated by simulation, as a required companion of the selective
-prior rather than an optional sensitivity analysis. Third, the availability-controlled analysis of
+prior rather than an optional sensitivity analysis --- while noting that the
+companion mitigates rather than eliminates the inflation, that only a
+borrowed-mass cap brings the worst case near the no-borrowing reference, and
+that strong grid-calibrated control erases the net power benefit
+(Table~\ref{tab:calibrated}). Third, the availability-controlled analysis of
 Section~\ref{sec:forward-results} bounds what the forward validation can
-claim: under a strict registry-only replay of each query's design date, most
+claim: under the registry-availability proxy applied at each query's design
+date, most
 of the pooled advantage over the EB reference is not realisable, because the
-donor results had not yet been posted. Two residual gaps remain even in that
-analysis. The stored registry records are current versions rather than
-as-of-cutoff snapshots, so endpoint text edited after completion could differ
-from what a contemporaneous user saw (the query side is protected --- the
-entire results section of each pseudo-query is removed before retrieval ---
-but full snapshot reconstruction remains future work); and registry posting
-understates true availability, since results are typically published in the
-literature before they are posted, so the strict replay is a lower bound just
-as the unfiltered analysis is an upper bound. Fourth, marginal
+donor results had not yet been posted, and the availability-consistently
+trained model is harmful where it borrows. The proxy itself has two known
+defects, both of which make it an approximation rather than a replay. It is
+a trial-level date: it cannot certify that the specific endpoint row existed
+in its current form at that date, and the stored registry records are
+current versions rather than as-of-cutoff snapshots, so endpoint text edited
+after completion can differ from what a contemporaneous user saw --- the
+audit's most-shared donor ($4/12$ in our snapshot, $4/13$ today, touching
+$307$ examples) is the concrete demonstration that snapshot reconstruction,
+which remains future work, is needed for a true historical replay. And it
+ignores the literature channel (results are often published before registry
+posting); we have not implemented or validated a literature-retrieval
+pipeline, so we treat this strictly as an unimplemented extension and do not
+use it to discount the null primary result. Fourth, marginal
 references set a high bar that should temper enthusiasm for borrowing
 machinery in general: a disease-stratified EB prior matched the selective
 model on the pooled forward windows (while being unstable across settings),
@@ -2184,7 +2449,7 @@ Section~\ref{sec:forward-results}. Fifth, automated extraction from ClinicalTria
 that are now measured at two levels. The automated audit quantifies gross
 invalidity (about 44\% of raw arm-level rows are not valid binary
 observations; an admission rule passing a synthetic round-trip check removes
-them), and the stratified expert audit of Section~\ref{sec:limitations-data}
+them), and the stratified single-rater author audit of Section~\ref{sec:limitations-data}
 bounds the residual: numeric extraction in the admitted subset is
 $93.8\%$ clean on all four numeric items jointly, the two errors found move
 the headline comparisons by under $0.001$ NLL, but only $77.5\%$ of admitted
@@ -2246,29 +2511,42 @@ robust-MAP and classical baselines, and gold-standard and external-control
 simulations with known truth, alongside automated and expert extraction
 audits. The
 empirical accounting is deliberately unsparing, and the supportable
-conclusion is precise. Selective borrowing improves substantially on the
+conclusion is precise, stated in the order of its evidential weight. The
+primary real-data analysis --- registry-availability proxy on the
+audit-validated strict-ORR estimand --- demonstrates \emph{no} predictive
+gain on decision-time-available data: the availability-consistently trained
+model is significantly harmful where borrowing engages, and the well-trained
+model applied under the same constraints is neutral. Everything favourable
+about the real-data evaluation lives in the hypothetical full-information
+upper bound: there, selective borrowing improves substantially on the
 flawed fixed-budget predecessor --- in and out of time, under query-level and
-donor-block resampling alike, and under every training seed. Against
-appropriately fitted marginal empirical-Bayes references, single-fit
-selective priors are consistently but not significantly ahead; the
-pre-registered five-seed ensemble does exceed the intercept-EB reference on
-the pooled forward windows ($\Delta$ $-0.0356$, CI $[-0.0670,-0.0059]$),
-an advantage attributable to the interaction of the EB anchor with learnable
-total borrowing and concentrated where candidate information is rich; and
-its demonstrated per-query value is triage, above all the
+donor-block resampling alike, under every training seed, and on the
+strict-ORR subset --- single-fit selective priors are consistently but not
+significantly ahead of appropriately fitted marginal EB references, an
+exploratory five-seed ensemble does exceed the intercept-EB reference
+($\Delta$ $-0.0356$, CI $[-0.0670,-0.0059]$),
+the advantage is attributable to the interaction of the EB anchor with
+learnable total borrowing, and
+the demonstrated per-query value is triage, above all the
 elimination of forced-borrowing harm where the candidate set carries little
-usable information. Under a strict registry-availability replay of each
-query's design date, most of the remaining aggregate advantage is not yet
-realisable at all, because the donor results had not been posted --- a
-constraint that is relaxing quickly as registry reporting matures. The
+usable information. That upper bound becomes realisable only as registry
+reporting matures. The
 known-truth simulation adds the design-side account: under exchangeability
 the selective prior delivers the best type-I-controlled power in our
 comparison ($0.613$ at a type I error of $0.024$), but its learnable total
 borrowing removes the fixed budget's accidental cap under uniform whole-set
-conflict (type I error up to $0.243$ standalone, at a nominal $0.025$), so
-the outcome-adaptive SAM companion --- which restores control ($\le 0.070$)
+conflict (type I error up to $0.243$ standalone, unrescuable by threshold
+recalibration), so
+the outcome-adaptive SAM companion --- which mitigates the inflation (worst
+case $0.070$, still $2.8\times$ nominal)
 while keeping the no-conflict advantage --- is a required part of the
-proposal, not a sensitivity analysis.
+proposal, not a sensitivity analysis; and once complete designs are
+calibrated to strong type I control over the pre-specified conflict grid,
+the net power benefit of borrowing vanishes (capped selective + SAM $0.521$
+versus $0.536$ without borrowing at matched worst-case safety). The
+frequentist safety we can claim is pointwise mitigation under a documented
+grid, delivered most effectively by a borrowed-mass cap; it is not verified
+strong control.
 
 These are calibration and simulation results, not clinical ones. They do not
 establish average superiority of candidate-level borrowing over marginal
@@ -2441,8 +2719,14 @@ bookkeeping summary of prior parameters. & Not the prior's effective sample
 size in the sense of Morita et al. \\
 Outcome-fit temporal split & Forward validation on disjoint future windows
 with past-only refits; outcome and fitting leakage controlled, donor
-availability at decision time not yet enforced. & See
-Sections~\ref{sec:eval} and 6.2. \\
+availability at decision time not enforced. & The hypothetical
+full-information upper bound. \\
+Registry-availability proxy & Donor usable only if its results-first-posted
+date precedes the query's start date; a trial-level approximation, not a
+snapshot replay. & Defines the primary real-data analysis. \\
+Strict-ORR estimand & Queries and donors whose endpoint titles pass the
+audit-validated canonicaliser. & Primary; full binary-response corpus is a
+sensitivity population. \\
 SAM adapter & Prior-data conflict adapter used as sensitivity analysis;
 conflict ratio and returned mass defined against the prior's own weak
 component. & Not a regulatory qualification. \\

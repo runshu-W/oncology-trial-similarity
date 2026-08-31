@@ -108,7 +108,7 @@ def fig_design_oc(design, path):
     axes[1].legend(fontsize=7.5, loc="lower right", ncol=2)
     fig.suptitle("Operating characteristics against a fixed design null. The standalone "
                  "selective prior's type I error escapes under uniform conflict;\n"
-                 "the anchored SAM companion restores control "
+                 "the anchored SAM companion mitigates the inflation "
                  "(full pooling and power prior omitted: type I error 0.48-0.96)",
                  y=1.05, fontsize=11)
     fig.tight_layout()

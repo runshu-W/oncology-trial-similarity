@@ -684,13 +684,14 @@ def build_training_example_from_pipeline_result(
                 # count-only sensitivity analysis.
                 "nct_id": component.get("candidate_nct_id") or component.get("nct_id"),
                 "unit": component.get("unit"),
+                "endpoint": component.get("endpoint"),
             }
         )
         lambda_rule.append(float(component.get("lambda_rule", 0.0)))
 
     return {
         "query": {"count": int(count), "denominator": int(denominator),
-                  "unit": query.get("unit")},
+                  "unit": query.get("unit"), "endpoint": query.get("endpoint")},
         "lambda_0": float(mixture["lambda_0"]),
         "feature_names": LAMBDA_FEATURE_NAMES,
         "features": features,

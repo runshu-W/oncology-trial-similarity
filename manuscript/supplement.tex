@@ -72,11 +72,13 @@ Single-fit selective priors consistently but not significantly lead the EB
 reference. & Test $\Delta$ $-0.0295$ CI $[-0.0722,+0.0109]$; forward
 $-0.0266$ CI $[-0.0591,+0.0064]$; negative under all five seeds (forward
 $-0.018$ to $-0.035$). & Supported as stated. \\
-The pre-registered five-seed ensemble exceeds the EB reference on pooled
-forward validation. & Ensemble NLL $2.8084$ vs $2.8440$; $\Delta$ $-0.0356$
-CI $[-0.0670,-0.0059]$ (single pre-specified aggregate test); test-split
-ensemble still inconclusive ($-0.0336$ CI $[-0.0755,+0.0070]$). & Supported;
-lever pre-registered before execution, outcome-blind. \\
+An exploratory five-seed ensemble exceeds the EB reference on pooled
+(upper-bound) forward validation. & Ensemble NLL $2.8084$ vs $2.8440$;
+$\Delta$ $-0.0356$
+CI $[-0.0670,-0.0059]$; test-split
+ensemble inconclusive ($-0.0336$ CI $[-0.0755,+0.0070]$). & Exploratory
+(rule fixed within the revision cycle, not independently registered);
+upper-bound tier only. \\
 The most-recent-window lead is real and consistent with a learning curve. &
 Window-3 ensemble $\Delta$ $-0.0480$, Bonferroni $98.33\%$ CI
 $[-0.0947,-0.0024]$; composition-controlled comparison on the same 390
@@ -90,12 +92,25 @@ The triage's demonstrated per-query value is harm avoidance. & Lowest mass
 tertile: predecessor $+0.148$ vs EB, selective $+0.003$ CI $[-0.007,+0.012]$;
 middle tertile $-0.054$ CI $[-0.089,-0.019]$; top tertile $-0.029$ CI
 $[-0.117,+0.060]$. & Supported. \\
-Under strict registry availability, the aggregate advantage is not yet
-realisable. & Donor results posted before query start: $4.2\%$ of gated
-observations survive; availability-consistent rerun pooled $\Delta$
-$-0.001$ CI $[-0.017,+0.016]$; available-donor subgroup ($n=179$) $-0.003$
-CI $[-0.072,+0.072]$; availability $2\%\to31\%$ across windows. & Supported;
-scopes all real-data claims. \\
+PRIMARY: no predictive gain on decision-time-available data; harm where an
+availability-consistently trained model borrows. & Registry-availability
+proxy $\times$ strict-ORR: pooled $+0.035$ CI $[+0.007,+0.067]$; engaged
+subgroup ($n=119$) $+0.173$ CI $[+0.037,+0.324]$, win $38\%$; frozen
+canonical models under the same filters neutral ($-0.002$ CI
+$[-0.015,+0.010]$; non-strict $-0.001$ CI $[-0.017,+0.016]$); $4.2\%$ of
+gated observations available, $2\%\to31\%$ of queries across windows. &
+The paper's primary real-data result; upper-bound analyses labelled
+hypothetical. \\
+The strict-ORR restriction does not change the upper-bound pattern. &
+Retrained strict subset pooled $\Delta$ $-0.034$ CI $[-0.074,+0.007]$
+($n=589$); frozen-model strict filtering $-0.033$ CI $[-0.068,+0.001]$. &
+Supported; endpoint contamination was not driving the upper-bound
+advantage. \\
+The endpoint canonicaliser is audit-validated. & $98.6\%$ accuracy on 74
+unambiguous audited rows ($100\%$ sensitivity, $91.7\%$ specificity; one
+FP is a title--definition mismatch); corpus rates $73.1\%$ of queries,
+$84.0\%$ of donor observations strict. & Supported (validated against the
+single-rater author audit). \\
 Shared-donor dependence does not drive the conclusions. & $12.7\%$ of query
 pairs share a gated donor; donor-block bootstrap CIs match query-level;
 leave-one-donor-out pooled deltas $-0.018$ to $-0.037$. & Supported;
@@ -113,10 +128,17 @@ power in the comparison. & Simulation, no conflict: type I $0.024$, power
 $0.613$ (predecessor $0.588$; no borrowing $0.536$; EB-only $0.497$). &
 Supported (simulation). \\
 Standalone selective borrowing is unsafe under uniform whole-set conflict;
-the anchored SAM companion is required. & Type I $0.056/0.145/0.243$ at
-shifts $0.5/1.0/1.5$ (predecessor $\le 0.072$); fixed-discount ablation
-$0.079$ at shift $1.0$; selective+SAM $0.041/0.070/0.046$ with power
-$0.594$ at no conflict. & Supported (simulation); central safety finding. \\
+SAM mitigates but does not restore control. & Type I $0.056/0.145/0.243$ at
+shifts $0.5/1.0/1.5$; selective+SAM $0.041/0.070/0.046$ (worst still
+$2.8\times$ nominal); partial-conflict cells easier (worst $0.112$
+standalone). & Supported (simulation); wording per round-3 review. \\
+No threshold rescues the standalone selective prior; a borrowed-mass cap is
+the most effective safety mechanism; strong grid-calibrated control erases
+the net power benefit. & $\tau^{*}$ nonexistent for standalone selective;
+cap-$0.5$ worst case $0.044$ (vs $0.243$); reference-matched calibration:
+capped+SAM power $0.521$ vs no-borrowing $0.536$; calibrated-to-$0.025$
+selective+SAM power $0.388$. & Supported (simulation, pre-specified 2-D
+grid); pointwise vs strong control distinguished. \\
 In the selective architecture the per-source discount response is flat;
 adaptivity migrates to the set level. & Borrowed size by true distance:
 selective $43.6/43.7/43.8/43.9$ (flat) vs fixed-budget-with-signal
@@ -126,11 +148,14 @@ Design-time signals of the kind used here cannot detect uniform whole-set
 conflict. & S4 primary-label ROC-AUC $0.43$--$0.45$ (all design-time methods
 below chance); outcome-dependent UIP-JS $0.813$ ($0.839$ process-compatible
 labels). & Supported (simulation; structural). \\
-In the external-control world the selective prior learns to withhold
-borrowing. & Nominal borrowed size $\approx 0$ at every drift; OCs coincide
-with EB-only (type I $\le 0.019$); power $0.631$ vs internal-only $0.237$
-comes from the (there highly informative) EC anchor
-$\mathrm{Beta}(19.0,78.7)$. & Supported (simulation; anchor caveat stated). \\
+In the external-control world the selective prior withholds borrowing and
+its safety is the anchor's, not the method's. & Selective rows coincide with
+EB-only at every drift; anchor battery: mean $-0.4$ logit $\Rightarrow$
+type I $0.104$--$0.126$; precision $\times4$ $\Rightarrow$ $0.033$
+($0.076$ het); heterogeneity (SD $0.3$) lifts the correct anchor to
+$0.041$--$0.049$; precision $\times1/4$ safe everywhere ($\le0.029$) with
+power $0.433$ vs $0.237$. & Supported (simulation battery); EC safety not
+claimed as method-level. \\
 SAM layers are outcome-adaptive and scored separately, against each prior's
 own weak component. & OA rows recomputed under the released adapter with
 documented semantics: selective\_sam test $2.7995$ (KS $0.094$), two\_head\_sam
@@ -254,12 +279,40 @@ the released adapter implementation with each prior's own weak component
 (randomized PIT seed $20260707$); the manual-audit sampling frame
 (\texttt{docs/\allowbreak manual\_audit\_sample\_2026-08-31.csv}) oversamples
 percentage-derived and most-shared donors (seed $20260822$); the completed
-audit (\texttt{docs/\allowbreak manual\_audit\_sample\_2026-08-31\_completed.csv})
-is analysed with Wilson $95\%$ intervals, and the audit-corrected
-sensitivity rescoring (fix NCT03290079 $\to 2/18$, NCT03331250 $\to 4/13$;
+audit (\texttt{docs/} \texttt{manual\_audit\_sample\_2026-08-31\_completed.csv})
+is analysed with Wilson $95\%$ intervals. The audit-corrected
+sensitivity rescoring (fix
+NCT03290079 $\to 2/18$, NCT03331250 $\to 4/13$;
 drop two flagged $100\%$-proportion rows; 221 scorings touched, rescored
 with the frozen canonical models, bootstrap seed $20260823$) is archived in
 \texttt{artifacts/\allowbreak round2/audit\_sensitivity\_meta.json}.
+
+\paragraph{Round-3 additions.} Endpoint canonicaliser: rule set released
+with the code (the canonicaliser script under \texttt{scripts/});
+validation frame =
+the 74 unambiguous audited rows. Calibration study: per-replicate posterior
+probabilities stored for every design cell; pre-specified grid = uniform
+shifts $\{0,0.25,\dots,1.5\}$ at full conflict plus partial-conflict cells
+$f\in\{0.25,0.5,0.75\}\times$ shifts $\{0.5,1.0,1.5\}$ (new seeds via the
+released seed function; full-conflict cells reuse released seeds and
+reproduce the round-2 rejection rates at $0.975$); threshold grid
+$0.975$--$0.9995$ step $0.0005$; cap variant projects historical mass onto
+$\le 0.5$. The partial-conflict and control-heterogeneity DGM extensions
+(the \texttt{conflict\_fraction} and \texttt{theta\_control\_sd} fields)
+draw no extra
+randomness at their released defaults (draw signatures verified
+bit-identical). EC anchor battery: mean $\pm0.4$ logit at preserved
+precision, precision $\times4$/$\times1/4$ at preserved mean, flat; new
+heterogeneity worlds SD $0.3$ (logit) at drifts $-0.8$ and $0.0$. Strict-ORR
+reruns: strict windows $128/155/306$; strict pools $439/567/722$ (primary
+tier) and $221/336/444$ (availability-consistent), canonical
+hyperparameters and seed; design-weighted audit estimates use stratum sizes
+$10/404/261$ (donors: top-shared census / percentage / count) and
+$395/380$ (queries), with finite-population correction; block-bootstrap
+sensitivity schemes: strongest-donor blocks (346) and top-two-donor unions
+(58, degenerate, reported for transparency); audit-corrected sensitivity
+seeds and all round-3 artifacts under
+\texttt{artifacts/\allowbreak round3/}.
 
 \paragraph{Sensitivity artifacts.} Repository artifacts include section-weight
 sensitivity (\texttt{results/tables/\allowbreak section\_weight\_sensitivity.csv}),

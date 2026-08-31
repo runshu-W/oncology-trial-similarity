@@ -8,8 +8,8 @@ evaluation rows produced for the rewrite
 (artifacts_pathfinding/rewrite_numbers_perexample.json) plus the pipeline
 modules for calibration primitives.
 
-F1  EB-referenced head-to-head on the clean test split (design-time priors).
-F2  Leakage-free forward validation on disjoint future windows.
+F1  EB-referenced head-to-head on the held-out split (design-time priors).
+F2  Forward validation on disjoint future windows (outcome-fit temporal split).
 F3  Calibration: PIT, reliability, prediction-interval coverage (test split).
 F12 Learned borrowing triage: borrowed mass versus candidate-set information.
 """
@@ -130,7 +130,7 @@ def f1():
 
     fig, (axL, axR) = plt.subplots(1, 2, figsize=(9.6, 4.8), gridspec_kw={"width_ratios": [2.1, 1.3]})
     barh_panel(axL, TEST, DESIGN, mean(TEST, "eb"),
-               "Mean predictive NLL on clean test split (n = 281, lower is better)")
+               "Mean predictive NLL on held-out split (n = 281, lower is better)")
     axL.set_title("a  Design-time priors vs the EB reference")
     show = ["selective", "eb_strat", "two_head_old", "robust_map_w0.5", "rule"]
     ys = range(len(show))
@@ -174,7 +174,7 @@ def f2():
     barh_panel(axL, FWD, DESIGN, mean(FWD, "eb"),
                "Pooled future-window NLL (n = 775, lower is better)")
     axL.set_title("a  Disjoint-window forward validation")
-    axL.text(0.98, 0.02, "leakage-free (past-only refits)", transform=axL.transAxes,
+    axL.text(0.98, 0.02, "outcome-fit temporal split (past-only refits)", transform=axL.transAxes,
              ha="right", va="bottom", fontsize=7.5, style="italic", color="#444")
     x = range(len(per))
     for i, (label, n, d, lo, hi) in enumerate(per):

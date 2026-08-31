@@ -73,6 +73,11 @@ class SimConfig:
     p_same_surface: float = 0.55
     # Systematic historical-vs-current logit shift (prior-data conflict).
     conflict_shift: float = 0.0
+    # Round-3: fraction of donors receiving the conflict shift (partial,
+    # non-uniform conflict). 1.0 = the released uniform-shift behaviour; the
+    # guard below draws NO extra randomness when fraction >= 1.0, so all
+    # released scenario seeds remain bit-identical.
+    conflict_fraction: float = 1.0
     # Between-trial heterogeneity on the logit scale.
     tau: float = 0.25
     # Probability a candidate has an incompatible endpoint definition, which
@@ -168,7 +173,11 @@ def simulate_query(cfg: SimConfig, rng: np.random.Generator) -> dict:
         c_logit = _true_logit(
             c["line"], c["regimen"], c["pdl1"], c["biomarker"], rng.normal(0, cfg.tau)
         )
-        c_logit += offset + cfg.conflict_shift
+        if cfg.conflict_fraction >= 1.0:
+            c_logit += offset + cfg.conflict_shift
+        else:
+            c_logit += offset + (cfg.conflict_shift
+                                 if rng.random() < cfg.conflict_fraction else 0.0)
         theta_true = float(_sigmoid(c_logit))
 
         # Endpoint incompatibility / poor result quality bias the OBSERVED rate.
@@ -301,6 +310,11 @@ class ExternalControlConfig:
     # Negative = external controls look worse than the internal control, which
     # biases the treatment effect upward and inflates type I error.
     drift_shift: float = -0.80
+    # Round-3: SD of the TRUE control rate across replicates on the logit
+    # scale (heterogeneous-control worlds). 0.0 = released fixed-rate
+    # behaviour; the guard draws NO extra randomness when 0.0, keeping the
+    # released seeds bit-identical.
+    theta_control_sd: float = 0.0
     tau: float = 0.25
     p_endpoint_incompatible: float = 0.15
     p_poor_result_quality: float = 0.12
@@ -317,6 +331,9 @@ def simulate_external_control_query(cfg: ExternalControlConfig,
     q["regimen"] = "chemo"
 
     theta_ctl = float(np.clip(cfg.theta_control, 0.01, 0.99))
+    if cfg.theta_control_sd > 0.0:
+        base_logit = _logit(theta_ctl) + rng.normal(0.0, cfg.theta_control_sd)
+        theta_ctl = float(np.clip(_sigmoid(base_logit), 0.01, 0.99))
     theta_trt = float(np.clip(theta_ctl + cfg.treatment_effect, 0.01, 0.99))
     ctl_logit = _logit(theta_ctl)
 
