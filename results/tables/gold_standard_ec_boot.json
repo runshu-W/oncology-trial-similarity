@@ -1,0 +1,244 @@
+{
+ "anchor_sampling_distribution": {
+  "anchor_refit_reproduction_maxdiff": 0.0,
+  "n_boot": 500,
+  "logit_mean_shift_q": {
+   "0.025": -0.05778411240591331,
+   "0.5": -6.661338147750939e-16,
+   "0.975": 0.05727675618544459
+  },
+  "precision_ratio_q": {
+   "0.025": 0.6950064502538773,
+   "0.5": 0.8546186646386507,
+   "0.975": 1.2396976696848427
+  },
+  "battery_mean_shift": 0.4,
+  "battery_precision_ratio": 4.0
+ },
+ "propagated": [
+  {
+   "world": "null",
+   "drift": -1.2,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.0185
+  },
+  {
+   "world": "null",
+   "drift": -1.2,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.0185
+  },
+  {
+   "world": "null",
+   "drift": -0.8,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.0105
+  },
+  {
+   "world": "null",
+   "drift": -0.8,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.0105
+  },
+  {
+   "world": "null",
+   "drift": -0.4,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.014
+  },
+  {
+   "world": "null",
+   "drift": -0.4,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.014
+  },
+  {
+   "world": "null",
+   "drift": 0.0,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.0165
+  },
+  {
+   "world": "null",
+   "drift": 0.0,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.0165
+  },
+  {
+   "world": "null",
+   "drift": 0.4,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.0185
+  },
+  {
+   "world": "null",
+   "drift": 0.4,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.0185
+  },
+  {
+   "world": "null",
+   "drift": 0.8,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.013
+  },
+  {
+   "world": "null",
+   "drift": 0.8,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.013
+  },
+  {
+   "world": "alt",
+   "drift": -1.2,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.603
+  },
+  {
+   "world": "alt",
+   "drift": -1.2,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.603
+  },
+  {
+   "world": "alt",
+   "drift": -0.8,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.6005
+  },
+  {
+   "world": "alt",
+   "drift": -0.8,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.6005
+  },
+  {
+   "world": "alt",
+   "drift": -0.4,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.621
+  },
+  {
+   "world": "alt",
+   "drift": -0.4,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.621
+  },
+  {
+   "world": "alt",
+   "drift": 0.0,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.6125
+  },
+  {
+   "world": "alt",
+   "drift": 0.0,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.6125
+  },
+  {
+   "world": "alt",
+   "drift": 0.4,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.5935
+  },
+  {
+   "world": "alt",
+   "drift": 0.4,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.5935
+  },
+  {
+   "world": "alt",
+   "drift": 0.8,
+   "het": 0.0,
+   "method": "eb_only_boot",
+   "reject_rate": 0.5865
+  },
+  {
+   "world": "alt",
+   "drift": 0.8,
+   "het": 0.0,
+   "method": "selective_boot",
+   "reject_rate": 0.5865
+  },
+  {
+   "world": "null",
+   "drift": -0.8,
+   "het": 0.3,
+   "method": "eb_only_boot",
+   "reject_rate": 0.0435
+  },
+  {
+   "world": "null",
+   "drift": -0.8,
+   "het": 0.3,
+   "method": "selective_boot",
+   "reject_rate": 0.0435
+  },
+  {
+   "world": "null",
+   "drift": 0.0,
+   "het": 0.3,
+   "method": "eb_only_boot",
+   "reject_rate": 0.036
+  },
+  {
+   "world": "null",
+   "drift": 0.0,
+   "het": 0.3,
+   "method": "selective_boot",
+   "reject_rate": 0.036
+  },
+  {
+   "world": "alt",
+   "drift": -0.8,
+   "het": 0.3,
+   "method": "eb_only_boot",
+   "reject_rate": 0.588
+  },
+  {
+   "world": "alt",
+   "drift": -0.8,
+   "het": 0.3,
+   "method": "selective_boot",
+   "reject_rate": 0.588
+  },
+  {
+   "world": "alt",
+   "drift": 0.0,
+   "het": 0.3,
+   "method": "eb_only_boot",
+   "reject_rate": 0.597
+  },
+  {
+   "world": "alt",
+   "drift": 0.0,
+   "het": 0.3,
+   "method": "selective_boot",
+   "reject_rate": 0.597
+  }
+ ]
+}

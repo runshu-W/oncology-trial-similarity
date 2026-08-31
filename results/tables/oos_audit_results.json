@@ -1,0 +1,217 @@
+{
+ "n_returned": 60,
+ "n_unambiguous": 58,
+ "n_ambiguous": 2,
+ "ambiguous_rows": [
+  {
+   "aid": "R4-09",
+   "role": "component",
+   "pred": false,
+   "actual_type": "clinical response (NCI-WG + flow cytometry) at 3 months",
+   "notes": "Description says 'combined morphological [NCI-WG criteria] + flow cytometry criteria' without enumerating which response categories (CR/PR/nPR) count as response; flow-cytometry component suggests MRD-flavored composite. Insufficient to confirm strict CR+PR ORR; also a 3-month landmark."
+  },
+  {
+   "aid": "R4-49",
+   "role": "query",
+   "pred": false,
+   "actual_type": "unspecified clinical response",
+   "notes": "Registry description gives no response criteria at all ('to estimate the clinical response rate ... after immunotherapy'); trial terminated early. Cannot determine whether CR+PR objective response was meant."
+  }
+ ],
+ "overall": {
+  "n": 58,
+  "tp": 24,
+  "tn": 24,
+  "fp": 6,
+  "fn": 4,
+  "accuracy": 0.8275862068965517,
+  "accuracy_ci": [
+   0.7057009942610748,
+   0.9140960046683857
+  ],
+  "sensitivity": 0.8571428571428571,
+  "sensitivity_ci": [
+   0.673347330684192,
+   0.9596643692029085
+  ],
+  "specificity": 0.8,
+  "specificity_ci": [
+   0.6143334890034062,
+   0.9228644879989345
+  ],
+  "ppv": 0.8,
+  "ppv_ci": [
+   0.6143334890034062,
+   0.9228644879989345
+  ],
+  "npv": 0.8571428571428571,
+  "npv_ci": [
+   0.673347330684192,
+   0.9596643692029085
+  ]
+ },
+ "by_role": {
+  "query": {
+   "n": 29,
+   "tp": 12,
+   "tn": 13,
+   "fp": 3,
+   "fn": 1,
+   "accuracy": 0.8620689655172413,
+   "accuracy_ci": [
+    0.6833593905608515,
+    0.9611051687045611
+   ],
+   "sensitivity": 0.9230769230769231,
+   "sensitivity_ci": [
+    0.6397025647321186,
+    0.9980543715026533
+   ],
+   "specificity": 0.8125,
+   "specificity_ci": [
+    0.5435434537683881,
+    0.9595262660940542
+   ],
+   "ppv": 0.8,
+   "ppv_ci": [
+    0.5191088661931456,
+    0.9566879948941633
+   ],
+   "npv": 0.9285714285714286,
+   "npv_ci": [
+    0.661315510068184,
+    0.9981932193408747
+   ]
+  },
+  "component": {
+   "n": 29,
+   "tp": 12,
+   "tn": 11,
+   "fp": 3,
+   "fn": 3,
+   "accuracy": 0.7931034482758621,
+   "accuracy_ci": [
+    0.6027530507727477,
+    0.9200581511239196
+   ],
+   "sensitivity": 0.8,
+   "sensitivity_ci": [
+    0.5191088661931456,
+    0.9566879948941633
+   ],
+   "specificity": 0.7857142857142857,
+   "specificity_ci": [
+    0.4920243229515314,
+    0.9534207121101328
+   ],
+   "ppv": 0.8,
+   "ppv_ci": [
+    0.5191088661931456,
+    0.9566879948941633
+   ],
+   "npv": 0.7857142857142857,
+   "npv_ci": [
+    0.4920243229515314,
+    0.9534207121101328
+   ]
+  }
+ },
+ "false_calls": [
+  {
+   "aid": "R4-03",
+   "role": "component",
+   "pred": true,
+   "actual_type": "bone scan response",
+   "notes": "CR/PR of radiotracer uptake on isotope bone scan per protocol-specific Bone Scan Time Point Response Criteria - imaging-modality-specific, not RECIST-type objective response."
+  },
+  {
+   "aid": "R4-22",
+   "role": "component",
+   "pred": true,
+   "actual_type": "PSA50 and/or radiographic CR+PR (PCWG3)",
+   "notes": "Composite: PSA decline >=50% AND/OR radiographic CR/PR per PCWG3; PSA-only responders count, so not strict ORR."
+  },
+  {
+   "aid": "R4-24",
+   "role": "component",
+   "pred": true,
+   "actual_type": "PSA response (PCWG3, >=50% decline)",
+   "notes": "PSA >=50% decline confirmed >=3 weeks later - biochemical response."
+  },
+  {
+   "aid": "R4-25",
+   "role": "query",
+   "pred": true,
+   "actual_type": "CR+PR+mCR+HI (MDS composite)",
+   "notes": "Overall response = CR + PR + marrow CR + hematologic improvement - composite including HI and marrow-only CR, broader than CR+PR."
+  },
+  {
+   "aid": "R4-27",
+   "role": "query",
+   "pred": false,
+   "actual_type": "ORR (CR+PR, ACTG Kaposi-sarcoma-type criteria)",
+   "notes": "Clinical response = CR or PR by objective lesion criteria (lesion count/flattening/50% decrease in sum of products of perpendicular diameters) - disease-appropriate objective CR+PR standard (KS-type), analogous to WHO bidimensional criteria."
+  },
+  {
+   "aid": "R4-28",
+   "role": "component",
+   "pred": false,
+   "actual_type": "CR+PR of premalignant oral lesions (WHO-style bidimensional)",
+   "notes": "CR = disappearance of lesions; PR = >=50% reduction in sum of products of diameters - objective CR+PR by WHO-style measurement, but on premalignant lesions (oral leukoplakia/erythroplakia chemoprevention), not malignant-tumor ORR; flag if pool is restricted to cancer ORR."
+  },
+  {
+   "aid": "R4-33",
+   "role": "component",
+   "pred": false,
+   "actual_type": "ORR (CR+PR, RECIST 1.0) at 4 months",
+   "notes": "OR = CR + PR per RECIST; assessed at 4 months, i.e. objective response rate at that timepoint (allowed per criteria)."
+  },
+  {
+   "aid": "R4-50",
+   "role": "component",
+   "pred": false,
+   "actual_type": "ORR (CR+PR, RECIST 1.1)",
+   "notes": "Title is vague but description explicitly defines the measure as ORR = CR + PR per RECIST 1.1."
+  },
+  {
+   "aid": "R4-54",
+   "role": "query",
+   "pred": true,
+   "actual_type": "CR+CRp+CRi (AML composite)",
+   "notes": "Response = CR + CRp + CRi within 3 months - CR-variant hematologic composite, no PR."
+  },
+  {
+   "aid": "R4-60",
+   "role": "query",
+   "pred": true,
+   "actual_type": "abscopal response (irRECIST, unirradiated sites only)",
+   "notes": "CR/PR restricted to unirradiated lesions using irRECIST - immune-related criteria variant (excluded) and lesion-subset-restricted, not standard ORR."
+  }
+ ],
+ "corpus_weighted_accuracy": {
+  "estimate": 0.8188,
+  "strata": {
+   "query_strict": {
+    "n_audited": 15,
+    "stratum_accuracy": 0.8,
+    "corpus_weight": 0.4187
+   },
+   "query_nonstrict": {
+    "n_audited": 14,
+    "stratum_accuracy": 0.9285714285714286,
+    "corpus_weight": 0.1592
+   },
+   "component_strict": {
+    "n_audited": 15,
+    "stratum_accuracy": 0.8,
+    "corpus_weight": 0.3052
+   },
+   "component_nonstrict": {
+    "n_audited": 14,
+    "stratum_accuracy": 0.7857142857142857,
+    "corpus_weight": 0.117
+   }
+  },
+  "note": "weights = corpus pool shares at sampling time"
+ }
+}

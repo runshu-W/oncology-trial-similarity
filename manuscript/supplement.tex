@@ -92,25 +92,46 @@ The triage's demonstrated per-query value is harm avoidance. & Lowest mass
 tertile: predecessor $+0.148$ vs EB, selective $+0.003$ CI $[-0.007,+0.012]$;
 middle tertile $-0.054$ CI $[-0.089,-0.019]$; top tertile $-0.029$ CI
 $[-0.117,+0.060]$. & Supported. \\
-PRIMARY: no predictive gain on decision-time-available data; harm where an
-availability-consistently trained model borrows. & Registry-availability
-proxy $\times$ strict-ORR: pooled $+0.035$ CI $[+0.007,+0.067]$; engaged
-subgroup ($n=119$) $+0.173$ CI $[+0.037,+0.324]$, win $38\%$; frozen
-canonical models under the same filters neutral ($-0.002$ CI
-$[-0.015,+0.010]$; non-strict $-0.001$ CI $[-0.017,+0.016]$); $4.2\%$ of
-gated observations available, $2\%\to31\%$ of queries across windows. &
-The paper's primary real-data result; upper-bound analyses labelled
-hypothetical. \\
-The strict-ORR restriction does not change the upper-bound pattern. &
-Retrained strict subset pooled $\Delta$ $-0.034$ CI $[-0.074,+0.007]$
-($n=589$); frozen-model strict filtering $-0.033$ CI $[-0.068,+0.001]$. &
-Supported; endpoint contamination was not driving the upper-bound
-advantage. \\
-The endpoint canonicaliser is audit-validated. & $98.6\%$ accuracy on 74
-unambiguous audited rows ($100\%$ sensitivity, $91.7\%$ specificity; one
-FP is a title--definition mismatch); corpus rates $73.1\%$ of queries,
-$84.0\%$ of donor observations strict. & Supported (validated against the
-single-rater author audit). \\
+PRIMARY: no predictive gain on decision-time-available data; the final
+capped design is neutral there; the uncapped ablation is harmful. &
+Registry-availability proxy $\times$ title-screened subset: final design
+pooled $+0.006$ CI $[-0.005,+0.016]$ (block $[-0.004,+0.016]$), engaged
+subgroup ($n=119$) $+0.030$ CI $[-0.021,+0.079]$; uncapped $+0.035$ CI
+$[+0.008,+0.067]$, engaged $+0.173$ CI $[+0.040,+0.324]$, win $38\%$;
+frozen canonical control neutral ($-0.002$ CI $[-0.015,+0.010]$); $4.2\%$
+of gated observations available, $2\%\to31\%$ of queries across windows. &
+The paper's primary real-data result (dedicated Table~2 and forest
+Figure~13); upper-bound analyses labelled hypothetical. \\
+The uncapped ablation's primary-tier harm is a training-pool-size effect. &
+Seed stability: engaged-subgroup harm $+0.102$--$+0.150$ under four extra
+seeds; equal-$n$ downsampled full-pool controls harmful to the same degree
+($+0.100/+0.162/+0.131$); dose--response $25\%/50\%/100\%$ of full pools:
+$+0.219/+0.198/+0.080$, canonical full-corpus model $-0.011$. & Supported
+(mechanism experiments on identical scoring rows). \\
+The borrowed-mass cap improves, not taxes, the upper-bound tiers. & Capped
+($c=0.5$) vs EB: forward $-0.0413$ CI $[-0.0625,-0.0202]$; retrained
+title-screened $-0.0485$ CI $[-0.0742,-0.0233]$; frozen title-screened
+$-0.0440$ CI $[-0.0667,-0.0223]$; held-out test $-0.0247$ CI
+$[-0.0588,+0.0097]$; caps $0.3/0.7$ similar; uncapped counterparts
+non-significant ($-0.027/-0.034/-0.033$). & Supported (upper-bound tier);
+the only significant selective-vs-EB intervals in the evaluation. \\
+The title-screened restriction does not change the upper-bound pattern. &
+Retrained title-screened subset pooled $\Delta$ $-0.034$ CI
+$[-0.074,+0.007]$ ($n=589$); frozen-model title-screened filtering
+$-0.033$ CI $[-0.068,+0.001]$ (uncapped). & Supported; endpoint
+contamination was not driving the upper-bound advantage. \\
+The endpoint canonicaliser is audit-informed and title-screened; its
+apparent accuracy is a resubstitution estimate, with a frozen-rule
+out-of-sample check added. & Apparent (resubstitution): $98.6\%$ on 74
+unambiguous rows from the audit the rules were iterated against ($100\%$
+sensitivity, $91.7\%$ specificity; one FP is a title--definition
+mismatch); corpus rates $73.1\%$ of queries, $84.0\%$ of donor
+observations; out-of-sample (rules frozen at recorded hash, 60 fresh
+blinded records, same single rater): accuracy $82.8\%$ CI $[70.6,91.4]$,
+sensitivity $85.7\%$, specificity $80.0\%$, subset purity (PPV) $80.0\%$
+CI $[61.4,92.3]$; 2 records indeterminate. & Resubstitution optimism
+confirmed and quantified; rules NOT retuned on the errors; not
+independent dual-rater validation. \\
 Shared-donor dependence does not drive the conclusions. & $12.7\%$ of query
 pairs share a gated donor; donor-block bootstrap CIs match query-level;
 leave-one-donor-out pooled deltas $-0.018$ to $-0.037$. & Supported;
@@ -132,13 +153,34 @@ SAM mitigates but does not restore control. & Type I $0.056/0.145/0.243$ at
 shifts $0.5/1.0/1.5$; selective+SAM $0.041/0.070/0.046$ (worst still
 $2.8\times$ nominal); partial-conflict cells easier (worst $0.112$
 standalone). & Supported (simulation); wording per round-3 review. \\
-No threshold rescues the standalone selective prior; a borrowed-mass cap is
-the most effective safety mechanism; strong grid-calibrated control erases
-the net power benefit. & $\tau^{*}$ nonexistent for standalone selective;
-cap-$0.5$ worst case $0.044$ (vs $0.243$); reference-matched calibration:
-capped+SAM power $0.521$ vs no-borrowing $0.536$; calibrated-to-$0.025$
-selective+SAM power $0.388$. & Supported (simulation, pre-specified 2-D
-grid); pointwise vs strong control distinguished. \\
+Worst-case calibration is degenerate for the uncapped prior and yields no
+material gain for any design. & Exact $\tau^{*}=0.9999$ for standalone
+selective with power $0.069$ (no-borrowing $0.448$ at its own $\tau^{*}$);
+largest apparent gain over no borrowing at any $\tau^{*}$ is $+0.7$ points
+(cap $0.1$), within MC error; consistent with Kopp-Schneider et al.\ 2020.
+& Supported (simulation); the reference-matched framing of the previous
+revision is withdrawn. \\
+Under the empirical-mixture frame the final design carries a small
+validated net benefit with a bounded worst case. & Independent
+$10{,}000$-replicate validation at frozen thresholds: avg type I $0.0258$
+(MC se $0.0005$; no-borrowing $0.0251$), worst null cell $0.0360$
+[CP $95\%$ UCB $0.0392$; Bonferroni $0.0416$] vs ceiling $0.05$; mixture
+power $0.5154$, paired $+0.0066$ (se $0.0007$) vs no borrowing; profile
+$+4.4$ to $+5.3$ points at drifts $0$ to $+1$, deficits at strong negative
+drift; $n_0$ strata $+0.0/+1.3/+0.7$ points. & Supported (average-case
+control under the corpus-estimated drift mixture; not strict worst-case
+control). \\
+SAM is measurably redundant under the cap and is excluded from the final
+design. & Cap-$0.5$+SAM validates at mixture power $0.5057$ ($-0.31$
+points vs no borrowing) with worst cell $0.0322$ vs the cap-only
+$0.0360$; selection batch: worst-case changes $\le 0.004$, mixture power
+$-1.1$ points. & Supported; SAM retained as sensitivity for the uncapped
+prior only. \\
+The corpus-measured donor--query drift is wide, explaining why
+decision-time gains are hard. & Per-query mean drift (gated
+title-screened pairs, $n=939$): deconvolved $N(+0.12, 1.33^2)$ logits;
+median $|D| = 0.95$; $\approx 30\%$ of mass beyond $|1.5|$. & New
+measurement; the mixture frame's mixing measure. \\
 In the selective architecture the per-source discount response is flat;
 adaptivity migrates to the set level. & Borrowed size by true distance:
 selective $43.6/43.7/43.8/43.9$ (flat) vs fixed-budget-with-signal
@@ -156,16 +198,24 @@ type I $0.104$--$0.126$; precision $\times4$ $\Rightarrow$ $0.033$
 $0.041$--$0.049$; precision $\times1/4$ safe everywhere ($\le0.029$) with
 power $0.433$ vs $0.237$. & Supported (simulation battery); EC safety not
 claimed as method-level. \\
+The EC battery is a systematic stress test, not hyperparameter-uncertainty
+propagation; the latter is measured separately and is negligible. &
+Bootstrap of the anchor fit ($B=500$; refit reproduces the released anchor
+exactly): logit-mean $95\%$ range $\pm 0.06$, precision ratio
+$0.70$--$1.24$ (battery: $\pm 0.4$, $\times 4$); per-replicate propagation
+leaves type I at $0.011$--$0.019$ (canonical $0.010$--$0.019$), het cells
+$0.036$--$0.044$ (canonical $0.041$--$0.049$). & Supported; scopes stated
+explicitly. \\
 SAM layers are outcome-adaptive and scored separately, against each prior's
 own weak component. & OA rows recomputed under the released adapter with
 documented semantics: selective\_sam test $2.7995$ (KS $0.094$), two\_head\_sam
 $2.8154$, rule\_sam $2.9226$. & Supported; descriptive only. \\
 Numeric extraction integrity in the admitted subset is high, and the
-percentage-reconstruction path is vindicated. & Expert audit, 80 stratified
+percentage-reconstruction path is vindicated. & Single-rater author audit, 80 stratified
 rows, six items vs the live registry: arm $98.8\%$, numerator $97.5\%$,
 denominator $97.5\%$, population $97.5\%$; all four jointly $93.8\%$ CI
 $[86.2,97.3]$; percentage stratum denominators $42/42$. & Supported
-(completed expert audit). \\
+(completed single-rater author audit). \\
 The two numeric errors found do not move the conclusions. & Proportion-row
 double misparse (one observation, one query) and registry-version drift on
 the most-shared donor ($4/12$ snapshot vs $4/13$ current, 307 examples);
@@ -313,6 +363,62 @@ sensitivity schemes: strongest-donor blocks (346) and top-two-donor unions
 (58, degenerate, reported for transparency); audit-corrected sensitivity
 seeds and all round-3 artifacts under
 \texttt{artifacts/\allowbreak round3/}.
+
+\paragraph{Round-4 additions (this revision).} Borrowed-mass cap: projection
+$\lambda_i \leftarrow \lambda_i \min(1, c/m)$, $m=\sum_i\lambda_i$, excess to
+the anchored weak component; final-design value $c=0.5$ fixed in the
+previous revision; sweep grid $c \in \{0.1,\dots,0.9\}$ with and without
+anchored SAM, base selective prior built once per replicate. Two-sided
+cells: uniform shifts $\{-1.5,\dots,-0.25\}$ added in both worlds (fresh
+deterministic seeds via the released seed function from the cell name).
+Empirical drift distribution: per-query mean donor--query drift on the
+empirical-logit ($+0.5$) scale over gated title-screened pairs with $\ge 2$
+donors ($n=939$ queries); noise correction $\mathrm{mean}(v)/m$ per query
+(idiosyncratic donor variation deliberately retained in the systematic
+estimate, which enlarges the spread); deconvolved law
+$N(+0.124, 1.328^2)$; mixture weights = that law discretised on the
+$0.25$-step two-sided grid, edge bins absorbing tails; the all-pairs
+sensitivity version is $N(+0.125, 1.391^2)$. Mixture calibration:
+$\tau_{\mathrm{mix}}$ = smallest threshold $\ge 0.975$ (grid step $0.0005$
+to $0.9995$, then $0.9999$) with drift-weighted average type I $\le 0.025$;
+hard ceiling $0.05$ = worst null cell (two-sided uniform + partial) at
+$\tau_{\mathrm{mix}}$; exact worst-case $\tau^{*}$ = maximum over null
+cells of the empirical $97.5\%$ quantile of stored posterior probabilities.
+Selection batch: $2{,}000$ replicates per cell, seed base $20260720$
+(round-3 store reused for positive cells; \texttt{cap50} columns verified
+bit-identical to the round-3 \texttt{selective\_cap50} store). Independent
+validation batch: $10{,}000$ replicates per cell, all $44$ cells, fresh
+seed base $20260901$, thresholds frozen from the selection batch; reporting
+= per-cell type I, worst cell with pointwise and Bonferroni
+Clopper--Pearson $95\%$ upper bounds, mixture average with MC standard
+error, paired (within-replicate) mixture-power differences.
+$n_0$-conditional operating characteristics: strata $20$--$28$, $29$--$37$,
+$38$--$45$, replicate $n_0$ recovered by regenerating each cell's dataset
+from its seed. Capped real-data rescoring: every tier (held-out test,
+forward, retrained title-screened, availability-consistent primary, frozen
+title-screened) at caps $\{0.3, 0.5, 0.7\}$ plus uncapped, cap applied at
+scoring only; uncapped scores verified to reproduce the stored per-example
+values ($\le 1.6\times10^{-4}$); primary-analysis blocks = strongest
+gated available donor per query ($534$ blocks, largest $7$); bootstrap
+seed $20260901$, $4{,}000$ resamples. Training-pool mechanism experiments
+(identical primary scoring rows and fold anchors throughout): seed
+stability = availability-consistent retraining at seeds $+1..+4$; equal-$n$
+composition control = full title-screened pools randomly downsampled to
+$221/336/444$ (three draws, RNG $500{+}k$); dose--response = $25/50/100\%$
+of the full pools (RNG $900$). Out-of-sample endpoint audit: canonicaliser
+frozen at SHA-256
+\texttt{df78ad8a\ldots} (full hash in the released key file) before
+sampling; $60$ records from trials untouched by the first audit, stratified
+by role $\times$ frozen prediction ($15$ per stratum, seed $20260901$),
+predictions withheld from the auditor; adjudication against registry
+outcome descriptions. EC anchor-fit uncertainty: nonparametric bootstrap of
+the $300$ training control arms ($B=500$, RNG $20260901$); propagation =
+one bootstrap anchor drawn per evaluation replicate (RNG $20260902$) for
+EB-only and frozen-selective over the released drift grid and
+heterogeneity cells. Round-4 artifacts under
+\texttt{artifacts/\allowbreak round4/}; new figures \texttt{F13} (primary
+forest) and \texttt{F14} (mixture operating profile) built by
+\texttt{scripts/\allowbreak build\_round4\_figures.py}.
 
 \paragraph{Sensitivity artifacts.} Repository artifacts include section-weight
 sensitivity (\texttt{results/tables/\allowbreak section\_weight\_sensitivity.csv}),

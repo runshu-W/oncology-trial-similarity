@@ -1,0 +1,33 @@
+{
+ "strict_pairs_primary": {
+  "n_queries": 939,
+  "mean": 0.1239,
+  "sd_observed": 1.4751,
+  "mean_squared_se": 0.4134,
+  "sd_true_deconvolved": 1.3276,
+  "raw_abs_quantiles": {
+   "0.5": 0.9459,
+   "0.8": 1.8303,
+   "0.9": 2.3421,
+   "0.95": 2.9193
+  },
+  "adj_abs_q95_normal": 2.726,
+  "bound_on_grid": 1.5
+ },
+ "all_pairs_sensitivity": {
+  "n_queries": 1307,
+  "mean": 0.1248,
+  "sd_observed": 1.521,
+  "mean_squared_se": 0.3789,
+  "sd_true_deconvolved": 1.3909,
+  "raw_abs_quantiles": {
+   "0.5": 0.9431,
+   "0.8": 1.877,
+   "0.9": 2.4846,
+   "0.95": 3.0693
+  },
+  "adj_abs_q95_normal": 2.8509,
+  "bound_on_grid": 1.5
+ },
+ "spec": "bound = smallest grid shift >= |mean| + 1.96*sd_true of per-query mean donor drift (empirical logit, +0.5), gated components, deconvolved for sampling noise"
+}

@@ -1,0 +1,71 @@
+{
+ "batch": "validation",
+ "strata": {
+  "n20-28": {
+   "weak_only": {
+    "avg_t1": 0.0262,
+    "mix_power": 0.4124
+   },
+   "eb_only": {
+    "avg_t1": 0.0262,
+    "mix_power": 0.4124
+   },
+   "selective_cap50": {
+    "avg_t1": 0.0255,
+    "mix_power": 0.4126
+   },
+   "selective_cap50_sam": {
+    "avg_t1": 0.0248,
+    "mix_power": 0.403
+   },
+   "net_benefit_cap50_vs_weak": 0.0002,
+   "net_benefit_cap50_vs_eb": 0.0002
+  },
+  "n29-37": {
+   "weak_only": {
+    "avg_t1": 0.0253,
+    "mix_power": 0.5145
+   },
+   "eb_only": {
+    "avg_t1": 0.0253,
+    "mix_power": 0.5145
+   },
+   "selective_cap50": {
+    "avg_t1": 0.0271,
+    "mix_power": 0.5271
+   },
+   "selective_cap50_sam": {
+    "avg_t1": 0.0259,
+    "mix_power": 0.5188
+   },
+   "net_benefit_cap50_vs_weak": 0.0126,
+   "net_benefit_cap50_vs_eb": 0.0126
+  },
+  "n38-45": {
+   "weak_only": {
+    "avg_t1": 0.0238,
+    "mix_power": 0.6114
+   },
+   "eb_only": {
+    "avg_t1": 0.0265,
+    "mix_power": 0.6261
+   },
+   "selective_cap50": {
+    "avg_t1": 0.0249,
+    "mix_power": 0.6185
+   },
+   "selective_cap50_sam": {
+    "avg_t1": 0.0238,
+    "mix_power": 0.6071
+   },
+   "net_benefit_cap50_vs_weak": 0.0071,
+   "net_benefit_cap50_vs_eb": -0.0076
+  }
+ },
+ "tau_mix": {
+  "weak_only": 0.9805,
+  "eb_only": 0.975,
+  "selective_cap50": 0.9755,
+  "selective_cap50_sam": 0.978
+ }
+}

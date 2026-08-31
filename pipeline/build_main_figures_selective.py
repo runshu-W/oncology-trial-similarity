@@ -186,8 +186,9 @@ def f2():
     axR.set_xlabel("Future window (primary completion date)")
     axR.set_ylabel("Selective vs EB: paired $\\Delta$NLL (95% CI)")
     axR.set_title("b  Per-window paired delta")
-    fig.suptitle("Selective borrowing matches or exceeds the EB reference out of time,\n"
-                 "significantly in the best-trained window", fontsize=11, fontweight="bold", y=1.05)
+    fig.suptitle("Hypothetical full-information upper bound: forward validation\n"
+                 "(availability-consistent primary analysis reported separately)",
+                 fontsize=11, fontweight="bold", y=1.05)
     save(fig, "F2_forward_validation")
 
 
