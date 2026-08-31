@@ -175,23 +175,26 @@ largest apparent gain over no borrowing at any $\tau^{*}$ is $+0.7$ points
 (cap $0.1$), within MC error; consistent with Kopp-Schneider et al.\ 2020.
 & Supported (simulation); the reference-matched framing of the previous
 revision is withdrawn. \\
-The corpus-specific decision analysis (exploratory) finds a marginal
-size-adjusted average difference and a conditional, local like-for-like
-advantage. &
+The corpus-specific decision analysis (exploratory) establishes no
+average net difference at matched size; a cell-specific ROC-efficiency
+diagnostic locates a local advantage at small drift of either sign. &
 Independent $10{,}000$-replicate validation at frozen thresholds: avg type
 I $0.0258$ (MC se $0.0005$; no-borrowing $0.0251$; neither exactly
 $0.025$), worst null cell $0.0360$ [CP $95\%$ UCB $0.0392$; Bonferroni
 $0.0416$] vs the tolerated ceiling $0.05$. In-validation size-adjusted
-reanalysis: full-batch interpolation $+0.0024$ vs no borrowing (paired MC
-se $0.0007$), cross-fitted $+0.0057$ (per-fold se $0.0010$; achieved
-sizes $0.0244/0.0260$) --- order $+0.002$ to $+0.006$, threshold-estimation
-error unpinned beyond that; sign-robust across corpus-derived mixings,
-rising as drift dispersion narrows ($+0.040$ under $N(0,0.5)$). Pointwise
-size-matched (per-cell null rejection $=0.025$, cross-fitted): $+0.074$
-at zero drift, $+0.051/+0.020/+0.014$ at $+0.25/+0.5/+0.75$, reversing
-to $-0.019/-0.032/-0.027$ at drifts $\ge 1$; $n_0$ strata
-$+0.0/+1.3/+0.7$ (frozen thresholds). & Exploratory
-(thresholds of the reanalysis estimated on the validation batch itself;
+reanalysis: single-analysis point estimates positive ($+0.0024$ full
+batch; $+0.0057$ single cross-fit; $+0.0010$ to $+0.0063$ across
+corpus-derived mixings) but repeated cross-fitting ($R=200$) centres the
+difference at $-0.0007$ ($95\%$ split interval $[-0.0014,+0.0039]$; $4\%$
+of splits positive) --- sign not established; only the dispersion
+dependence ($+0.040$ under $N(0,0.5)$) is robust. ROC-efficiency
+diagnostic (per-cell null rejection $=0.025$, cross-fitted; conditions on
+the unknown true drift, not implementable): $\approx +0.07$ at
+$|{\rm drift}| \le 0.25$, fading through $\pm 0.5$--$0.75$, reversing to
+$-0.02$/$-0.03$ beyond $|1|$; partial-conflict cells track displaced
+fraction; $n_0$ strata $+0.0/+1.3/+0.7$ (frozen thresholds). &
+Exploratory
+(reanalysis thresholds estimated on the validation batch itself;
 corpus-specific mixing measure; tolerated, not nominal, pointwise
 control; no claim of verified average frequentist control). \\
 The cap's protection holds under donor-precision stress; its soft spot is
@@ -270,7 +273,9 @@ corpus $= 7{,}173$ trials, $26{,}603$ primary-endpoint arm rows;
 $1{,}470 \to 1{,}407$ examples; full re-run with fixed seeds. & Supported. \\
 Every partition is out-of-fit but none is out-of-development. & Provenance
 paragraph (Section 2.11) discloses what each split was exposed to at each
-stage; forward windows carry confirmatory weight; prospective registry
+stage; forward windows carry confirmatory weight for the pre-specified
+uncapped architecture comparisons only (not for the post hoc capped
+redesign); prospective registry
 vintages identified as the true lockbox. & Supported (disclosure). \\
 Reported learned results use genuine, freshly trained checkpoints, and the
 round-2 machinery reproduces the published numbers before extending them. &
@@ -502,6 +507,24 @@ real-data evaluation is labelled a post hoc exploratory redesign
 evaluation (the cap postdates examination of earlier uncapped results);
 independent confirmation requires a new registry vintage, an untouched
 window, or external data.
+
+\paragraph{Round-7 additions (this revision).} Repeated cross-fitting:
+$R = 200$ random half-splits of each validation cell; per split,
+size-matching thresholds solved by bisection on one half (weighted
+average type I $= 0.02513$ under the canonical mixing) and the paired
+difference evaluated on the other, folds averaged
+(\texttt{gold\_standard\_round7\_crossfit.json}; RNG $20260908$). The
+pointwise ROC-efficiency diagnostic is extended to all $13$ two-sided
+uniform and $9$ partial-conflict cells (per-cell null rejection $=
+0.025$, cross-fitted; RNG $20260909$). Block-rule provenance: the capped
+block bootstrap assigns each query its strongest gated donor by rule
+weight, with no-donor queries as singleton blocks ($365$ blocks over the
+$775$ forward queries); the earlier released dependence analysis used its
+own strongest-gated-donor assignment ($346$ blocks) with a different
+handling of no-donor queries; rule sensitivity for the capped forward
+interval --- strongest-by-rule-weight $[-0.0669,-0.0169]$, no-donor
+pooled $[-0.0665,-0.0182]$, strongest-by-gate $[-0.0634,-0.0203]$ --- is
+released as \texttt{round7\_block\_rules.json}.
 
 \paragraph{Sensitivity artifacts.} Repository artifacts include section-weight
 sensitivity (\texttt{results/tables/\allowbreak section\_weight\_sensitivity.csv}),

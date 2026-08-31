@@ -80,9 +80,10 @@ def f13():
                   "(negative favours the design)")
     for spine in ("left", "top", "right"):
         ax.spines[spine].set_visible(False)
-    ax.set_title("Primary analysis: the cap turns significant harm into "
-                 "neutrality\n(registry-availability proxy $\\times$ "
-                 "title-screened ORR subset)", fontsize=10.5,
+    ax.set_title("Primary analysis: capped neutral, uncapped harmful\n"
+                 "(post hoc exploratory redesign comparison; "
+                 "registry-availability proxy $\\times$ title-screened "
+                 "binary-response subset)", fontsize=10,
                  fontweight="bold")
     save(fig, "F13_primary")
 
@@ -112,9 +113,9 @@ def f14():
     axs[0].axhline(0.05, color=BAD, ls=":", lw=0.9)
     axs[0].text(-1.48, 0.051, "pre-specified ceiling 0.05", fontsize=7.5,
                 color=BAD, va="bottom")
-    axs[0].set_ylabel("Type I error")
+    axs[0].set_ylabel("Null-world rejection rate")
     axs[0].legend(frameon=False, fontsize=8, ncol=2)
-    axs[1].set_ylabel("Power")
+    axs[1].set_ylabel("Alt-world rejection rate")
     axs[2].bar(shifts, [W[s] for s in shifts], width=0.21, color="#a6bddb")
     axs[2].set_ylabel("Drift\nweight")
     axs[2].set_xlabel("Uniform donor drift (logit shift), two-sided grid")
