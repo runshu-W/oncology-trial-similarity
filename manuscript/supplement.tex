@@ -5,12 +5,10 @@
 %
 %  Standalone document. Compile with:
 %     latexmk -pdf supplement.tex
-%  Moved out of the main manuscript 2026-07-12 (pre-submission cleanup):
-%  the Claim--Evidence Map is an internal cross-check aid and is provided
-%  here as supplementary material rather than in the main appendix.
-%  Updated 2026-08-14 to the corrected-units re-run: all real-data values
-%  match the regenerated evidence artifacts (see the endpoint-unit
-%  subsection of the main text).
+%  Updated 2026-08-31 for the selective-borrowing revision: the
+%  Claim--Evidence Map matches the EB-referenced evaluation and the
+%  selective two-head architecture; Section S2 collects the precise
+%  configuration constants requested in pre-submission review.
 % =====================================================================
 \documentclass[11pt]{article}
 
@@ -42,63 +40,148 @@ for Bayesian historical borrowing}
 
 This table maps each principal claim in the main text to its supporting
 evidence and the boundary of that evidence. It is a cross-check aid: every
-``Status'' entry states the setting in which the claim is supported (for
-example, retrospective ORR, leakage-free, simulation, or borrowing-layer only)
-and does not assert clinical or regulatory validity. All real-data values
-correspond to the corrected-units re-run on $N=1{,}407$ leakage-controlled ORR
-pseudo-queries; simulation values are unaffected by the endpoint-unit
-correction.
+``Status'' entry states the setting in which the claim is supported and does
+not assert clinical or regulatory validity. All real-data values correspond to
+the unit-corrected data; ``test'' is the clean $20\%$ split ($n=281$),
+``forward'' the pooled disjoint future windows ($n=775$, past-only refits).
+Design-time and outcome-adaptive comparisons are never mixed.
 
 \begin{longtable}{p{0.32\textwidth} p{0.39\textwidth} p{0.19\textwidth}}
 \toprule
 \textbf{Claim} & \textbf{Evidence} & \textbf{Status} \\
 \midrule
 \endhead
-Trained two-head calibration improves held-out NLL over rule. & $2.8957$ vs
-$3.0100$ mean NLL. & Supported (retrospective ORR). \\
-SAM conflict adaptation improves NLL and responds to conflict. & Two-head-SAM
-$2.7938$, rule-SAM $2.9006$; simulation conflict behaviour. & Supported as
-sensitivity evidence. \\
-Conflict-adapted borrowing shows lower future-fold NLL in three rolling-origin
-splits. & Leakage-free rolling-origin: rule-SAM $-0.100$ to $-0.109$;
-per-fold-retrained two-head-SAM $-0.198$ to $-0.203$ nats (bootstrap 95\% CIs
-exclude 0). & Supported (leakage-free) for closed-form and learned models. \\
-Priors show improved (not perfect) calibration, not merely lower loss. & PIT KS
-$0.177$, 95\% coverage $0.996$, reliability slope $1.36$ for two-head-SAM. &
-Supported (held-out ORR). \\
-Learned prior outperforms a standard robust prior. & Two-head-SAM $2.794$ vs
-best robust-MAP $3.002$; robust-MAP degrades to $3.100$ at higher
-robustification weights. & Supported (retrospective ORR). \\
+Flat-referenced borrowing gains are largely marginal-distribution information
+in disguise. & Intercept-only EB (2 parameters, no candidates): test NLL
+$2.9012$ vs weak $3.1641$; every fixed-budget borrowing construction at or
+above EB (rule $3.0542$, paired $\Delta$ $+0.153$ CI $[+0.073,+0.237]$; best
+robust-MAP $3.0427$). & Supported (retrospective ORR). \\
+The selective architecture significantly improves on fixed-budget borrowing.
+& Paired vs two-head predecessor: test $-0.0581$ CI $[-0.1170,-0.0026]$;
+forward $-0.0665$ CI $[-0.0993,-0.0346]$. & Supported (test and leakage-free
+forward). \\
+The selective prior matches or modestly exceeds the EB reference. & Test
+$\Delta$ $-0.0295$ CI $[-0.0722,+0.0109]$; forward $\Delta$ $-0.0266$ CI
+$[-0.0591,+0.0064]$; most recent window $-0.0461$ CI $[-0.0861,-0.0083]$
+(significant). & Supported as stated; average superiority not claimed. \\
+Learned total borrowing performs design-time triage. & Borrowed-mass quartiles
+$0.15/0.36/0.65$ (vs forced $\approx0.79$); mean mass $0.310$ ($I<8$) vs
+$0.585$ ($I\ge8$); Spearman $+0.59$. & Supported (forward windows;
+descriptive). \\
+Candidate borrowing helps where candidates are informative. & Pre-specified
+$I\ge8$ subgroup: forward $\Delta$ vs EB $-0.0585$ CI $[-0.1240,+0.0127]$,
+win $60\%$; outcome-conditioned diagnostic: donor consensus within $0.15$ of
+truth $\Rightarrow$ $\Delta$ $-0.25$ to $-0.32$, win $82$--$84\%$. & Supported
+directionally; subgroup CI includes zero; diagnostic is outcome-conditioned. \\
+Selective calibration approaches the EB reference at lower NLL. & Test PIT-KS
+$0.094$ (EB $0.035$, fixed-budget $0.173$); prediction-interval coverage
+$0.683/0.925/0.975$ at nominal $0.50/0.80/0.95$ (conservative, partly by
+discreteness). & Supported (test split). \\
+A disease-stratified EB reference is competitive but unstable. & Forward:
+$2.8152$, $\Delta$ vs EB $-0.0288$ CI $[-0.0452,-0.0128]$, indistinguishable
+from selective ($+0.0022$ CI $[-0.0281,+0.0345]$); test: worse than EB
+($+0.0209$). & Supported; reported as a limitation. \\
 Borrowing improves design-based operating characteristics without conflict. &
 Gold-standard simulation: type I error $0.025$ vs $0.037$ no-borrowing; power
 $0.587$ vs $0.536$; full pooling $0.584$. & Supported (simulation). \\
 Under strong conflict the learned prior degrades and is not the safest. & Type
 I error $0.070$ vs rule $0.050$ and robust-MAP $0.047$, without compensating
 power gain. & Supported (simulation; reported as a limitation). \\
-Design-time signals cannot detect uniform whole-set conflict. & Scenario S4:
-every design-time method below chance (ROC-AUC $0.445$); outcome-dependent
-UIP-JS $0.839$. & Supported (simulation; structural limitation). \\
-The prospective signal does not improve discrimination but is necessary for
-the discount head to respond. & Ablation: ROC-AUC change $-0.000$ to $+0.016$;
-without $g_i$ the fitted discount is constant (SD $0.002$) and borrowed
-information is flat across donors. & Supported (simulation ablation). \\
-Adaptive borrowing protects type I error with drifted external controls. &
-External-control scenario: pooling $0.211$, internal-only $0.014$, learned
-prior $0.032$. & Supported (simulation). \\
-Extracted observations are of measured quality. & About 44\% of raw arm rows
-are not valid binary observations; the admission rule (synthetic round-trip
-8/8) removes them before prior construction. & Supported (July audit;
+Design-time signals of the kind used here cannot detect uniform whole-set
+conflict. & Scenario S4: every evaluated design-time method below chance
+(ROC-AUC $0.445$); outcome-dependent UIP-JS $0.839$. & Supported (simulation;
+structural limitation of feature-plus-consensus criteria). \\
+The prospective signal does not improve discrimination but activates the
+discount head. & Ablation: ROC-AUC change $-0.000$ to $+0.016$; without $g_i$
+fitted discount constant (SD $0.002$); with it, borrowed information declines
+with true distance. & Supported (simulation ablation). \\
+Adaptive borrowing mitigates external-control type-I inflation relative to
+pooling. & External-control scenario: pooling $0.211$, internal-only $0.014$,
+learned prior $0.032$ --- reduced inflation, not full control at the nominal
+$0.025$. & Supported (simulation; wording deliberate). \\
+SAM layers are outcome-adaptive and scored separately. & Same-outcome NLL
+(selective+SAM test $2.786$) reported only in the labelled block; SAM assessed
+by simulation trigger/OC behaviour. & Supported; no design-time claim made. \\
+Extracted observations are of measured quality. & About $44\%$ of raw arm rows
+are not valid binary observations; admission rule (synthetic round-trip $8/8$)
+removes them before prior construction. & Supported (July audit;
 pre-correction corpus). \\
 The endpoint-unit defect is quantified and corrected, and results were
 regenerated. & $804/3{,}319$ arm-level ORR rows provably wrong pre-correction;
 all four call sites fixed; $1{,}470 \to 1{,}407$ examples; full re-run with
-fixed seeds and pinned environment. & Supported (correction documented in
-main text). \\
-Reported two-head results use genuine, freshly trained checkpoints. & Corrected
-re-run trained the primary and per-fold models from scratch (seed $20260603$);
-attached predictions match training-run NLL rows to within $10^{-4}$. &
+fixed seeds and pinned environment. & Supported (documented in main text). \\
+Reported learned results use genuine, freshly trained checkpoints. & Primary
+and per-window models trained from scratch (seed $20260603$); inference
+consistency check matches training-run NLL rows to within $10^{-4}$. &
 Supported. \\
 \bottomrule
 \end{longtable}
+
+\section{Configuration constants and reproducibility details}
+
+\paragraph{Candidate features (9 dimensions).} As defined in the main text:
+$s_i$ = Stage-2 overall similarity $/100$; disease, regimen, endpoint,
+follow-up, and eligibility match scores = the corresponding Stage-2 $0$--$5$
+dimension scores $/5$; result-quality score $/5$; negative red-flag severity
+$-\mathrm{rf}_i \in [-1,0]$; and $\log(1+n_i)$. Stage-2 dimension scores are
+produced by the deterministic reranker released with the code
+(\texttt{pipeline/oncology\_trial\_similarity\_pipeline.py}); the scoring
+rules, keyword tables, and gate conditions are implemented there verbatim and
+exercised by the released unit tests.
+
+\paragraph{Gate and rule prior.} The conservative gate multiplies factors for
+endpoint compatibility ($<1.5/5$ blocks), result usability ($0$ blocks),
+disease match ($<1.5/5$ scales by $0.2$; $<2.5/5$ by $0.6$), and low-severity
+red flags (scale $0.5$). Rule discounts $a^{\mathrm{rule}}_i$ follow the
+suitability ladder $0.75/0.40/0.15/0$; the rule prior fixes $\lambda_0=0.2$
+with a flat $\mathrm{Beta}(1,1)$ anchor.
+
+\paragraph{Selective model.} DeepSets encoder $\phi$: $9 \to 16 \to 16$
+(ReLU); score head $\rho$ and discount head: $32 \to 16 \to 1$; weak-component
+head $\psi$: $16 \to 16 \to 1$ on the pooled context. Training: Adam, learning
+rate $0.01$, $100$ epochs, full batch, seed $20260603$ (primary and every
+window refit); KL-to-rule weight $\rho = 0.1$ on normalised candidate
+allocation; listwise term disabled ($\eta = 0$); borrowed-information penalty
+$10^{-4}\max(\sum_i \lambda_i a_i n_i - 100, 0)^2$. EB anchors by
+beta-binomial MLE (grid plus coordinate refinement): training split
+$\mathrm{Beta}(0.68, 1.70)$; past-only fits $\mathrm{Beta}(0.65,1.61)$,
+$(0.68,1.70)$, $(0.69,1.72)$ at the 2020/2021/2022-12-31 cutoffs.
+Disease-stratified EB: per-primary-site MLE for strata with $\ge 40$ training
+queries, global fallback otherwise.
+
+\paragraph{Evaluation constants.} Clean test split: deterministic $80/20$
+(seed $20260603$), $n = 281$. Disjoint forward windows by primary completion
+date: $(2020\text{-}12\text{-}31,2021\text{-}12\text{-}31]$ $n=181$,
+$(2021\text{-}12\text{-}31,2022\text{-}12\text{-}31]$ $n=204$,
+$>2022\text{-}12\text{-}31$ $n=390$; past-only training pools $632/813/1{,}017$.
+Paired bootstrap: $4{,}000$ resamples, percentile intervals. PIT: randomized
+form, RNG seed $20260707$; prediction intervals: equal-tailed on the exact
+beta-binomial mixture pmf. Pre-specified information subgroup: $I = \sum_i
+\mathrm{gate}_i a^{\mathrm{rule}}_i n_i \ge 8$, fixed from exploratory
+analysis of the two earlier windows before the final window was examined.
+Robust-MAP baseline: DerSimonian--Laird heterogeneity on the rate scale,
+Haldane-smoothed rates, MAP ESS cap $200$, $\epsilon = 10^{-4}$,
+robustification weights $w \in \{0.5, 0.9\}$. SAM adapter: temperature
+$\tau = 1$; multiplier $\min(1, R^{\tau})$ with $R$ the
+historical-to-weak predictive ratio at the observed outcome.
+
+\paragraph{Gold-standard simulation.} As released in
+\texttt{simulation/gold\_standard/}: $2{,}000$ replicates per cell (estimation
+and design worlds), simulation training set $300$ queries, $60$ epochs, seed
+$20260720$; design test $H_0: \theta \le 0.20$ at one-sided $0.025$,
+alternative $\theta_0 = 0.35$; conflict grid $0$--$1.5$ logit shift; success
+threshold $0.975$; fixed-discount comparator $0.35$. Data-generating
+constants, trap/hidden-gem composition, and per-cell outputs are archived in
+\texttt{results/tables/gold\_standard\_*}.
+
+\paragraph{Sensitivity artifacts.} Repository artifacts include section-weight
+sensitivity (\texttt{results/tables/section\_weight\_sensitivity.csv}),
+feature ablation, $\lambda_0$-frontier and conflict sweeps from the
+operating-characteristics engine, and the per-example evaluation rows behind
+every table in this revision
+(\texttt{artifacts/rerun\_unitfix\_2026-08-14/} and the selective-revision
+artifact set); regeneration commands are given in
+\texttt{docs/reproducibility.md} and the figure scripts assert every plotted
+headline value against the manuscript numbers before writing output.
 
 \end{document}

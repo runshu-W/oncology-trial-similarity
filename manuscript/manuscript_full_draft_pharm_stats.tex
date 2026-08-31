@@ -71,30 +71,46 @@ SECRET) to assemble a high-recall candidate set; Stage~2 (rerank) scores
 candidates on nine auditable, borrowing-relevant clinical and statistical
 features and applies a conservative clinical gate; and Stage~3 (borrow) turns
 each surviving candidate into a beta-binomial historical component. The central
-methodological contribution is a two-head DeepSets model that treats the
-retrieved candidates as an unordered set and emits, for each candidate,
-\emph{both} a mixture weight \emph{and} a separate effective-sample-size
-discount---keeping ``which donor to borrow from'' and ``how much information to
-borrow'' as distinct, independently learned quantities. An optional SAM-style
-adapter then down-weights historical components that conflict with the observed
-data. Because expert borrowability labels do not exist at scale, evaluation was
-retrospective and simulation-based: leakage-controlled pseudo-queries (completed
-trials replayed with their outcomes hidden), held-out beta-binomial predictive
-negative log-likelihood (NLL), true-date temporal validation, simulation
-operating characteristics, baseline comparisons, feature ablation, and software
-tests.
+methodological contribution is a \emph{selective} two-head DeepSets model:
+candidate-level heads emit, for each retrieved candidate, a mixture weight and
+a separate information discount, while a set-level head places the weak
+component inside the same learnable softmax, so that ``which donor,'' ``how
+much information per donor,'' and ``whether to borrow at all'' are all learned
+per query from design-time features. The weak component is anchored at an
+intercept-only empirical-Bayes (EB) beta prior fitted to training-era queries
+only, and the same EB prior---a two-parameter marginal prior that uses no
+candidate information---serves as the reference baseline for every real-data
+comparison. Because expert borrowability labels do not exist at scale,
+evaluation was retrospective and simulation-based, with a strict partition
+between \emph{design-time} priors (fixed before the current outcome is seen),
+scored by held-out beta-binomial predictive negative log-likelihood (NLL) on
+leakage-controlled pseudo-queries and by disjoint-window forward validation
+with past-only refits, and \emph{outcome-adaptive} layers (SAM-style conflict
+adaptation), whose same-outcome predictive scores are partly mechanical and
+which are therefore assessed by known-truth simulation operating
+characteristics instead.
 
-\noindent\textbf{Results.} In borrowing baseline comparisons on objective
-response rate (ORR) pseudo-queries, the trained two-head mixture model achieved
-mean negative log-likelihood (NLL) $2.8957$ versus $3.0100$ for the rule-based
-mixture and $2.9006$ for the conflict-adapted rule baseline; the same SAM
-adapter applied to the trained two-head prior achieved $2.7938$, the lowest of
-all evaluated priors. Under
-leakage-free forward validation---models trained only on trials completed before
-a cutoff date and scored on strictly later trials---across three cutoffs, the
-conflict-adapted priors showed lower future-fold NLL with paired bootstrap
-95\% confidence intervals excluding zero, and improved calibration diagnostics
-(better probability-integral-transform uniformity and near-nominal coverage).
+\noindent\textbf{Results.} On unit-corrected ORR pseudo-queries the selective
+prior achieved held-out NLL $2.8716$ on a clean $20\%$ test split, versus
+$2.9012$ for the EB reference (paired $\Delta$ $-0.0295$, bootstrap $95\%$ CI
+$[-0.0722,+0.0109]$) and $2.9297$ for the fixed-budget two-head predecessor
+($\Delta$ $-0.0581$, CI $[-0.1170,-0.0026]$). Under leakage-free forward
+validation on disjoint future windows, each scored by a model refit on
+past-only data, the selective prior matched or modestly exceeded the EB
+reference overall ($\Delta$ $-0.0266$, CI $[-0.0591,+0.0064]$), improved
+significantly on the predecessor architecture ($\Delta$ $-0.0665$, CI
+$[-0.0993,-0.0346]$), and outperformed EB significantly in the most recent,
+best-trained window ($\Delta$ $-0.0461$, CI $[-0.0861,-0.0083]$). The learned
+total borrowing behaved as design-time triage: mean borrowed mass was $0.31$
+when the candidate set carried little usable endpoint information and $0.59$
+when it was information-rich (Spearman $+0.59$ with a pre-specified
+information measure), against a forced $\approx 0.79$ in the fixed-budget
+predecessor; calibration moved to near the EB reference
+(probability-integral-transform Kolmogorov--Smirnov $0.094$ versus $0.173$ for
+the predecessor and $0.035$ for EB), with conservative interval coverage.
+Outcome-adaptive SAM layers attained still lower same-outcome NLL (selective +
+SAM $2.79$) but are reported separately because such scores partly reflect
+adaptation to the outcome being scored.
 
 In a gold-standard simulation with parameter-level exchangeability known by
 construction, evaluated in a single-arm design testing $H_0\!:\theta \le 0.20$,
@@ -114,19 +130,23 @@ drifted downward, full pooling inflated type I error to $0.211$ against $0.014$
 for internal-control-only analysis, while the learned prior held it to $0.032$.
 
 \noindent\textbf{Conclusions.} The framework provides a reproducible
-methodology prototype and retrospective predictive-calibration evidence
-package for oncology historical borrowing. Its defensible contribution is the
-integration of free-text retrieval with candidate-level borrowing and a
-gold-standard evaluation protocol, rather than any individual statistical
-component, each of which has close precedents. The retrospective and simulation
-analyses reported here do not establish expert borrowability of individual
-historical trials or clinical decision validity, and do not replace expert
-clinical and statistical review, prospective validation, or protocol-specific
-operating-characteristics evaluation. An endpoint-unit defect discovered while
-auditing the extraction was corrected and the full real-data evaluation was
-re-run on unit-corrected data; the defect, its measured scope, and the effect
-of the correction are documented in the text, and the simulation results were
-never affected by it.
+methodology prototype and an EB-referenced, leakage-partitioned evaluation
+protocol for oncology historical borrowing. Its defensible contributions are a
+selective borrowing architecture whose per-query total borrowing is learned
+rather than fixed---significantly improving on fixed-budget candidate
+borrowing and yielding an interpretable design-time triage policy---and the
+finding, of independent cautionary value, that against a properly fitted
+marginal EB prior the average real-data benefit of candidate-level borrowing
+is modest and concentrated where retrieved candidate sets are
+information-rich; known-truth simulation shows when borrowing helps and when
+it harms. These analyses do not establish average superiority over marginal
+priors, expert borrowability of individual historical trials, or clinical
+decision validity, and do not replace expert clinical and statistical review,
+prospective validation, or protocol-specific operating-characteristics
+evaluation. An endpoint-unit defect discovered while auditing the extraction
+was corrected and the full real-data evaluation was re-run on unit-corrected
+data; the defect, its measured scope, and the effect of the correction are
+documented in the text, and the simulation results were never affected by it.
 
 \vspace{0.5em}
 \noindent\textbf{Keywords:} Bayesian historical borrowing; mixture prior;
@@ -255,20 +275,31 @@ scorer over nine clinical and statistical features relevant to borrowing, so
 that candidate selection is inspectable feature by feature rather than
 delegated to an opaque model, which addresses the auditability weakness of
 family~B. Stage~3 (borrow) contains the core methodological contribution: a
-two-head DeepSets model (2H-DS), which treats the retrieved candidates as an
-unordered set and is therefore permutation-invariant by construction [24], and
-which emits for each candidate \emph{both} a mixture weight $\lambda_i$
-\emph{and} a separate effective-sample-size discount $a_i$ --- addressing the
-pooled-weight and conflated-quantity limitations of family~A directly. A
-SAM-style conflict adapter then down-weights historical components that
-disagree with the observed data [11], supplying the dynamic-borrowing safeguard
-in a form whose trigger behaviour can be reported and inspected. Preceding all
+\emph{selective} two-head DeepSets model (S2H-DS), which treats the retrieved
+candidates as an unordered set and is therefore permutation-invariant by
+construction [24], and which learns three distinct quantities --- for each
+candidate a mixture weight $\lambda_i$ and a separate information discount
+$a_i$, and, through a set-level head that places the weak component inside the
+same softmax, a per-query total borrowing fraction. Fixing the weak-component
+mass in advance, as our own earlier fixed-budget architecture and many mixture
+constructions do, forces a constant share of prior mass onto whatever
+candidates survive gating, however weak they are; making it learnable lets the
+model decline to borrow when the retrieved set is uninformative. The weak
+component is anchored at an intercept-only empirical-Bayes (EB) beta prior
+fitted to training-era queries, and that same EB prior --- a two-parameter
+marginal prior using no candidate information --- is the reference against
+which every real-data result is judged. A
+SAM-style conflict adapter can then down-weight historical components that
+disagree with the observed data [11], supplying a dynamic-borrowing safeguard
+whose trigger behaviour can be reported and inspected; because it consults the
+current outcome, it is evaluated by simulation rather than by same-outcome
+predictive scores. Preceding all
 learned weighting, a conservative clinical gate zeroes out candidates that are
 endpoint-incompatible or whose posted results are unusable, so that statistical
 fit can never override clinical incompatibility. The novelty we claim is not
 any single component but the linkage: an auditable retrieval stage connected to
-candidate-specific, conflict-aware mixture-prior construction, evaluated by
-predictive calibration.
+candidate-specific, selectively weighted mixture-prior construction, evaluated
+against a marginal EB reference by predictive calibration.
 
 \begin{figure}[htbp]
   \centering
@@ -276,9 +307,11 @@ predictive calibration.
   \caption{\textbf{Pipeline overview.} Schematic of the borrowability
   pipeline: ClinicalTrials.gov parsing, structured trial summary, Stage~1
   retrieval with the SECRET-inspired section pool, explainable Stage~2
-  reranking, beta-binomial mixture components, and two-head DeepSets weighting
-  --- separating the mixture weight $\lambda$ from the effective-sample-size
-  discount $a$ --- followed by the SAM conflict adapter.}
+  reranking, beta-binomial mixture components, and selective two-head DeepSets
+  weighting --- separating the mixture weight $\lambda$ from the
+  effective-sample-size discount $a$, with a set-level head that learns the
+  total borrowing $1-\lambda_0$ per query --- followed by the SAM conflict
+  adapter.}
   \label{fig:pipeline}
 \end{figure}
 
@@ -297,22 +330,30 @@ weak-only, rule-based, power-prior-, MAP- and UIP-style baselines
 are therefore fourfold, and we foreground the second as the central
 methodological novelty: (i) the retrieve $\rightarrow$ rerank $\rightarrow$
 borrow pipeline linking registry retrieval to prior construction;
-(ii)~\emph{the two-head DeepSets model---the core contribution---which learns,
-for each individual donor trial, a mixture weight and a separate
-effective-sample-size discount as a permutation-invariant function of the whole
-retrieved set, so that donor selection and per-donor information size become
-decoupled, learnable quantities}; (iii) a transparent SAM-style conflict adapter
-reported as a sensitivity mechanism rather than a qualified procedure; and
-(iv) a label-free retrospective calibration protocol for evaluating
-borrowability pipelines. We draw the
+(ii)~\emph{the selective two-head DeepSets model---the core
+contribution---which learns, for each individual donor trial, a mixture weight
+and a separate information discount, and, through a set-level head, the
+per-query total borrowing fraction, all as permutation-invariant functions of
+the whole retrieved set, so that donor selection, per-donor information size,
+and whether to borrow at all become decoupled, learnable quantities}; (iii) an
+EB-referenced, leakage-partitioned evaluation protocol that scores every
+design-time prior against an intercept-only empirical-Bayes reference and
+assesses outcome-adaptive layers (a transparent SAM-style conflict adapter) by
+known-truth simulation; and
+(iv) an honest empirical accounting, of independent cautionary value, of how
+much candidate-level borrowing adds over marginal priors on registry-scale
+oncology data --- on average little, and concentrated where the retrieved
+candidate set is information-rich. We draw the
 boundary plainly: automated retrospective evidence of this kind supports method
 development and pre-specification, not clinical borrowing decisions, which
 continue to require disease-specific expert review. The remainder of the paper
 is organised as follows. Section~2 describes the data, the three stages, and
-the evaluation protocol; Section~3 reports borrowing
-baselines, temporal validation, simulation operating characteristics, and
-worked case studies; Section~4 discusses the implications, the relationship to
-existing adaptive-borrowing methods, and the limitations of the approach.
+the evaluation protocol; Section~3 sets up the gold-standard and
+external-control simulations; Section~4 reports the EB-referenced borrowing
+comparisons, forward validation, calibration diagnostics, simulation operating
+characteristics, and worked case studies; Section~5 discusses the
+implications, the relationship to existing adaptive-borrowing methods, and the
+limitations of the approach.
 
 
 \subsection*{Positioning relative to existing adaptive-borrowing methods}
@@ -541,30 +582,43 @@ component plus historical components:
 p(\theta) \;=\; \lamz\,\mathrm{Beta}(\theta\mid 1,1)
 \;+\; \sum_i \lambda_i\,\mathrm{Beta}(\theta\mid \alpha_i,\beta_i).
 \end{equation}
-The current prototype uses $\lamz = 0.2$ by default unless otherwise
-specified. Raw historical weights are normalized to the remaining prior mass
-$1-\lamz$. If all raw historical weights are zero, the prior falls back to a
-weak-only form with $\lamz = 1$. The component weight $\lambda_i$ and the
-discount $a_i$ are conceptually distinct: the former controls allocation
-across mixture components, whereas the latter controls the effective sample
-size inside a component. The two-head DeepSets model is designed to preserve
-this distinction by learning mixture allocation and sample-size discounting as
-separate outputs. When model-based weights are applied, the implementation
-retains rule-based weights and rule-based beta parameters for auditability.
+The rule-based prototype fixes $\lamz = 0.2$ and a flat anchor
+$\mathrm{Beta}(1,1)$: raw historical weights are normalized to the remaining
+prior mass $1-\lamz$, and if all raw historical weights are zero the prior
+falls back to a weak-only form with $\lamz = 1$. Two consequences of that
+fixed budget matter for everything that follows. First, whenever \emph{any}
+candidate passes its gate, a constant $80\%$ of prior mass is forced onto the
+retrieved candidates, however weak they are. Second, the flat anchor places
+the fallback mass on a prior with mean $0.5$, far from the marginal ORR
+distribution of oncology trials. The selective learned model of
+Section~\ref{sec:twohead} removes both restrictions: the anchor becomes an
+empirical-Bayes fit and the total borrowing becomes a learned, per-query
+quantity. The component weight $\lambda_i$ and the
+discount $a_i$ are conceptually distinct throughout: the former controls
+allocation across mixture components, whereas the latter controls the nominal
+information size inside a component. When model-based weights are applied, the
+implementation retains rule-based weights and rule-based beta parameters for
+auditability.
 
-\subsection{Two-head DeepSets model for mixture weights and discounts (core method)}
-The two-head DeepSets model is the central methodological contribution of this
-work. Classical robust priors assign a single pooled weight to all historical
-evidence and set the borrowing discount separately or by fixed rule; here both
-quantities are instead learned as \emph{candidate-specific} functions of
-borrowability features while remaining a permutation-invariant function of the
-whole retrieved candidate set. The learned prior therefore replaces the
-rule-based mixture weight $\lambda_i$ and, optionally, the effective sample-size
-discount $a_i$ with the two output heads of a single model. The paired
+\subsection{Selective two-head DeepSets model for weights, discounts, and total borrowing (core method)}
+\label{sec:twohead}
+The selective two-head DeepSets model is the central methodological
+contribution of this work. Classical robust priors assign a single pooled
+weight to all historical evidence and set the borrowing discount separately or
+by fixed rule; our own earlier fixed-budget architecture learned
+candidate-specific weights and discounts but still forced a constant total
+borrowing fraction. Here \emph{three} quantities are learned as functions of
+design-time borrowability features, permutation-invariant in the retrieved
+candidate set: the per-candidate mixture weight $\lambda_i$, the per-candidate
+information discount $a_i$, and --- through a set-level head that places the
+weak component inside the same softmax --- the per-query total borrowing
+fraction $1-\lamz$. The paired
 benchmarks in Sections~\ref{sec:headtohead-results}, \ref{sec:forward-results},
-and~\ref{sec:calib-results} evaluate exactly this model
-(\texttt{two\_head}, and \texttt{two\_head\_sam} when combined with the
-SAM conflict adapter of Section~\ref{sec:sam}).
+and~\ref{sec:calib-results} evaluate this model (\texttt{selective}) against
+the empirical-Bayes reference and against the fixed-budget predecessor
+(\texttt{two\_head}), which is retained as an ablation; \texttt{selective\_sam}
+denotes the combination with the outcome-adaptive SAM conflict adapter of
+Section~\ref{sec:sam}.
 
 \paragraph{Candidate features.} Each candidate $i$ is represented by a
 nine-dimensional feature vector
@@ -592,21 +646,44 @@ candidate embedding $\phi(x_i)$ with the pooled context $c$ to yield a raw score
 $z_i$, so that borrowing ``this candidate relative to the rest of the set'' is
 expressible --- the property a single pooled prior cannot represent.
 
-\paragraph{Head 1 --- mixture allocation.} The allocation head converts scores
-to mixture weights through a gated softmax over candidates,
+\paragraph{Head 1 --- mixture allocation, jointly with the weak component.}
+A set-level head maps the pooled context $c$ to a weak-component logit
+$z_0 = \psi(c)$ (a one-hidden-layer network of width $16$), and allocation is
+a single softmax over the weak component and the gated candidates,
 \begin{equation}
-\lambda_i = (1-\lamz)\,\frac{\exp(z_i)\,\mathrm{gate}_i}{\sum_j \exp(z_j)\,\mathrm{gate}_j},
+\lamz = \frac{\exp(z_0)}{\exp(z_0) + \sum_j \exp(z_j)\,\mathrm{gate}_j},
+\qquad
+\lambda_i = \frac{\exp(z_i)\,\mathrm{gate}_i}{\exp(z_0) + \sum_j \exp(z_j)\,\mathrm{gate}_j},
 \end{equation}
 so candidates with $\mathrm{gate}_i = 0$ (the conservative clinical gate of
-Section~\ref{sec:rerank}) are masked entirely, $\sum_i \lambda_i = 1-\lamz$, and
-$\lamz + \sum_i \lambda_i = 1$. If every gate is zero the prior collapses to
-weak-only ($\lamz = 1$).
+Section~\ref{sec:rerank}) are masked entirely and
+$\lamz + \sum_i \lambda_i = 1$ with $\lamz$ free to vary per query. When the
+candidate logits are weak relative to $z_0$ the model borrows little; when the
+set is information-rich it borrows more --- this is the selectivity mechanism,
+and Section~\ref{sec:triage-results} verifies that the learned $\lamz$ in fact
+tracks a pre-specified design-time information measure. If every gate is zero
+the prior collapses to weak-only ($\lamz = 1$). The fixed-budget predecessor
+is recovered exactly by replacing $\exp(z_0)$ with
+$\tfrac{\lamz^{\mathrm{fix}}}{1-\lamz^{\mathrm{fix}}}\sum_j \exp(z_j)\,\mathrm{gate}_j$
+for $\lamz^{\mathrm{fix}} = 0.2$, which is how the \texttt{two\_head} ablation
+is defined.
 
-\paragraph{Head 2 --- effective sample-size discount.} The second head outputs a
+\paragraph{Empirical-Bayes anchor.} The weak component is
+$\mathrm{Beta}(\hat a_0, \hat b_0)$ with $(\hat a_0, \hat b_0)$ fitted by
+beta-binomial maximum likelihood to the training-era query outcomes only ---
+the training split for the primary fit ($\mathrm{Beta}(0.68, 1.70)$, mean
+$0.28$, nominal information $2.4$ patients), and past-only data at each cutoff
+for the forward refits. Declining to borrow therefore means falling back to
+the marginal ORR distribution of comparable-era trials rather than to a flat
+prior with mean $0.5$. The identical EB prior, used alone, is the reference
+baseline of Section~\ref{sec:eval}.
+
+\paragraph{Head 2 --- information discount.} The second head outputs a
 per-candidate discount $a_i \in (0,1]$, which reconstructs that candidate's beta
-component as $\alpha_i = 1 + a_i y_i$ and $\beta_i = 1 + a_i(n_i - y_i)$.
+component as $\alpha_i = 1 + a_i y_i$ and $\beta_i = 1 + a_i(n_i - y_i)$, so
+that $a_i n_i$ is the component's nominal borrowed sample size.
 Separating $a_i$ (how much information a borrowed component carries) from
-$\lambda_i$ (how much mixture mass it receives) is the key modeling choice:
+$\lambda_i$ (how much mixture mass it receives) is a key modeling choice:
 allocation and information size are learned independently rather than tied to a
 single weight. If a checkpoint has no discount head, the rule discount and its
 beta parameters are used.
@@ -620,21 +697,26 @@ over training pseudo-queries, the combined loss
 + \mathcal{L}_{\mathrm{ESS}},
 \end{equation}
 whose terms are: (i)~the primary predictive loss $\mathcal{L}_{\mathrm{pred}}$,
-the mean held-out beta-binomial mixture predictive NLL (Section~\ref{sec:eval});
-(ii)~a Kullback--Leibler term pulling the learned candidate allocation toward
-the rule allocation with weight $\rho = 0.1$, a mild regularizer that stabilizes
-the fit on small data without forcing it to copy the rule; (iii)~an optional
+the mean training-outcome beta-binomial mixture predictive NLL under the
+EB-anchored selective mixture (Section~\ref{sec:eval});
+(ii)~a Kullback--Leibler term with weight $\rho = 0.1$ pulling the
+\emph{normalized} candidate allocation $\lambda_i / \sum_j \lambda_j$ toward
+the normalized rule allocation --- a mild regularizer that stabilizes relative
+allocation on small data without penalizing or rewarding the learned total
+borrowing $\sum_i \lambda_i$; (iii)~an optional
 listwise allocation term with weight $\eta$ (disabled by default, $\eta = 0$)
 whose target $t_i = \mathrm{softmax}_i(r_i/T)$ is built from each candidate's
-relative held-out log predictive
+relative log predictive
 $r_i = \log P(y_0\mid n_0,\alpha_i,\beta_i) - \log P(y_0\mid n_0,1,1)$, giving a
-within-candidate-set signal for which donors best explain the held-out outcome;
-and (iv)~an effective sample-size penalty
+within-candidate-set signal for which donors best explain the training outcome;
+and (iv)~a borrowed-information penalty
 $\mathcal{L}_{\mathrm{ESS}} = 10^{-4}\,\max\!\big(\sum_i \lambda_i a_i n_i - \mathrm{ESS_{cap}},\,0\big)^2$
-with $\mathrm{ESS_{cap}} = 100$. Held-out evaluation uses only the pure
-predictive NLL and excludes all regularizers. Optimization used Adam
-(learning rate $0.01$) for $100$ epochs with hidden width $16$; the model was
-fit on an $80\%$ split of the pseudo-queries (seed $20260603$) and, for the
+with $\mathrm{ESS_{cap}} = 100$ on the weighted nominal borrowed sample size
+(Section~\ref{sec:eval} discusses why this quantity is a nominal summary
+rather than a mixture-prior effective sample size). Held-out evaluation uses
+only the pure predictive NLL and excludes all regularizers. Optimization used
+Adam (learning rate $0.01$) for $100$ epochs with hidden width $16$; the model
+was fit on an $80\%$ split of the pseudo-queries (seed $20260603$) and, for the
 leakage-free forward analysis, retrained on past-only data at each temporal
 cutoff (Section~\ref{sec:forward-results}).
 
@@ -669,6 +751,22 @@ assess prior-data conflict, it cannot be used to pre-select historical evidence
 before the trial outcome is observed; any applied use would require embedding it
 within a pre-specified dynamic-borrowing design.
 
+Two evaluation consequences follow and are enforced throughout the paper.
+First, a same-outcome predictive score of a SAM-adjusted prior is not a proper
+out-of-sample score of a design-time prior: the adapter has already shifted
+mass toward whichever side of the mixture better fits the outcome being
+scored, so part of any NLL advantage is mechanical. SAM-adjusted rows are
+therefore segregated into an explicitly labelled \emph{outcome-adaptive} block
+of the results tables, are never compared as equals with design-time priors,
+and are never the basis of a performance claim. Second, the legitimate
+evaluation of an outcome-adaptive rule is frequentist and prospective: the
+known-truth simulation of Section~\ref{sec:simulation}, in which SAM's effect
+on type~I error, power, coverage, and trigger behaviour is measured over
+replicates against the generating truth. The selective architecture of
+Section~\ref{sec:twohead} supplies the design-time counterpart of the same
+instinct: it withholds borrowing using candidate-set features available before
+the outcome exists, rather than the outcome itself.
+
 \subsection{Prospective set-level conflict signal}
 \label{sec:prospective}
 The nine reranking dimensions all describe design and surface comparability:
@@ -698,15 +796,63 @@ same model throughout, so that its contribution can be read directly.
 \subsection{Evaluation without expert borrowability labels}
 \label{sec:eval}
 Expert borrowability labels were unavailable. Evaluation therefore used
-internal retrospective and simulation evidence:
-\begin{enumerate}[nosep,leftmargin=2em]
-\item held-out beta-binomial predictive NLL;
-\item true-date temporal (subset and leakage-free rolling-origin) NLL;
-\item simulation operating characteristics;
-\item borrowing baseline head-to-head comparisons;
-\item feature ablation and section-weight sensitivity;
-\item software verification through focused and full unit-test runs.
-\end{enumerate}
+internal retrospective and simulation evidence, organised around three design
+decisions.
+
+\paragraph{The empirical-Bayes reference.} Every real-data comparison is
+judged against the intercept-only EB prior of Section~\ref{sec:twohead}: a
+single $\mathrm{Beta}(\hat a_0,\hat b_0)$ fitted by beta-binomial maximum
+likelihood to training-era query outcomes, using no candidate information
+whatever. This reference exists because a flat $\mathrm{Beta}(1,1)$ is a straw
+man for oncology ORR --- much of any borrowing method's apparent gain over it
+comes merely from learning that response rates are usually well below $0.5$.
+A borrowing pipeline earns its complexity only by what it adds \emph{beyond}
+the marginal outcome distribution. We additionally report a
+disease-stratified EB variant (per-primary-site fits for strata with at least
+$40$ training queries, global fallback otherwise) as a second, stronger
+marginal reference.
+
+\paragraph{Design-time versus outcome-adaptive priors.} Priors fixed before
+the current outcome is seen (EB, stratified EB, rule, fixed-discount,
+commensurate-, MAP- and power-prior-style, robust-MAP, the fixed-budget
+two-head, and the selective model) are scored by held-out predictive NLL, a
+strictly proper score for them. Outcome-adaptive layers (SAM variants), whose
+same-outcome scores are partly mechanical (Section~\ref{sec:sam}), appear only
+in a separately labelled table block and are assessed by simulation operating
+characteristics.
+
+\paragraph{Outcome roles and terminology.} Each pseudo-query outcome plays
+exactly one of four roles, named consistently throughout: a \emph{masked}
+outcome is hidden from retrieval and reranking during feature construction
+(true of every query); a \emph{training} outcome is additionally used to fit
+model parameters or EB anchors; a \emph{validation} outcome steers no fitting
+and is scored by a model whose training set excluded it --- the clean $20\%$
+test split (random, seed $20260603$) and the forward windows below; a
+\emph{development-set} score is one computed over a set that includes training
+outcomes (reported only for completeness, always labelled). Forward validation
+uses \emph{disjoint} future windows: each window $(c_k, c_{k+1}]$ of primary
+completion dates is scored once, by the model and EB anchor refit on data
+up to $c_k$ only, so no trial is evaluated twice and no future information
+enters any fit.
+
+The evidence layers are: held-out beta-binomial predictive NLL against the EB
+reference; disjoint-window forward validation with past-only refits;
+predictive calibration diagnostics; simulation operating characteristics;
+borrowing baseline head-to-head comparisons; feature ablation and
+section-weight sensitivity; and software verification through focused and full
+unit-test runs. Two pre-specified real-data subgroup analyses accompany the
+aggregate comparisons: the design-time candidate-information measure
+$I = \sum_i \mathrm{gate}_i\, a^{\mathrm{rule}}_i n_i$ dichotomised at $I \ge 8$
+(fixed from an exploratory analysis on the earlier temporal windows before the
+final window was examined), and the learned total borrowing itself as a
+descriptive diagnostic. All other subgroup splits are labelled exploratory.
+A terminological caution applies to information summaries: for a mixture
+prior, $\sum_i \lambda_i a_i n_i$ is a \emph{weighted nominal borrowed sample
+size}, not the prior's effective sample size in the sense of Morita et al.;
+mixture information depends on component separation and the weak-component
+mass, so we use the nominal quantity only as a bookkeeping summary and label
+it accordingly.
+
 All results are interpreted as retrospective predictive calibration or
 simulation evidence. They do not establish expert-level borrowability of
 individual candidates. Table~\ref{tab:datasets} summarizes the evaluation
@@ -727,9 +873,10 @@ response rate (ORR) pseudo-queries.}
 \toprule
 Analysis & Size & Split / leakage status & Endpoint scope \\
 \midrule
-Borrowing head-to-head + calibration & 1{,}407 queries & Retrospective model-development; closed-form rows leakage-free, learned rows include development queries & ORR \\
-Two-head training & 80\%/20\% split (seed 20260603) & Fit on 80\%, scored on held-out 20\% & ORR \\
-Leakage-free rolling-origin forward & train 632/813/1{,}017; future folds 775/594/390 & Train-on-past / test-on-future at cutoffs 2020/2021/2022-12-31; per-fold retraining & ORR \\
+EB reference priors & fits on 1{,}126 train / past-only pools & Intercept-only and disease-stratified beta-binomial MLE; no candidate information & ORR \\
+Borrowing head-to-head + calibration & clean test split 281; development set 1{,}407 & Test split leakage-free for all methods; development-set columns include training outcomes for learned rows and are labelled & ORR \\
+Selective / two-head training & 80\%/20\% split (seed 20260603) & Fit on 80\%, validated on the untouched 20\% & ORR \\
+Leakage-free forward validation & disjoint windows 181/204/390 (train 632/813/1{,}017) & Each window $(c_k,c_{k+1}]$ scored once by the model and EB anchor refit on data $\le c_k$ & ORR \\
 Gold-standard \& external-control simulation & 2{,}000 replicates per cell & Known-truth simulation (no real-data leakage) & Simulated binary endpoint \\
 Extraction-quality audit & 7{,}173 trials (26{,}066 arm rows) & Automated consistency checks + synthetic round-trip; manual data-entry spot check & All extracted counts \\
 \bottomrule
@@ -738,7 +885,8 @@ Extraction-quality audit & 7{,}173 trials (26{,}066 arm rows) & Automated consis
 
 \paragraph{Predictive scoring metric.} For a pseudo-query with held-out
 treatment-arm outcome $(y_0, n_0)$ and a mixture prior with components indexed
-by $k$ (the weak component with $\alpha_0 = \beta_0 = 1$ and the historical
+by $k$ (the weak component with its anchor parameters --- $\mathrm{Beta}(1,1)$
+for the rule-based prototype, the EB fit for the selective model --- and the historical
 components), the beta-binomial predictive probability is
 \begin{equation}
 P(y_0 \mid n_0) = \sum_k \lambda_k\,\binom{n_0}{y_0}\,
@@ -764,19 +912,18 @@ predictions are calibrated), here in the randomized form appropriate for
 discrete beta-binomial predictions, together with empirical $50/80/95\%$
 credible-interval coverage and a reliability slope.
 
-\paragraph{Evaluation protocol and leakage.} Learned two-head models were
-trained on an $80\%$ split of the pseudo-queries (seed $20260603$) and evaluated
-on the held-out remainder for model development. The borrowing head-to-head and
-calibration comparisons (Sections~\ref{sec:headtohead-results}
-and~\ref{sec:calib-results}) report
-every method on the common set of $1{,}407$ ORR pseudo-queries so that all
-priors are scored on identical queries; closed-form priors require no fitting
-and are leakage-free by construction, whereas the learned rows in these
-retrospective comparisons include queries that contributed to model
-development. The leakage-free generalization estimate for the learned models is
-therefore the rolling-origin forward validation in Section~\ref{sec:forward-results}, in which a
-two-head DeepSets model is retrained on past-only data at each cutoff and scored
-only on strictly future trials.
+\paragraph{Evaluation protocol and leakage.} Learned models and EB anchors
+were fitted on the $80\%$ training split of the pseudo-queries (seed
+$20260603$). The primary head-to-head and calibration comparisons
+(Sections~\ref{sec:headtohead-results} and~\ref{sec:calib-results}) report
+every method on the clean $20\%$ test split ($n = 281$), on which no method
+--- learned or closed-form --- touched the scored outcomes during fitting;
+the full $1{,}407$-query development-set column is reported alongside for
+context and is labelled as such wherever learned rows are involved. The
+temporal generalization estimate is the disjoint-window forward validation of
+Section~\ref{sec:forward-results}, in which the selective model, the
+fixed-budget ablation, and the EB anchors are all refit on past-only data at
+each cutoff and each future trial is scored exactly once.
 
 \subsection{Software verification and evidence-package status}
 The mixture-prior utilities are implemented as a pure-Python statistical
@@ -850,7 +997,8 @@ query trial's true response rate $\theta_0$, together with the per-donor
 borrowable/not label and the oracle allocation. Thirteen priors are compared
 (Table~\ref{tab:design-oc}). Performance measures are bias, empirical standard error, RMSE and
 credible-interval coverage for $\theta_0$; sensitivity, specificity, PPV, NPV
-and ROC/PR-AUC for the borrowing decision; prior effective sample size; and
+and ROC/PR-AUC for the borrowing decision; the weighted nominal borrowed
+sample size; and
 agreement with the oracle allocation. All quantities carry Monte Carlo standard
 errors. We use statistical rather than machine-learning nomenclature throughout,
 and we keep the two levels separate: type I error and power refer to the trial
@@ -899,186 +1047,233 @@ non-comparable external controls.
 \section{Results}
 \label{sec:results}
 
-\subsection{Borrowing baseline comparisons}
+\subsection{EB-referenced borrowing comparisons}
 \label{sec:headtohead-results}
-The borrowing baseline comparison used 1{,}407 ORR pseudo-query examples,
-computed with the genuine two-head DeepSets checkpoint (the same evaluation
-reported in Section~\ref{sec:calib-results}; Figure~\ref{fig:nll}). The weak-only prior had mean NLL $3.1641$
-and the rule mixture baseline $3.0100$. The trained two-head mixture model
-achieved mean NLL $2.8957$ (delta $-0.1143$ relative to rule), narrowly ahead
-of the conflict-adapted rule baseline at $2.9006$ (delta $-0.1094$); the same
-SAM adapter applied to the trained two-head prior achieved $2.7938$
-(delta $-0.2162$), the lowest of all evaluated priors. MAP-like and
-power-prior-like baselines had higher NLLs
-($3.2219$ and $3.2269$, respectively). The full head-to-head ranking, including
-a tuned RBesT-style robust meta-analytic-predictive prior, is given in
-Table~\ref{tab:headtohead}. These results suggest that calibrated
-mixture allocation and explicit prior-data conflict adaptation improve
-retrospective predictive performance; they do not show that individual
-historical candidates are expert-approved for borrowing. Because the learned
-rows in this comparison include queries that contributed to model development,
-this head-to-head is retrospective model-development evidence; the leakage-free
-estimate for the learned priors is the rolling-origin forward evaluation
-(Section~\ref{sec:forward-results}).
+Table~\ref{tab:headtohead} reports every prior on the clean $20\%$ test split
+($n = 281$; no method saw these outcomes during fitting) alongside the full
+$1{,}407$-query development set (labelled: learned rows and EB fits include
+their own training outcomes there), with design-time and outcome-adaptive
+priors in separate blocks (Figure~\ref{fig:nll}).
+
+Three comparisons carry the substance. First, \emph{the EB reference
+reorders the field}: the two-parameter marginal prior (test NLL $2.9012$)
+outperforms every borrowing construction except the learned ones ---
+rule-weighted borrowing ($3.0542$; paired $\Delta$ vs EB $+0.153$, $95\%$ CI
+$[+0.073,+0.237]$), the best-tuned robust-MAP ($3.0427$), and the classical
+comparators all sit \emph{above} it. Much of what borrowing appeared to add
+over the flat $\mathrm{Beta}(1,1)$ prior ($3.1641$) was marginal-distribution
+information that a two-parameter fit supplies for free. Second, the
+\emph{selective} model is the only design-time prior below the EB reference:
+test NLL $2.8716$, paired $\Delta$ $-0.0295$ (CI $[-0.0722,+0.0109]$) against
+EB and $-0.0504$ (CI $[-0.1066,+0.0003]$) against the stratified EB variant
+--- consistent leads whose intervals narrowly include zero. Third, the
+\emph{architecture matters}: against the fixed-budget predecessor the
+selective model improves by $-0.0581$ (CI $[-0.1170,-0.0026]$), a significant
+paired gain attributable to the learnable total borrowing and EB anchor,
+and Section~\ref{sec:forward-results} shows the same gain holds
+leakage-free out of time. These results do not show that individual
+historical candidates are expert-approved for borrowing.
 
 \begin{table}[htbp]
 \centering
-\caption{Borrowing-prior head-to-head: held-out beta-binomial predictive NLL
-(lower is better) and empirical 95\% credible-interval coverage on 1{,}407
-leakage-controlled ORR pseudo-queries (a retrospective, model-development
-comparison). Among the evaluated priors, the two-head DeepSets mixture prior
-with the SAM conflict adapter had the lowest NLL and favorable calibration,
-ahead of the best-tuned robust-MAP prior. Coverage alone does not define
-calibration: a diffuse prior such as weak-only can achieve high interval
-coverage while remaining uninformative.}
+\caption{EB-referenced borrowing head-to-head: mean beta-binomial predictive
+NLL (lower is better) on the clean $20\%$ test split ($n=281$; primary
+comparison) and on the full development set ($n=1{,}407$; includes training
+outcomes for learned rows and EB fits, reported for context). Design-time
+priors are fixed before the scored outcome; outcome-adaptive rows consult the
+scored outcome through the SAM adapter, carry a partly mechanical advantage
+(Section~\ref{sec:sam}), and are not compared as equals --- their proper
+evaluation is the simulation of Section~\ref{sec:goldsim-results}.}
 \label{tab:headtohead}
 \begin{tabular}{llrr}
 \toprule
-Method & Family & Mean NLL & 95\% coverage \\
+Method & Family & Test NLL ($n{=}281$) & Development NLL ($n{=}1{,}407$) \\
 \midrule
-\textbf{two\_head\_sam} & learned + SAM & \textbf{2.7938} & 0.996 \\
-two\_head & learned & 2.8957 & 0.974 \\
-rule\_sam & rule + SAM & 2.9006 & 0.995 \\
-robust\_map ($w{=}0.5$) & robust-MAP & 3.0019 & 0.986 \\
-rule & rule & 3.0100 & 0.972 \\
-commensurate\_like & classical & 3.0325 & 0.964 \\
-robust\_map ($w{=}0.9$) & robust-MAP & 3.0996 & 0.937 \\
-weak\_only & none & 3.1641 & 0.994 \\
-map\_like & classical & 3.2219 & 0.945 \\
-power\_prior\_like & classical & 3.2269 & 0.942 \\
+\multicolumn{4}{l}{\emph{Design-time priors}}\\
+\textbf{selective} & learned, EB anchor & \textbf{2.8716} & 2.8335 \\
+EB (intercept-only) & marginal reference & 2.9012 & 2.8992 \\
+EB (disease-stratified) & marginal reference & 2.9221 & 2.8688 \\
+two\_head (fixed budget) & learned ablation & 2.9297 & 2.8957 \\
+fixed\_discount & rule & 3.0422 & 2.9916 \\
+robust\_map ($w{=}0.5$) & robust-MAP & 3.0427 & 3.0019 \\
+rule & rule & 3.0542 & 3.0100 \\
+commensurate\_like & classical & 3.0900 & 3.0325 \\
+weak\_only ($\mathrm{Beta}(1,1)$) & flat & 3.1641 & 3.1641 \\
+robust\_map ($w{=}0.9$) & robust-MAP & 3.1978 & 3.0996 \\
+map\_like & classical & 3.2687 & 3.2219 \\
+power\_prior\_like & classical & 3.2807 & 3.2269 \\
+\midrule
+\multicolumn{4}{l}{\emph{Outcome-adaptive (labelled; not compared as equals)}}\\
+two\_head\_sam & learned + SAM & 2.7746 & 2.7583 \\
+selective\_sam & selective + SAM & 2.7859 & 2.7621 \\
+rule\_sam & rule + SAM & 2.8748 & 2.8591 \\
 \bottomrule
 \end{tabular}
-\end{table} Point-prediction
+\end{table}
+
+Point-prediction
 metrics should be interpreted more cautiously than count-level predictive
 likelihood: the current ORR point-prediction correlation was low, indicating
 the model is better viewed as a borrowing-weight calibration model than as an
 ORR regression model.
 
-To answer whether a standard robust prior would suffice, the head-to-head in
-Table~\ref{tab:headtohead} also includes a tuned robust
+To answer whether a standard robust prior would suffice, Table~\ref{tab:headtohead}
+includes a tuned robust
 meta-analytic-predictive (MAP) prior [5] in the style of the RBesT tools [15]
 (a robustified mixture of a pooled MAP
-component and a vague component). Its best-tuned configuration reached held-out
-NLL $3.002$ --- marginally better than naive rule ($3.010$) and clearly better
-than weak-only ($3.164$) borrowing, but worse than every conflict-adapted
-mixture prior --- and it was sensitive to its robustification weight, degrading
-to $3.040$ and $3.100$ at higher weights as a single pooled MAP over-borrowed
-from homogeneously treated historical evidence.
+component and a vague component). Its best-tuned configuration reached test
+NLL $3.043$ --- better than flat-anchored borrowing but above the plain EB
+reference, and sensitive to its robustification weight, degrading to $3.198$
+at $w = 0.9$ as a single pooled MAP over-borrowed
+from homogeneously treated historical evidence. The comparison that matters
+for practice is therefore not ``robust prior versus naive borrowing'' but
+``does any candidate-level construction beat the marginal fit,'' and on that
+comparison only the selective architecture qualifies.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{F1_headtohead_nll}
-  \caption{\textbf{Borrowing-prior head-to-head.} (a)~Held-out beta-binomial
-  predictive NLL (lower is better) for each borrowing prior on 1{,}407 ORR
-  pseudo-queries; the two-head + SAM mixture prior is lowest ($2.794$), ahead
-  of a tuned RBesT-style robust meta-analytic-predictive (MAP) prior (best
-  $3.002$). (b)~Empirical 95\% credible-interval coverage per method.}
+  \caption{\textbf{EB-referenced borrowing head-to-head (clean test split,
+  $n=281$).} (a)~Design-time priors: mean beta-binomial predictive NLL (lower
+  is better); the selective prior ($2.872$) is the only design-time prior
+  below the intercept-only EB reference ($2.901$, dashed line), and the
+  fixed-budget predecessor and all rule/classical/robust-MAP constructions sit
+  above it. (b)~Paired deltas versus EB with bootstrap $95\%$ CIs for the
+  learned priors and the strongest baselines.}
   \label{fig:nll}
 \end{figure}
 
-\subsection{Leakage-free rolling-origin forward evaluation}
+\subsection{Leakage-free forward validation on disjoint future windows}
 \label{sec:forward-results}
-To move beyond retrospective temporal-subset scoring, we evaluated held-out
-predictive NLL under rolling-origin, train-on-past/test-on-future splits---each
-model sees only trials completed on or before a cutoff date and is scored on
-strictly later trials, so no future information can leak into fitting---defined
-by true primary completion dates (cutoffs 2020-12-31, 2021-12-31, 2022-12-31;
-evaluation restricted to the future fold, with 775, 594, and 390 held-out
-trials respectively; Figure~\ref{fig:forward}). Closed-form priors require no fitting, so their
-future-fold NLL is a genuinely leakage-free forward evaluation. The rule-SAM
-mixture prior improved future-fold NLL over the rule baseline by $-0.1086$,
-$-0.1049$, and $-0.1004$ nats at the three cutoffs, with paired bootstrap 95\%
-confidence intervals $[-0.1313,-0.0880]$, $[-0.1267,-0.0833]$, and
-$[-0.1275,-0.0752]$; all intervals exclude zero. Averaged across cutoffs,
-held-out NLL was $2.852$ for rule-SAM, $2.956$ for rule, and $3.094$ for
-weak-only, while map-like and power-prior-like baselines were worse ($3.156$ and
-$3.160$), and 95\% interval coverage on the future fold remained near nominal
-($0.94$--$1.00$). The trained two-head and two-head-SAM priors achieved the
-lowest future-fold NLL ($2.868$ and $2.756$, with per-cutoff improvements over
-rule of $-0.073$ to $-0.101$ without the SAM adapter and $-0.198$ to $-0.203$
-with it); because each cutoff was scored with
-a two-head DeepSets model retrained on past-only (date at or before the cutoff)
-data, these learned-model rows are leakage-free as well, with all
-per-cutoff improvements retaining paired bootstrap 95\% confidence intervals
-that exclude zero (Table~\ref{tab:forward}). Non-leakage-controlled date-based
-subsets (annual cutoffs 2019--2022) showed the same ordering, with two-head-SAM
-improving mean NLL over the rule baseline by $-0.215$ to $-0.219$ nats.
+To measure temporal generalization without leakage or double-counting, the
+future was partitioned into disjoint windows by true primary completion date
+--- $(2020\text{-}12\text{-}31, 2021\text{-}12\text{-}31]$ ($n=181$),
+$(2021\text{-}12\text{-}31, 2022\text{-}12\text{-}31]$ ($n=204$), and
+$>2022\text{-}12\text{-}31$ ($n=390$) --- and each window was scored exactly
+once, by the selective model, fixed-budget ablation, and EB anchors refit
+strictly on data completed on or before the window's left cutoff (past-only
+training sets of $632$, $813$, and $1{,}017$ queries;
+Figure~\ref{fig:forward}). Closed-form priors require no fitting and are
+leakage-free by construction. Outcome-adaptive SAM rows are excluded here by
+the partition rule of Section~\ref{sec:eval}.
+
+Pooled over the $775$ future trials (Table~\ref{tab:forward}), the selective
+prior achieved NLL $2.8175$ versus $2.8440$ for the past-fit EB reference
+(paired $\Delta$ $-0.0266$, $95\%$ CI $[-0.0591,+0.0064]$) and $2.8839$ for
+the fixed-budget predecessor ($\Delta$ $-0.0665$, CI $[-0.0993,-0.0346]$ ---
+the architectural gain replicates leakage-free). Per window, the selective
+lead over EB was $-0.0062$ (CI $[-0.0874,+0.0855]$), $-0.0074$
+($[-0.0704,+0.0565]$), and $-0.0461$ ($[-0.0861,-0.0083]$): significant only
+in the most recent window, which is also the one whose refit saw the most
+training data --- a learning-curve pattern consistent with triage quality
+improving as the training pool grows. In the pre-specified
+information-rich subgroup ($I \ge 8$; $n=291$) the selective lead over EB was
+$-0.0585$ (CI $[-0.1240,+0.0127]$, win rate $60\%$), against $-0.0074$
+(CI $[-0.0381,+0.0223]$) in the information-poor remainder --- directionally
+as pre-specified, though the subgroup interval includes zero. The
+disease-stratified EB reference performed strongly here ($2.8152$; $\Delta$ vs
+intercept EB $-0.0288$, CI $[-0.0452,-0.0128]$) and was statistically
+indistinguishable from the selective prior pooled over windows ($\Delta$
+$+0.0022$, CI $[-0.0281,+0.0345]$), though unstable across settings (it was
+\emph{worse} than intercept EB on the test split, $+0.0209$). Marginal
+references are, in short, hard to beat: the selective model's demonstrated
+advantages over them are the significant most-recent-window win, the
+significant architectural improvement, and the interpretable triage behaviour
+of Section~\ref{sec:triage-results}, not an across-the-board dominance.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{F2_forward_validation}
-  \caption{\textbf{Leakage-free rolling-origin forward evaluation.}
-  (a)~Aggregated future-fold NLL across three train-on-past / test-on-future
-  cutoffs; two-head + SAM is lowest ($2.756$). (b)~Per-cutoff improvement over
-  the rule baseline with paired bootstrap 95\% confidence intervals, all
-  excluding zero. Learned-model rows use two-head DeepSets models retrained on
-  past-only data at each cutoff.}
+  \caption{\textbf{Leakage-free forward validation on disjoint future
+  windows.} (a)~NLL pooled over the three disjoint windows ($n=775$) for
+  design-time priors; the selective prior ($2.818$) and the disease-stratified
+  EB reference ($2.815$) lead, the intercept EB reference is at $2.844$
+  (dashed line), and the fixed-budget predecessor trails at $2.884$.
+  (b)~Per-window paired delta of the selective prior versus intercept EB with
+  bootstrap $95\%$ CIs; the most recent, best-trained window is significant
+  ($-0.046$, CI $[-0.086,-0.008]$).}
   \label{fig:forward}
 \end{figure}
 
 \begin{table}[htbp]
 \centering
-\caption{Rolling-origin forward evaluation (leakage-free). Held-out NLL on the
-future fold under train-on-past / test-on-future evaluation (cutoffs
-2020/2021/2022-12-31), averaged across cutoffs. Learned rows use two-head
-DeepSets models retrained on past-only data at each cutoff, so all methods are
-leakage-free.}
+\caption{Forward validation on disjoint future windows (leakage-free,
+design-time priors only). NLL pooled over the three windows ($n=775$); paired
+delta versus the past-fit intercept-EB reference with bootstrap $95\%$ CI
+where the comparison is primary. Learned rows and EB anchors are refit on
+past-only data at each window's left cutoff.}
 \label{tab:forward}
-\begin{tabular}{lrrc}
+\begin{tabular}{lrl}
 \toprule
-Method & Future-fold NLL & Mean 95\% cov. & Leakage-free \\
+Method & Pooled future NLL & Paired $\Delta$ vs EB [$95\%$ CI] \\
 \midrule
-\textbf{two\_head\_sam} & \textbf{2.7558} & 0.998 & yes \\
-rule\_sam & 2.8517 & 0.998 & yes \\
-two\_head & 2.8682 & 0.971 & yes \\
-rule & 2.9563 & 0.970 & yes \\
-commensurate\_like & 2.9688 & 0.968 & yes \\
-weak\_only & 3.0939 & 0.998 & yes \\
-map\_like & 3.1562 & 0.941 & yes \\
-power\_prior\_like & 3.1601 & 0.941 & yes \\
+EB (disease-stratified) & 2.8152 & $-0.0288$ $[-0.0452,-0.0128]$ \\
+\textbf{selective} & \textbf{2.8175} & $-0.0266$ $[-0.0591,+0.0064]$ \\
+EB (intercept-only) & 2.8440 & reference \\
+two\_head (fixed budget) & 2.8839 & $+0.0399$ $[-0.0071,+0.0872]$ \\
+fixed\_discount & 2.9483 & --- \\
+robust\_map ($w{=}0.5$) & 2.9535 & --- \\
+rule & 2.9694 & --- \\
+commensurate\_like & 2.9841 & --- \\
+robust\_map ($w{=}0.9$) & 3.0445 & --- \\
+weak\_only ($\mathrm{Beta}(1,1)$) & 3.1122 & --- \\
+map\_like & 3.1693 & --- \\
+power\_prior\_like & 3.1737 & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Predictive calibration diagnostics}
 \label{sec:calib-results}
-We assessed calibration against the real held-out outcome using the
-probability integral transform (PIT), interval coverage, and a reliability
-slope, rather than a single mean NLL (Figure~\ref{fig:calib}). On the 1{,}407 ORR pseudo-queries the
-two-head-SAM prior showed the most favorable calibration diagnostics among the
-evaluated priors, with mean held-out NLL $2.794$, PIT Kolmogorov--Smirnov
-distance to uniformity $0.177$ (essentially tied with the two-head prior alone
-at $0.175$), empirical 95\% credible-interval coverage
-$0.996$, and reliability slope $1.36$; rule-SAM was similar (KS $0.243$, slope
-$1.30$). These diagnostics are improved but not perfect: the reliability slope
-exceeds unity and the PIT is not exactly uniform, so we describe this as
-improved calibration rather than achieved calibration. By contrast, the weak-only and
-non-conflict-adapted priors were systematically optimistic (weak-only PIT mean
-$0.29$, KS $0.33$; 50\% intervals covered only $0.44$). Conflict adaptation
-both lowered NLL and moved the PIT mean and coverage toward nominal
-(Table~\ref{tab:calib}).
+We assessed calibration against the real held-out outcome on the clean test
+split using the randomized probability integral transform (PIT) and the
+empirical coverage of equal-tailed \emph{prediction} intervals for the
+observed count $y_0$ --- these are prior-predictive intervals for the outcome,
+not credible intervals for the latent rate $\theta$
+(Figure~\ref{fig:calib}, Table~\ref{tab:calib}). Because the predictive
+distribution is discrete, an equal-tailed interval attains at least its
+nominal level by construction, so all methods over-cover somewhat and we
+characterize coverage precisely rather than calling it nominal. The
+intercept-only EB reference is, unsurprisingly, the best-calibrated
+distribution for the marginal outcome (PIT KS $0.035$). The selective prior
+comes closest to it among borrowing methods (KS $0.094$; coverage
+$0.683/0.925/0.975$ at nominal $0.50/0.80/0.95$ --- conservative at $50\%$,
+partly by discreteness) while achieving lower NLL, whereas the fixed-budget
+predecessor (KS $0.173$), rule ($0.252$), and the flat-anchored and classical
+priors (KS $0.32$--$0.35$) are systematically optimistic --- the weak-only
+prior's $50\%$ intervals covered only $0.46$, and map- and power-prior-like
+constructions under-covered even at $95\%$ ($0.947$ and $0.936$). The
+selectivity mechanism thus improves calibration and NLL together, rather than
+trading one for the other.
 
 \begin{table}[htbp]
 \centering
-\caption{Predictive calibration diagnostics against the real held-out outcome:
-PIT Kolmogorov--Smirnov distance to uniformity (smaller is better), empirical
-coverage of 50/80/95\% credible intervals, and the reliability slope (the slope
-of observed on predicted response rate across binned predictions; $1.0$ =
-perfectly calibrated). Among the evaluated priors, the two-head + SAM prior
-shows the most favorable diagnostics, though not perfect calibration; the
-weak-only and classical priors are systematically optimistic.}
+\caption{Predictive calibration diagnostics on the clean test split
+($n=281$): PIT Kolmogorov--Smirnov distance to uniformity (smaller is better)
+and empirical coverage of equal-tailed $50/80/95\%$ \emph{prediction}
+intervals for the observed count (discreteness makes these conservative by
+construction). Design-time and outcome-adaptive blocks as in
+Table~\ref{tab:headtohead}. The selective prior approaches the calibration of
+the EB reference while achieving lower NLL; flat-anchored and classical priors
+are systematically optimistic.}
 \label{tab:calib}
-\begin{tabular}{lrrrrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-Method & Mean NLL & PIT KS & Cov50 & Cov80 & Cov95 & Reliab.\ slope \\
+Method & Mean NLL & PIT KS & Cov50 & Cov80 & Cov95 \\
 \midrule
-\textbf{two\_head\_sam} & \textbf{2.794} & 0.177 & 0.622 & 0.915 & 0.996 & \textbf{1.36} \\
-two\_head & 2.896 & \textbf{0.175} & 0.576 & 0.869 & 0.974 & 0.77 \\
-rule\_sam & 2.901 & 0.243 & 0.532 & 0.856 & 0.995 & 1.30 \\
-rule & 3.010 & 0.245 & 0.485 & 0.807 & 0.972 & 0.68 \\
-weak\_only & 3.164 & 0.331 & 0.443 & 0.794 & 0.994 & -- \\
-map\_like & 3.222 & 0.346 & 0.389 & 0.689 & 0.945 & 0.45 \\
-power\_prior\_like & 3.227 & 0.338 & 0.399 & 0.680 & 0.942 & 0.42 \\
+\multicolumn{6}{l}{\emph{Design-time priors}}\\
+EB (intercept-only) & 2.901 & \textbf{0.035} & 0.680 & 0.911 & 0.979 \\
+\textbf{selective} & \textbf{2.872} & 0.094 & 0.683 & 0.925 & 0.975 \\
+two\_head (fixed budget) & 2.930 & 0.173 & 0.544 & 0.858 & 0.972 \\
+rule & 3.054 & 0.252 & 0.484 & 0.819 & 0.979 \\
+weak\_only ($\mathrm{Beta}(1,1)$) & 3.164 & 0.317 & 0.459 & 0.819 & 0.996 \\
+map\_like & 3.269 & 0.324 & 0.384 & 0.694 & 0.947 \\
+power\_prior\_like & 3.281 & 0.315 & 0.395 & 0.676 & 0.936 \\
+\midrule
+\multicolumn{6}{l}{\emph{Outcome-adaptive (labelled; not compared as equals)}}\\
+selective\_sam & 2.786 & 0.094 & 0.694 & 0.929 & 0.979 \\
+two\_head\_sam & 2.775 & 0.172 & 0.598 & 0.907 & 0.996 \\
+rule\_sam & 2.875 & 0.248 & 0.537 & 0.879 & 0.996 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1086,18 +1281,55 @@ power\_prior\_like & 3.227 & 0.338 & 0.399 & 0.680 & 0.942 & 0.42 \\
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{F3_calibration}
-  \caption{\textbf{Predictive calibration.} (a)~PIT uniformity, (b)~reliability
-  curve (predicted vs.\ observed response rate), (c)~50/80/95\% interval
-  coverage, and (d)~reliability slope, comparing the two-head + SAM prior
-  against rule + SAM, the two-head prior without SAM, and the weak-only prior.
-  Conflict adaptation improves selected calibration diagnostics --- the
-  reliability slope rises from $0.77$ for two-head alone to $1.36$ with SAM
-  (values above $1.0$ indicate remaining miscalibration) --- and two-head + SAM
-  shows the most favorable diagnostics overall among the compared priors
-  (PIT-KS $0.177$, essentially tied with two-head alone at $0.175$;
-  near-nominal coverage).}
+  \caption{\textbf{Predictive calibration (clean test split).} (a)~PIT
+  uniformity, (b)~reliability curve (predicted vs.\ observed response rate),
+  and (c)~$50/80/95\%$ prediction-interval coverage, comparing the selective
+  prior against the intercept-only EB reference, the fixed-budget two-head
+  prior, and the weak-only prior. The selective prior approaches the EB
+  reference's PIT uniformity (KS $0.094$ vs $0.035$) at lower NLL, while
+  flat-anchored priors are systematically optimistic; coverage is
+  conservative for all methods, partly because equal-tailed intervals on a
+  discrete predictive distribution over-cover by construction.}
   \label{fig:calib}
 \end{figure}
+
+\subsection{The learned total borrowing behaves as design-time triage}
+\label{sec:triage-results}
+The selectivity mechanism is directly inspectable, because the learned
+$1-\lamz$ is a number per query. Over the pooled forward windows the borrowed
+mass spanned its range (quartiles $0.15/0.36/0.65$) rather than sitting at a
+forced constant (the fixed-budget predecessor allocates $\approx 0.79$
+whenever any candidate passes its gate). It tracked the pre-specified
+design-time information measure: mean borrowed mass was $0.310$ when $I < 8$
+and $0.585$ when $I \ge 8$, with Spearman correlation $+0.59$ between borrowed
+mass and $I$. The model therefore learned, from features alone, the triage
+that the subgroup analysis of Section~\ref{sec:forward-results} imposed by
+hand: borrow substantially when the retrieved set carries usable endpoint
+information, and fall back toward the EB anchor when it does not
+(Figure~\ref{fig:triage}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.72\textwidth]{F12_triage}
+  \caption{\textbf{Learned borrowing triage.} Learned borrowed mass
+  $1-\lambda_0$ against the pre-specified design-time candidate-set
+  information measure $I$ (log scale), one point per forward-window query.
+  Mean borrowed mass is $0.31$ below the pre-specified threshold $I=8$ and
+  $0.59$ above it (Spearman $+0.59$); the fixed-budget predecessor forces
+  $\approx 0.79$ everywhere (dotted line).}
+  \label{fig:triage}
+\end{figure}
+
+A mechanism check --- diagnostic only, because it conditions on the scored
+outcome and can never be a selection rule --- explains why triage is the right
+policy: among forward queries whose retrieved donors' consensus rate landed
+within $0.15$ of the eventual observed rate, candidate borrowing beat the EB
+reference decisively (paired deltas $-0.25$ to $-0.32$, win rates
+$82$--$84\%$), whereas for the majority of queries whose donor consensus was
+farther away, indiscriminate borrowing hurt ($+0.22$). Candidate-level
+borrowing works precisely when the retrieved candidates are genuinely
+informative about the query; the selective architecture's contribution is to
+predict, before the outcome exists, how much that is likely to be true.
 
 \subsection{Gold-standard simulation: operating characteristics}
 \label{sec:goldsim-results}
@@ -1336,98 +1568,98 @@ corrected extraction has been re-run end to end.
 \section{Case studies}
 \label{sec:casestudies}
 To make the pipeline concrete we walk through two leakage-controlled
-pseudo-queries end to end, in each of which endpoint-compatible historical
-evidence sharpens the held-out prediction: a small trial with moderate response
-and a single-arm trial with low response.
+pseudo-queries end to end --- recomputed, like every real-data number in this
+paper, on the unit-corrected data with the final models. They were chosen
+before the selective architecture existed, and they turned out to illustrate
+the two sides of the selectivity story: one query where compatible historical
+evidence sharpens the prediction, and one where the marginal reference is the
+better bet and the selective model correctly withholds most of its borrowing.
 
-\paragraph{Case 1 (moderate response, small trial).} NCT02551432, a completed single-arm Phase~2
+\paragraph{Case 1 (borrowing helps; development-set illustration).}
+NCT02551432, a completed single-arm Phase~2
 trial of pembrolizumab plus paclitaxel in relapsed/refractory small-cell lung
 cancer, had its objective response held out and hidden from retrieval,
 reranking, and feature construction (true outcome 6 of 26, observed ORR
-$0.231$). Using only the query's design and clinical text, Stage~1--2 admitted
-three endpoint-compatible single-arm historical arms with usable result tables
-(information sizes ${\approx}2$, $5$, and $8$ patients). The two-head DeepSets
-model kept the weak-prior mass at its default ($\lamz = 0.20$) and distributed
-the remaining mass approximately evenly across the three donors, whereas the
-rule prior tilted its weights toward the larger donor. As Table~\ref{tab:case}
-shows, without borrowing the weak-only prior sits at the uninformative $0.500$
-and predicts poorly (NLL $3.296$); the rule prior pulls only to $0.392$ (NLL
-$3.005$); and the two-head prior borrows more decisively, assigning more
-historical mass and yielding the lowest held-out NLL ($2.866$) in this single
-retrospective example (its predicted rate $0.241$ is close to the observed
-$0.231$, but we treat the NLL rather than the point estimate as the primary
-comparison). SAM
-did not trigger, because the borrowed history was concordant with the observed
-low response, so two-head and two-head-SAM coincide, illustrating that SAM
-intervenes only under prior-data conflict. This is a single retrospective
+$0.231$; this query fell in the training split, so learned rows here are a
+development-set illustration). Stage~1--2 admitted six endpoint-compatible
+historical arms with usable result tables. As Table~\ref{tab:case}
+shows, the flat prior predicts poorly (NLL $3.296$) and the EB reference
+improves on it ($3.010$); borrowing helps further --- the rule prior reaches
+$2.890$, the selective prior $2.844$ (borrowing $0.46$ of its mass), and the
+fixed-budget model, which happens to be right to borrow heavily here, $2.780$.
+This is a single retrospective
 illustration, not a clinical endorsement: the donors were selected for endpoint
 compatibility and result usability rather than adjudicated exchangeability, and
 one favorable case does not establish borrowability.
 
 \begin{table}[htbp]
 \centering
-\caption{Worked case study (NCT02551432, held-out ORR $6/26 = 0.231$). Predicted
-response rate and held-out beta-binomial NLL for each prior on this single query.
-Borrowing from endpoint-compatible historical arms moves the prediction from the
-uninformative $0.500$ onto the observed $0.231$, with the two-head prior most
-accurate.}
+\caption{Worked case study (NCT02551432, held-out ORR $6/26 = 0.231$;
+development-set illustration). Predicted
+response rate and held-out beta-binomial NLL for each design-time prior on
+this single query. Compatible historical arms sharpen the prediction beyond
+the EB reference.}
 \label{tab:case}
 \begin{tabular}{lrrc}
 \toprule
 Prior & Predicted ORR & Held-out NLL & 95\% interval covers truth \\
 \midrule
-Weak-only (no borrowing) & 0.500 & 3.296 & yes \\
-Rule prior & 0.392 & 3.005 & yes \\
-\textbf{Two-head + SAM} & \textbf{0.241} & \textbf{2.866} & yes \\
+Weak-only $\mathrm{Beta}(1,1)$ & 0.500 & 3.296 & yes \\
+EB reference (no borrowing) & 0.284 & 3.010 & yes \\
+Rule prior & 0.377 & 2.890 & yes \\
+Selective (borrowed mass $0.46$) & 0.267 & 2.844 & yes \\
+Two-head, fixed budget ($0.80$) & 0.285 & \textbf{2.780} & yes \\
 \textit{Observed (held out)} & \textit{0.231} & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Case 2 (low response, single-arm).} A second, independent example is
+\paragraph{Case 2 (withholding protects; clean test query).} A second,
+independent example is
 NCT03046953, a completed single-arm Phase~2 trial of avelumab in relapsed or
 refractory peripheral T-cell lymphoma, with its objective response held out
-(true outcome 5 of 32, observed ORR $0.156$). Using only the query's design and
-clinical text, Stage~1--2 admitted five endpoint-compatible historical arms
-carrying usable result tables. Here the held-out response is low, and borrowing
-again improves the prediction (Table~\ref{tab:case2}): the weak-only prior sits
-at the uninformative $0.500$ and predicts poorly (NLL $3.50$); the rule prior
-borrows toward the low historical rate ($\approx 0.21$, NLL $3.14$); and the
-two-head + SAM prior borrows most decisively, achieving the lowest held-out NLL
-($2.70$) --- an improvement of about $0.80$ nats over no borrowing. As in the
-head-to-head comparison, the gain here is primarily one of calibrated sharpness
-rather than a large shift in the point estimate: the two-head historical
-allocation concentrates the predictive distribution near the observed low rate.
-SAM did not trigger, because the low-response history was consistent with the
-observed outcome, so the two-head and two-head-SAM priors coincide.
+(true outcome 5 of 32, observed ORR $0.156$; a test-split query no model saw
+in training). Stage~1--2 again admitted six endpoint-compatible historical
+arms, but with modest usable information. Here borrowing is not clearly
+warranted (Table~\ref{tab:case2}): the EB reference reaches NLL $3.026$, and
+the fixed-budget model, forced to place $0.80$ of its mass on the candidates,
+does \emph{worse} ($3.182$). The selective model borrows only $0.40$ of its
+mass and lands within $0.021$ of the EB reference ($3.047$) --- the
+triage behaviour of Section~\ref{sec:triage-results} operating at the level of
+a single query, where declining to borrow is itself the correct decision. (The
+rule prior happens to do well here, $2.978$, because its size-tilted weights
+landed near the low observed rate; single queries carry no significance
+either way.)
 
 \begin{table}[htbp]
 \centering
-\caption{Second worked case study (NCT03046953, held-out ORR $5/32 = 0.156$).
-Predicted response rate and held-out beta-binomial NLL for each prior on this
-single query. Borrowing from five endpoint-compatible historical arms sharpens
-the prediction toward the low observed rate, with the two-head + SAM prior
-achieving the lowest NLL.}
+\caption{Second worked case study (NCT03046953, held-out ORR $5/32 = 0.156$;
+clean test-split query). When borrowing is not clearly warranted, the
+fixed-budget prior is penalised for borrowing anyway; the selective prior
+withholds most of its mass and stays close to the EB reference.}
 \label{tab:case2}
 \begin{tabular}{lrrc}
 \toprule
 Prior & Predicted ORR & Held-out NLL & 95\% interval covers truth \\
 \midrule
-Weak-only (no borrowing) & 0.500 & 3.50 & yes \\
-Rule prior & 0.21 & 3.14 & yes \\
-\textbf{Two-head + SAM} & \textbf{0.20} & \textbf{2.70} & yes \\
+Weak-only $\mathrm{Beta}(1,1)$ & 0.500 & 3.497 & yes \\
+EB reference (no borrowing) & 0.284 & \textbf{3.026} & yes \\
+Rule prior & 0.355 & 2.978 & yes \\
+Selective (borrowed mass $0.40$) & 0.271 & 3.047 & yes \\
+Two-head, fixed budget ($0.80$) & 0.315 & 3.182 & yes \\
 \textit{Observed (held out)} & \textit{0.156} & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Read together, the two case studies show the method's intended behavior when
-historical evidence is compatible: borrowing is taken up and sharpens the
-held-out prediction, at both moderate ($6/26$) and low ($5/32$) observed
-response, without over-borrowing. Neither query triggered the SAM conflict
-adapter, because in both the retrieved history was consistent with the outcome;
-the complementary behavior --- withholding borrowing when history conflicts with
-the data, so that borrowing does no harm --- is what the gold-standard
+Read together, the two case studies show both halves of the intended
+behavior: borrowing is taken up where compatible evidence sharpens the
+held-out prediction (Case~1), and it is largely withheld where the marginal
+reference is the better bet, limiting the damage that a forced borrowing
+budget would otherwise cause (Case~2). Outcome-adaptive SAM rows are omitted
+here under the partition rule of Section~\ref{sec:eval}; the aggregate
+counterpart of this per-query behavior --- borrowing helping under
+exchangeability and doing harm under conflict --- is what the gold-standard
 simulation operating characteristics (Section~\ref{sec:goldsim-results}) and the
 external-control analysis (Section~\ref{sec:ec-results}) quantify in aggregate.
 
@@ -1443,32 +1675,45 @@ evaluation. This addresses a common gap in historical-borrowing workflows:
 retrieved historical trials are often treated as similar before the
 statistical consequences of borrowing are assessed.
 
-The results support several bounded observations. First, in retrospective
-ORR pseudo-query evaluations, mixture-prior calibration and SAM-style conflict
-adaptation were associated with lower held-out predictive NLL than weak-only or
-rule-based borrowing, with improved --- though not perfect --- calibration
-diagnostics (better PIT uniformity and near-nominal coverage), not merely lower
-average loss. Second, in three rolling-origin splits the per-fold-retrained
-learned and closed-form conflict-adapted priors retained lower future-fold NLL,
-and exceeded a tuned RBesT-style robust meta-analytic-predictive prior in this
-setting, consistent with candidate-specific weighting adding value over a single
-pooled robust prior. Third, known-truth simulation indicated conflict
-sensitivity --- the learned and SAM-adapted priors reduced borrowed influence as
-prior-data conflict grew --- but these simulation analyses do not
+The results support several bounded observations, and the most important is
+also the most cautionary. First, \emph{marginal empirical-Bayes references are
+hard to beat}: judged against a two-parameter intercept-only EB prior rather
+than a flat $\mathrm{Beta}(1,1)$, every fixed-budget borrowing construction we
+evaluated --- rule-weighted, power-prior-, MAP- and commensurate-style, tuned
+robust-MAP, and our own earlier fixed-budget learned model --- delivered
+\emph{no} average real-data benefit, and most were significantly worse. Much
+of the apparent benefit of borrowing in flat-referenced comparisons, our own
+earlier drafts included, is marginal-distribution information in disguise.
+Second, \emph{selectivity is what earns back the difference}: making the
+total borrowing learnable per query, anchored at the EB fit, produced a
+significant paired improvement over the fixed-budget architecture in and out
+of time, the only design-time prior at or below the EB reference, a
+significant lead in the best-trained forward window, and calibration
+approaching the EB reference at lower NLL --- with an interpretable triage
+policy (borrowed mass tracking candidate-set information) as the mechanism.
+Third, the benefit of candidate-level borrowing is \emph{concentrated, not
+uniform}: directionally strongest in the pre-specified information-rich
+subgroup, decisive in the outcome-conditioned mechanism diagnostic when donor
+consensus was near the truth, and absent elsewhere --- which is exactly the
+behaviour a selective architecture should convert into aggregate gains as
+training data grow. Fourth, known-truth simulation indicated conflict
+sensitivity --- the learned and SAM-adapted priors reduced borrowed influence
+as prior-data conflict grew --- but these simulation analyses do not
 establish clinical exchangeability or expert borrowability.
 
 These findings locate the contribution against each of the three families
 surveyed in the Introduction. Relative to the statistical borrowing literature
 --- power priors, commensurate priors, MAP and robust-MAP constructions, and
 SAM [3,~4,~5,~6,~11] --- we do not take the historical set as given: the
-pipeline selects candidates and then weights them, and it separates the
+pipeline selects candidates and then weights them, separates the
 allocation decision (the mixture weight $\lambda_i$) from the information-size
-decision (the effective-sample-size discount $a_i$), which those methods
-typically conflate into a single quantity. Relative to constructions that apply
-one pooled weight to the whole historical set, candidate-specific two-head
-weighting outperformed a tuned robust-MAP prior in the retrospective ORR
-setting, which is the empirical form the argument for per-donor weights takes
-here; the closest precedent for per-source adaptive weights is the unit
+decision (the discount $a_i$), and learns whether to borrow at all, three
+quantities those methods typically collapse into one or two. The empirical
+form the argument takes here is deliberately strict: a tuned robust-MAP prior
+beat flat-anchored borrowing but not the plain EB reference, whereas the
+selective model did --- so the case for candidate-level machinery now rests on
+selectivity, not on borrowing as such; the closest precedent for per-source
+adaptive weights is the unit
 information prior of Jin and Yin [19], which we implement and evaluate directly
 rather than describe. Relative to machine-learning trial-outcome prediction, the
 reranker and the conservative clinical gate are inspectable feature by feature
@@ -1535,14 +1780,18 @@ calibration, and forward-validation analyses --- come from the corrected
 re-run, executed with the same seeds and pinned environment.
 
 The correction moved NLL levels down for every method (the held-out reference
-outcomes are cleaner) while preserving the method ordering and every
-qualitative conclusion; the one ordering change is that the trained two-head
-prior now narrowly outperforms the conflict-adapted rule baseline, where the
-pre-correction order was reversed. Forward-validation improvements remained
-stable with all paired bootstrap confidence intervals excluding zero. Three
-things were never affected. The two worked case studies
-(Section~\ref{sec:casestudies}) draw on rows reported in participant units
-($6/26$ and $5/32$) and are correct as printed. The gold-standard simulation and
+outcomes are cleaner) while preserving method orderings within the
+then-current comparisons, and forward-validation improvements at the time
+remained stable with paired bootstrap confidence intervals excluding zero. The
+correction also motivated the sharper evaluation reported in this version:
+cleaner targets made it possible to fit a meaningful empirical-Bayes
+reference, against which the limits of fixed-budget borrowing --- and the case
+for the selective architecture --- became visible. Three
+things were never affected. The held-out outcomes of the two worked case
+studies (Section~\ref{sec:casestudies}) are reported in participant units
+($6/26$ and $5/32$) and were never corrupted; their prior computations, like
+every real-data analysis, were regenerated on the corrected data with the
+final models. The gold-standard simulation and
 the external-control simulation do not touch this extraction path at all. And
 the direction of the defect was not systematically favourable to our method: it
 perturbed the held-out truth for a minority of queries in both directions. The
@@ -1570,30 +1819,49 @@ seen describe design similarity only, and are in principle unable to identify a
 prior--data conflict that displaces the entire retrieved set uniformly: the
 consensus of the remaining donors moves with the displacement, so no donor
 appears deviant. This is not a shortcoming of the particular signal we
-constructed but a property of any design-time criterion, and it is visible in
-the results --- under conflict (scenario~S4) the borrowing-discrimination
-ROC-AUC of every design-time method fell below chance ($0.445$), while UIP-JS,
+constructed but a property of any criterion built, as ours is, from these
+design features and within-set donor consensus --- an unmeasured uniform
+displacement of the whole set is unidentifiable to it in principle --- and it
+is visible in
+the results: under such conflict (scenario~S4) the borrowing-discrimination
+ROC-AUC of every design-time method we evaluated fell below chance ($0.445$),
+while UIP-JS,
 which computes its weights against the current data, attained $0.839$
 (Section~\ref{sec:prospective-results}). We therefore do not claim that
 prospective selection can stand alone, and retain the outcome-dependent SAM
-layer as a necessary second line of defence rather than as an optional
-sensitivity analysis. Third, rolling-origin forward validation is leakage-free for
-the closed-form priors, and the learned two-head and two-head-SAM forward rows
-are leakage-free as well, having been rescored with two-head DeepSets
-models retrained on past-only data at each cutoff; these per-fold models were
-trained on 632, 813, and 1{,}017 past-only examples; the training code now
-fixes the random seed ($20260603$, matching the primary two-head fit), so the
-per-cutoff refits are reproducible up to minor cross-platform numerical
-differences. Fourth, automated extraction from ClinicalTrials.gov may introduce errors
+layer as a second line of defence, evaluated by simulation, rather than as an
+optional
+sensitivity analysis. Third, the forward validation is leakage-free with
+respect to outcomes and model fitting --- disjoint future windows, each scored
+once by models and EB anchors refit on past-only data ($632$, $813$, and
+$1{,}017$ training examples; seed $20260603$ throughout, reproducible up to
+minor cross-platform numerical differences) --- but it does not yet enforce
+donor-level \emph{availability at decision time}: a donor completed before a
+cutoff may have posted its results only later, and the stored registry records
+are current versions rather than as-of-cutoff snapshots, so endpoint text
+edited after completion could differ from what a contemporaneous user would
+have seen. Results-first-posted dates are extracted for every trial, and
+re-running the forward analysis with donors restricted to
+results-posted-before-cutoff is planned; the query side is protected (the
+entire results section of each pseudo-query is removed before retrieval), but
+full registry-snapshot reconstruction remains future work. Fourth, marginal
+references set a high bar that should temper enthusiasm for borrowing
+machinery in general: a disease-stratified EB prior matched the selective
+model on the pooled forward windows (while being unstable across settings),
+the aggregate selective-versus-EB intervals narrowly include zero, the
+information-subgroup threshold, though fixed before the final window was
+examined, derives from exploratory analysis, and all learned-model results
+rest on a single training seed per fit; multi-seed stability reporting is
+planned. Fifth, automated extraction from ClinicalTrials.gov may introduce errors
 in endpoint mapping, arm identification, eligibility interpretation, date
 parsing, and result-usability assessment; the extraction-quality audit
 quantifies this (about 44\% of raw arm-level rows are not valid binary
 observations) and shows that an admission rule which passed a synthetic
 round-trip check removes them before prior construction, but extraction error in
 the admitted subset is not eliminated.
-Fifth, the framework and its evidence are limited to binary endpoints;
+Sixth, the framework and its evidence are limited to binary endpoints;
 applying the full retrieval and two-head pipeline to progression-free survival
-at fixed time points and other endpoints remains to be demonstrated. Sixth, the SECRET-style
+at fixed time points and other endpoints remains to be demonstrated. Seventh, the SECRET-style
 backend is a deterministic section-based minimum viable product, and
 Trial2Vec-style retrieval remains optional. Finally, simulation scenarios
 simplify oncology-trial complexity and should be viewed as stress tests rather
@@ -1627,29 +1895,43 @@ recommendation system.
 
 % ---------------------------------------------------------------------
 \section{Conclusion}
-We developed a reproducible methodology prototype that separates two questions
-usually merged in historical borrowing: whether a past trial \emph{can be found}
-(retrievability) and whether it \emph{should be borrowed from} (borrowability).
-The core contribution is a two-head DeepSets model that, for each retrieved
-candidate, learns a mixture weight and a separate effective-sample-size discount,
-so that ``which donor'' and ``how much information'' are decided independently
-rather than collapsed into one weight.
+We developed a reproducible methodology prototype that separates three
+questions usually merged in historical borrowing: whether a past trial
+\emph{can be found} (retrievability), whether it \emph{should be borrowed
+from} (borrowability), and \emph{how much to borrow at all}. The core
+contribution is a selective two-head DeepSets model that, for each retrieved
+candidate, learns a mixture weight and a separate information discount, and,
+through a set-level head anchored at an empirical-Bayes prior, a per-query
+total borrowing fraction --- so that ``which donor,'' ``how much information,''
+and ``whether to borrow'' are decided independently rather than collapsed into
+one fixed budget.
 
 Because expert borrowability labels do not exist at scale, we evaluated the
-pipeline without them, using held-out predictive NLL, calibration diagnostics,
-leakage-free forward validation, a robust meta-analytic-predictive baseline, and
-gold-standard and external-control simulations with known truth, alongside an
-extraction-quality audit. Across the real-data analyses the two-head prior with
-the SAM conflict adapter gave the lowest predictive NLL and the most favorable
-calibration among the evaluated priors, and outperformed a tuned robust-MAP
-prior; the known-truth simulation showed that it reduces borrowed influence when
-the historical evidence conflicts with the data, at the cost of slightly higher
-type I error than the rule baseline under strong conflict.
+pipeline without them, against an intercept-only empirical-Bayes reference and
+under a strict partition between design-time and outcome-adaptive priors:
+clean-test-split and disjoint-window forward NLL, calibration diagnostics,
+robust-MAP and classical baselines, and gold-standard and external-control
+simulations with known truth, alongside an extraction-quality audit. The
+empirical accounting is deliberately unsparing. Fixed-budget borrowing ---
+including our own earlier architecture and a tuned robust-MAP prior --- did
+not beat the two-parameter marginal reference on average; the selective
+architecture did match or modestly exceed it, improved significantly on its
+fixed-budget predecessor in and out of time, won significantly in the
+best-trained forward window, approached EB-level calibration at lower NLL,
+and learned an interpretable design-time triage policy in which borrowed mass
+tracks how much usable information the retrieved candidates actually carry.
+The known-truth simulation shows the same mechanism from the other side:
+borrowing helps under exchangeability, harms under conflict, and the adaptive
+layers reduce borrowed influence as conflict grows, at the cost of elevated
+type~I error relative to the rule baseline under strong conflict ($0.070$
+versus $0.050$ at a nominal $0.025$).
 
 These are calibration and simulation results, not clinical ones. They do not
-establish that any individual historical trial is appropriate to borrow from;
-that decision still requires expert clinical and statistical review, external
-validation, and protocol-specific operating-characteristics evaluation.
+establish average superiority of candidate-level borrowing over marginal
+priors, nor that any individual historical trial is appropriate to borrow
+from; that decision still requires expert clinical and statistical review,
+external validation, and protocol-specific operating-characteristics
+evaluation.
 
 % ---------------------------------------------------------------------
 \section*{Data and Code Availability}
