@@ -342,6 +342,7 @@ def components_from_reranked_rows(
             {
                 "nct_id": nct_id,
                 "endpoint": endpoint,
+                "unit": selected_quantity.get("unit"),
                 "overall_similarity_score": overall,
                 "endpoint_key": target_endpoint_key,
                 "count": y_i,

@@ -678,12 +678,19 @@ def build_training_example_from_pipeline_result(
                 "gate": gate,
                 "denominator": denominator_i,
                 "discount": discount,
+                # Provenance (revision 2026-08-31): donor identity for
+                # availability filtering and shared-donor clustering, and the
+                # reported unit of the selected observation for the
+                # count-only sensitivity analysis.
+                "nct_id": component.get("candidate_nct_id") or component.get("nct_id"),
+                "unit": component.get("unit"),
             }
         )
         lambda_rule.append(float(component.get("lambda_rule", 0.0)))
 
     return {
-        "query": {"count": int(count), "denominator": int(denominator)},
+        "query": {"count": int(count), "denominator": int(denominator),
+                  "unit": query.get("unit")},
         "lambda_0": float(mixture["lambda_0"]),
         "feature_names": LAMBDA_FEATURE_NAMES,
         "features": features,

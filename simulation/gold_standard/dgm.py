@@ -217,8 +217,13 @@ def simulate_query(cfg: SimConfig, rng: np.random.Generator) -> dict:
             float(np.log1p(n_c)),
         ], dtype=np.float64)
 
-        # ---- GOLD STANDARD: parameter-level exchangeability on the scale
-        # that borrowing actually uses (the observed rate). ----
+        # ---- GOLD STANDARD labels (two levels, revision 2026-08-31) ----
+        # Primary: parameter-level exchangeability of the LATENT rates.
+        # Secondary ("process-compatible"): exchangeability of the latent
+        # observation-process rate theta_obs = theta_true + reporting bias --
+        # the scale the borrowed data are actually generated from. Neither
+        # label uses the realized y/n, so neither carries binomial noise.
+        borrowable_param = bool(abs(theta_true - theta_query) <= cfg.epsilon)
         borrowable = bool(abs(theta_obs - theta_query) <= cfg.epsilon)
 
         candidates.append({
@@ -228,6 +233,7 @@ def simulate_query(cfg: SimConfig, rng: np.random.Generator) -> dict:
             "theta_true": theta_true,
             "theta_obs": theta_obs,
             "borrowable": borrowable,
+            "borrowable_param": borrowable_param,
             "same_surface": bool(same_hist and same_reg),
             "same_line": same_line,
             "endpoint_ok": endpoint_ok,
@@ -377,11 +383,13 @@ def simulate_external_control_query(cfg: ExternalControlConfig,
         ], dtype=np.float64)
 
         borrowable = bool(abs(theta_obs - theta_ctl) <= cfg.epsilon)
+        borrowable_param = bool(abs(theta_true - theta_ctl) <= cfg.epsilon)
 
         candidates.append({
             "features": features, "y": y_c, "n": n_c,
             "theta_true": theta_true, "theta_obs": theta_obs,
-            "borrowable": borrowable, "comparable": comparable,
+            "borrowable": borrowable, "borrowable_param": borrowable_param,
+            "comparable": comparable,
             "same_surface": bool(same_hist), "same_line": c["line"] == q["line"],
             "endpoint_ok": endpoint_ok, "result_ok": result_ok,
             "dim": {"disease": disease_match, "regimen": regimen_match,

@@ -1803,6 +1803,7 @@ def query_endpoint_observations(query_summary: dict[str, Any]) -> dict[str, dict
             "endpoint": endpoint.get("title", ""),
             "endpoint_family": endpoint_key,
             "time_frame": endpoint.get("time_frame", ""),
+            "unit": endpoint.get("unit"),
         }
         if treatment is not None:
             treatment_row, treatment_obs = treatment

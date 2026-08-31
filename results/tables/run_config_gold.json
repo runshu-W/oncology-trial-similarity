@@ -1,0 +1,7 @@
+{
+  "replicates": 2000,
+  "train_size": 300,
+  "epochs": 60,
+  "seed": 20260720,
+  "labels": "primary=|theta_true - theta0|<=eps; secondary(_obs)=|theta_obs - theta0|<=eps"
+}
