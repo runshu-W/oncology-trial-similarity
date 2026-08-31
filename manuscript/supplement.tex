@@ -17,6 +17,8 @@
 \usepackage{lmodern}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\graphicspath{{figures/}}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
@@ -110,18 +112,27 @@ full pools:
 $+0.219/+0.198/+0.080$, canonical full-corpus model $-0.011$. & Supports
 (not completes) the size attribution; mechanism experiments on identical
 scoring rows. \\
-The borrowed-mass cap improves, not taxes, the upper-bound tiers. & Capped
-($c=0.5$) vs EB: forward $-0.0413$ CI $[-0.0625,-0.0202]$; retrained
-title-screened $-0.0485$ CI $[-0.0742,-0.0233]$; frozen title-screened
-$-0.0440$ CI $[-0.0667,-0.0223]$; held-out test $-0.0247$ CI
+The mixture-mass cap improves, not taxes, the upper-bound tiers (post hoc
+redesign evaluation). & Capped
+($c=0.5$) vs EB: forward $-0.0413$ CI $[-0.0625,-0.0202]$, block
+$[-0.0665,-0.0166]$; retrained
+title-screened $-0.0485$ CI $[-0.0742,-0.0233]$, block
+$[-0.0815,-0.0189]$; frozen title-screened
+$-0.0440$ CI $[-0.0667,-0.0223]$, block $[-0.0707,-0.0179]$; held-out
+test $-0.0247$ CI
 $[-0.0588,+0.0097]$; caps $0.3/0.7$ similar; uncapped counterparts
-non-significant ($-0.027/-0.034/-0.033$). & Supported (upper-bound tier);
-the only significant selective-vs-EB intervals in the evaluation. \\
-The title-screened restriction does not change the upper-bound pattern. &
+non-significant ($-0.027/-0.034/-0.033$). & Post hoc exploratory redesign
+evaluation (the cap postdates examination of earlier uncapped results on
+these outcome sets); the only significant selective-vs-EB intervals in
+the evaluation. \\
+The directional upper-bound pattern survives title-based endpoint
+enrichment. &
 Retrained title-screened subset pooled $\Delta$ $-0.034$ CI
 $[-0.074,+0.007]$ ($n=589$); frozen-model title-screened filtering
-$-0.033$ CI $[-0.068,+0.001]$ (uncapped). & Supported; endpoint
-contamination was not driving the upper-bound advantage. \\
+$-0.033$ CI $[-0.068,+0.001]$ (uncapped). & Directional survival only:
+with $\approx 20\%$ residual non-ORR endpoints, one rater, and wide PPV
+intervals, a causal exclusion of endpoint contamination is not
+supported. \\
 The endpoint canonicaliser is audit-informed and title-screened; its
 apparent accuracy is a resubstitution estimate, with a frozen-rule
 out-of-sample check added. & Apparent (resubstitution): $98.6\%$ on 74
@@ -146,10 +157,12 @@ completed audit vindicates the percentage stratum ($42/42$ denominators). \\
 Selective calibration approaches the EB reference at lower NLL. & Test PIT-KS
 $0.094$ (EB $0.035$, fixed-budget $0.173$); coverage $0.683/0.925/0.975$ at
 nominal $0.50/0.80/0.95$. & Supported (held-out split). \\
-Under exchangeability the selective prior gives the best type-I-controlled
-power in the comparison. & Simulation, no conflict: type I $0.024$, power
+Under exchangeability the selective prior gives the highest observed power
+among methods with estimated type I error $\le 0.025$ in that simulated
+cell. & Simulation, no conflict: estimated type I $0.024$ ($2{,}000$
+replicates; a point estimate, not demonstrated control), power
 $0.613$ (predecessor $0.588$; no borrowing $0.536$; EB-only $0.497$). &
-Supported (simulation). \\
+Supported as a Monte Carlo observation. \\
 Standalone selective borrowing is unsafe under uniform whole-set conflict;
 SAM mitigates but does not restore control. & Type I $0.056/0.145/0.243$ at
 shifts $0.5/1.0/1.5$; selective+SAM $0.041/0.070/0.046$ (worst still
@@ -163,25 +176,32 @@ largest apparent gain over no borrowing at any $\tau^{*}$ is $+0.7$ points
 & Supported (simulation); the reference-matched framing of the previous
 revision is withdrawn. \\
 The corpus-specific decision analysis (exploratory) finds a marginal
-size-matched average difference and material conditional structure. &
+size-adjusted average difference and a conditional, local like-for-like
+advantage. &
 Independent $10{,}000$-replicate validation at frozen thresholds: avg type
 I $0.0258$ (MC se $0.0005$; no-borrowing $0.0251$; neither exactly
 $0.025$), worst null cell $0.0360$ [CP $95\%$ UCB $0.0392$; Bonferroni
-$0.0416$] vs the tolerated ceiling $0.05$; size-matched power difference
-vs no borrowing $+0.0024$ (paired MC se $0.0007$; cap $0.3$: $+0.0057$;
-EB-only: $-0.0015$), robust in sign across corpus-derived mixings
-($+0.0010$ to $+0.0063$; bootstrap $[+0.0006,+0.0044]$), rising as drift
-dispersion narrows ($+0.040$ under $N(0,0.5)$); conditional profile
-$+4.4$ to $+5.3$ points at drifts $0$ to $+1$ where per-cell type I runs
-to $0.036$; $n_0$ strata $+0.0/+1.3/+0.7$. & Exploratory
-(corpus-specific mixing measure; tolerated, not nominal, pointwise
+$0.0416$] vs the tolerated ceiling $0.05$. In-validation size-adjusted
+reanalysis: full-batch interpolation $+0.0024$ vs no borrowing (paired MC
+se $0.0007$), cross-fitted $+0.0057$ (per-fold se $0.0010$; achieved
+sizes $0.0244/0.0260$) --- order $+0.002$ to $+0.006$, threshold-estimation
+error unpinned beyond that; sign-robust across corpus-derived mixings,
+rising as drift dispersion narrows ($+0.040$ under $N(0,0.5)$). Pointwise
+size-matched (per-cell null rejection $=0.025$, cross-fitted): $+0.074$
+at zero drift, $+0.051/+0.020/+0.014$ at $+0.25/+0.5/+0.75$, reversing
+to $-0.019/-0.032/-0.027$ at drifts $\ge 1$; $n_0$ strata
+$+0.0/+1.3/+0.7$ (frozen thresholds). & Exploratory
+(thresholds of the reanalysis estimated on the validation batch itself;
+corpus-specific mixing measure; tolerated, not nominal, pointwise
 control; no claim of verified average frequentist control). \\
 The cap's protection holds under donor-precision stress; its soft spot is
 anchor precision. & Donor arm sizes $\times 4$: uncapped type I
 $0.14/0.32/0.48$ at shifts $0.5/1.0/1.5$ vs $0.06/0.15/0.24$ at standard
 precision; capped $0.025$--$0.040$ throughout (no borrowing
 $0.026$--$0.038$). Anchor precision $\times 4$: capped design reaches
-$0.059$ at shift $1.0$; $\times 1/4$: $\le 0.050$. Real-data posterior
+$0.0595$ at shift $1.0$ (MC se $0.0053$; one-sided CP $95\%$ bound
+$0.069$) --- exceeding the tolerated ceiling; $\times 1/4$: $\le 0.050$.
+Real-data posterior
 historical weight exceeds $0.5$ for $28\%$ of forward queries (max
 $0.92$) with posterior-mean shifts $\le 0.13$. & Supported (stress
 simulations + influence diagnostics); the cap bounds mixture probability,
@@ -440,8 +460,10 @@ forest) and \texttt{F14} (mixture operating profile) built by
 per-design size--power curves on the validation batch over the threshold
 grid $0.970$--$0.9999$; thresholds interpolated so each design's
 drift-weighted average type I equals the target (no-borrowing's validated
-$0.02513$, the nominal $0.025$, or the largest threshold whose MC $95\%$
-upper bound of average type I is $\le 0.025$); paired within-replicate
+$0.02513$, the nominal $0.025$, or the \emph{smallest} threshold whose MC
+$95\%$
+upper bound of average type I is $\le 0.025$ --- smallest, because power
+falls in the threshold); paired within-replicate
 power differences at the matched thresholds are released as
 \texttt{gold\_standard\_\allowbreak size\_matched.json}. Mixing-measure
 robustness:
@@ -459,8 +481,27 @@ downsampling is extended to eight draws, released as
 \texttt{starvation\_summary.json} and
 \texttt{equal\_n\_\allowbreak extra.json}.
 Final-design rows for the held-out/development, forward, and calibration
-tables computed by \texttt{scripts/\allowbreak
-capped\_table\_rows\_round5.py}.
+tables are computed by the released script
+\texttt{capped\_\allowbreak table\_\allowbreak rows\_\allowbreak
+round5.py} under \texttt{scripts/}.
+
+\paragraph{Round-6 additions (this revision).} Cross-fitted size
+adjustment: each validation cell's $10{,}000$ replicates split in half;
+size-matching thresholds interpolated on one half, paired power
+differences and achieved sizes evaluated on the other, both folds
+averaged. Pointwise size matching: per uniform-drift cell, thresholds set
+to the empirical $97.5\%$ null quantile of the matching half, differences
+evaluated on the other half. Anchor-stress inference: worst
+anchor-$\times 4$ cell reported with binomial MC standard error and
+one-sided Clopper--Pearson $95\%$ bound. Strongest-donor block bootstrap
+extended to the capped forward and title-screened comparisons ($4{,}000$
+resamples, seed $20260906$). Artifacts:
+\texttt{gold\_standard\_\allowbreak round6\_analysis.json},
+\texttt{round6\_block\_capped.json}. Post-hoc scoping: every capped
+real-data evaluation is labelled a post hoc exploratory redesign
+evaluation (the cap postdates examination of earlier uncapped results);
+independent confirmation requires a new registry vintage, an untouched
+window, or external data.
 
 \paragraph{Sensitivity artifacts.} Repository artifacts include section-weight
 sensitivity (\texttt{results/tables/\allowbreak section\_weight\_sensitivity.csv}),
@@ -517,5 +558,82 @@ Two-head, fixed budget ($0.80$) & 0.315 & 3.182 & yes \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\section{The prospective conflict signal: full analysis (moved from the
+main text, round 6)}
+
+The ablation gave a clear and initially unwelcome answer. Adding the
+prospective set-level conflict signal changed the borrowing-discrimination
+ROC-AUC (primary, parameter-level labels) by $+0.017$, $+0.008$, $+0.006$,
+$+0.001$ and $+0.005$ across the five scenarios for the fixed-budget
+architecture, and by $+0.012$ to $-0.000$ for the selective architecture
+--- negligible relative to Monte Carlo error --- and did not improve type
+I error. On the outcome the signal was designed to improve, it does
+essentially nothing.
+
+The reason is structural. The signal measures a donor's deviation from
+the consensus of the remaining donors, so it can only detect
+heterogeneity \emph{within} the candidate set. When prior-data conflict
+displaces the whole set uniformly, the consensus moves with it and no
+donor appears deviant. Under conflict the ROC-AUC of every design-time
+method fell below chance ($0.43$--$0.45$ in scenario S4 under the primary
+labels; the selective prior itself scored $0.429$), because surface
+features actively mislead when the entire retrieved history is biased.
+Detecting that situation requires the current outcome: UIP-JS, which
+computes its weights against the current data, attained $0.813$ under the
+primary labels ($0.839$ under the process-compatible labels) in the same
+scenario.
+
+The signal does, however, do something else in the fixed-budget
+architecture, which the borrowed-size response curve
+(Figure~\ref{fig:s4-ess}) makes visible. Without it, the learned discount
+head is inert: the per-source borrowed sample size is flat across donors
+at every true distance from the query rate ($43.6$, $43.7$, $43.8$,
+$43.9$ across distance bins, pooled over the five scenarios). With the
+signal, the borrowed size declines monotonically with true distance
+($31.3$, $30.4$, $28.0$, $23.6$). The nine reranking dimensions describe
+design similarity only; none carries information about outcome-space
+discrepancy, so a discount head conditioned on them alone collapses to a
+constant, and the set-level signal supplies exactly the missing
+information while never touching the query outcome.
+
+The selective architecture changes this picture in a way we did not
+anticipate and report as a finding. Even with the prospective signal, the
+selective model's discount response is flat ($43.6$, $43.7$, $43.8$,
+$43.9$): once the total-borrowing head exists, training reallocates the
+comparability response to the set level and the per-source discount stops
+grading donors (Figure~\ref{fig:s4-ess}). Per-donor discrimination under
+the selective model is therefore no better than under the fixed-budget
+model (Figure~\ref{fig:s4-roc}) --- its gains come from deciding how much
+to borrow overall, not from grading whom to borrow from more finely. The
+defensible claim is narrower than the one we set out to make: the
+prospective signal does not improve donor ranking; in the fixed-budget
+model it is what makes the per-source discount function at all; and in
+the selective model even that role disappears.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F9_ess_response}
+  \caption{Learned per-source borrowed sample size $a_k n_k$, binned by
+  the donor's true distance $|\theta_k - \theta_0|$ from the query rate
+  (pooled over the five estimation scenarios). A flat line means the
+  discount head is inert. In the fixed-budget architecture the
+  prospective signal activates the head (declining curve); in the
+  selective architecture the response is flat even with the signal ---
+  adaptivity migrates to the set-level total-borrowing head. The
+  fixed-discount ablation is flat by construction.}
+  \label{fig:s4-ess}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F10_discrimination}
+  \caption{Borrowing-decision discrimination: ROC-AUC for identifying
+  genuinely exchangeable donors against the parameter-level gold
+  standard, by scenario. Under prior-data conflict (S4) every design-time
+  method falls below chance; only outcome-using UIP-JS remains
+  informative. Error bars are Monte Carlo standard errors.}
+  \label{fig:s4-roc}
+\end{figure}
 
 \end{document}
