@@ -54,9 +54,10 @@ for Bayesian historical borrowing}
 \noindent\textbf{Background.} Bayesian historical borrowing can sharpen the
 estimate of an objective response rate (ORR) in a small oncology trial, but
 its value depends on \emph{which} historical evidence is used and on the
-frame in which its error rates are controlled. Textual similarity between
+frame in which its error rates are assessed. Textual similarity between
 registry records is not sufficient for the first, and --- since strict
-worst-case type~I control provably forfeits the power gains of borrowing ---
+worst-case type~I control forfeits the power gains of borrowing in
+one-parameter designs of the kind studied here ---
 nominal safety language is not sufficient for the second.
 
 \noindent\textbf{Methods.} An explainable retrieve--rerank--borrow pipeline
@@ -66,55 +67,67 @@ retrieved candidate, a mixture weight and a separate information discount,
 and, at the set level, the per-query total borrowing --- anchored at an
 intercept-only empirical-Bayes (EB) prior that also serves as the reference
 for every real-data comparison. The complete specified \emph{final design}
-adds a borrowed-mass cap fixed a priori at $0.5$ and contains no
+adds a historical mixture-mass cap of $0.5$ (fixed before the cap
+analyses) and contains no
 outcome-adaptive component (a SAM-style adapter is retained only as a
 sensitivity analysis). Evaluation separates design-time priors (scored by
 held-out and forward predictive negative log-likelihood, NLL) from
 outcome-adaptive layers (known-truth simulation only), and separates a
 \emph{primary analysis} --- donor availability enforced at decision time by
 a registry-availability proxy, on an audit-informed, title-screened ORR
-subset --- from a hypothetical full-information upper bound. Decision
-thresholds are calibrated in an empirical-mixture frame whose mixing
-measure is the corpus-estimated donor--query drift distribution, subject
-to a pre-specified worst-case ceiling of $0.05$, with thresholds selected
-on one simulation batch and re-evaluated on an independent five-fold-larger
-batch.
+subset --- from a hypothetical full-information upper bound. Operating
+characteristics are assessed in a worst-case frame and in an exploratory,
+corpus-specific decision analysis whose mixing
+measure is the corpus-estimated donor--query drift distribution, with a
+tolerated pointwise inflation ceiling of $0.05$, thresholds fixed
+on one simulation batch, re-evaluation on an independent five-fold-larger
+batch, and all between-design power comparisons made at matched validated
+average size.
 
-\noindent\textbf{Results.} In the primary analysis the final design is safe
-but not yet useful: pooled $\Delta$NLL versus the availability-consistent EB
+\noindent\textbf{Results.} In the primary analysis the final design is
+predictively neutral but not yet useful: pooled $\Delta$NLL versus the
+availability-consistent EB
 reference $+0.006$ ($95\%$ CI $[-0.005,+0.016]$; engaged subgroup $+0.030$,
 CI $[-0.021,+0.079]$), where the uncapped ablation is significantly harmful
 ($+0.035$; engaged subgroup $+0.173$, CI $[+0.040,+0.324]$) --- a failure
 that seed-replication, equal-size downsampling, and a learning-curve
-experiment attribute to the thin as-of-cutoff training pools, and that the
+experiment link to the thin as-of-cutoff training pools, and that the
 cap converts to neutrality. On the upper-bound tiers the capped design's
 forward and title-screened deltas are the evaluation's only significant
 selective-versus-EB intervals ($-0.041$, CI $[-0.063,-0.020]$; $-0.049$,
 CI $[-0.074,-0.023]$; $-0.044$, CI $[-0.067,-0.022]$): capping the learned
 borrowing improves out-of-time generalisation rather than taxing it. In the
 known-truth simulation, worst-case calibration is degenerate for the
-uncapped prior ($\tau^{*}=0.9999$, power $0.069$) and yields no material
-gain for any design, as theory predicts; under the empirical-mixture frame,
-on the independent validation batch at frozen thresholds, the final design
-holds drift-averaged type~I error at $0.026$ (MC se $0.0005$; calibrated
-no borrowing itself validates at $0.025$) with worst null cell $0.036$
-(Clopper--Pearson $95\%$ bound $0.039$, ceiling $0.05$) and returns
-mixture power $0.515$ against $0.509$ --- a paired net benefit of $+0.007$
-(MC se $0.0007$) that concentrates where the premise holds ($+4$ to $+5$
-points at drifts $0$ to $+1.0$; $+1.3$ points in mid-sized queries) and
-reverses at strong negative drift. The
-corpus-estimated drift distribution itself (SD $\approx 1.3$ logits) shows
+uncapped prior ($\hat\tau^{*}=0.9999$, power $0.069$) and yields no
+material gain for any design, as expected in this one-parameter setting.
+An exploratory corpus-specific decision analysis --- drift-weighted
+operating characteristics under the corpus-estimated drift distribution
+(SD $\approx 1.3$ logits), thresholds frozen before an independent
+five-fold-larger validation batch --- finds the final design's worst null
+cell at $0.036$ (Clopper--Pearson $95\%$ bound $0.039$, tolerated ceiling
+$0.05$) and, at matched validated average size, a mixture-power difference
+over calibrated no borrowing of only $+0.002$ to $+0.006$ across
+corpus-derived mixing measures (bootstrap interval $[+0.001, +0.004]$
+under the canonical mixing): marginal on average, though rising steeply as
+drift dispersion narrows ($+0.04$ under $N(0,0.5)$ drift) and
+concentrated where approximate exchangeability holds ($+4$ to $+5$ points
+at drifts $0$ to $+1$, where per-cell type~I error runs up to $0.036$).
+The wide corpus drift distribution itself explains
 why decision-time gains are hard: donors far from the query are common. An
-external-control stress battery shows that scenario's safety belongs to the
-EB anchor, not the method; a single-rater registry audit bounds numeric
-extraction error (two errors, headline shifts $<0.001$ NLL) and motivates
-the title-screened estimand.
+external-control stress battery shows that scenario's protection belongs
+to the EB anchor, not the method; a single-rater registry audit bounds
+numeric extraction error (two errors, headline shifts $<0.001$ NLL) and
+motivates the title-screened estimand.
 
 \noindent\textbf{Conclusions.} On decision-time-available registry data,
 predictive gains over a fitted marginal EB prior remain undemonstrated; the
-final design's value there is bounded-cost insurance, its power case rests
-on the mixture frame and matures with the registry, and no borrowing method
-can do better under strict worst-case control. All claims are graded by
+final design's demonstrated value is bounding the predictive harm of
+learned borrowing (with a tolerated, not eliminated, pointwise error
+inflation of up to $0.036$ observed against the $0.05$ ceiling), while its
+average power case is exploratory, corpus-specific, marginal at this
+corpus's drift dispersion, and expected to mature with the registry. In
+designs of this kind no borrowing method retains a power benefit under
+strict worst-case control. All claims are graded by
 frame in the text; expert review, prospective validation, and
 protocol-specific operating characteristics remain prerequisites for any
 decision-informing use.
@@ -281,8 +294,10 @@ against a marginal EB reference by predictive calibration.
   reranking, beta-binomial mixture components, and selective two-head DeepSets
   weighting --- separating the mixture weight $\lambda$ from the
   borrowed-size discount $a$, with a set-level head that learns the
-  total borrowing $1-\lambda_0$ per query --- followed by the SAM conflict
-  adapter.}
+  total borrowing $1-\lambda_0$ per query --- followed by the historical
+  mixture-mass cap that completes the final design. The SAM conflict
+  adapter (dashed) is a sensitivity analysis only and is not part of the
+  final design.}
   \label{fig:pipeline}
 \end{figure}
 
@@ -311,15 +326,19 @@ the evidence for each decision graded explicitly: the set-level decisions
 (when to borrow, and how much in total, under an explicit cap) are the ones
 our data support, while donor-level discrimination remains an architectural
 capability that is not empirically demonstrated;
-(iii)~\emph{the capped final design and its calibration frames}: a
-borrowed-mass cap fixed a priori at $0.5$, a corpus-estimated donor--query
+(iii)~\emph{the capped final design and its assessment frames}: a
+historical mixture-mass cap of $0.5$ fixed before the cap analyses, a
+corpus-estimated donor--query
 drift distribution --- to our knowledge the first such measurement on
-registry ORR data --- used as the mixing measure of an empirical-mixture
-threshold calibration with a pre-specified worst-case ceiling, an
+registry ORR data --- used as the mixing measure of an exploratory
+corpus-specific decision analysis with a tolerated pointwise inflation
+ceiling, an
 independent large validation batch so that threshold selection and
-error-rate assessment never share simulation data, and worst-case
+error-rate assessment never share simulation data, size-matched power
+comparisons so liberality cannot masquerade as benefit, and worst-case
 reporting alongside, in explicit acknowledgement that strict unrestricted
-type~I control provably forfeits all power gains from borrowing [28];
+type~I control forfeits all power gains from borrowing in one-parameter
+settings of this kind [28];
 (iv) an EB-referenced, leakage-partitioned, availability-tiered evaluation
 protocol that scores every design-time prior against an intercept-only
 empirical-Bayes reference, assesses outcome-adaptive layers (a transparent
@@ -731,7 +750,7 @@ and conflict adaptation is requested.
 A conflict adapter in the style of the self-adapting mixture (SAM)
 prior [11] is evaluated as a named sensitivity analysis for the
 \emph{uncapped} selective prior. It is not part of the final design
-(Section~\ref{sec:cap}): the borrowed-mass cap there achieves the same
+(Section~\ref{sec:cap}): the mixture-mass cap there achieves the same
 worst-case protection at lower power cost, and the simulation reports both
 so the redundancy is measured rather than asserted.
 The adapter downweights historical components when the pseudo-query outcome
@@ -772,36 +791,46 @@ Section~\ref{sec:twohead} supplies the design-time counterpart of the same
 instinct: it withholds borrowing using candidate-set features available before
 the outcome exists, rather than the outcome itself.
 
-\subsection{Borrowed-mass cap and the final design}
+\subsection{Historical mixture-mass cap and the final design}
 \label{sec:cap}
 The selective prior of Section~\ref{sec:twohead} is a mixture
 $\pi = \lambda_0\,\mathrm{Beta}(a_0,b_0) + \sum_i \lambda_i\,
 \mathrm{Beta}(\alpha_i,\beta_i)$ with $\lambda_0 + \sum_i \lambda_i = 1$;
-call $m = \sum_i \lambda_i$ its \emph{historical mass}. The borrowed-mass
-cap is the projection
+call $m = \sum_i \lambda_i$ its \emph{historical mass}. The historical
+mixture-mass cap (``the cap'' hereafter) is the projection
 \[
   \lambda_i \;\leftarrow\; \lambda_i \cdot \min\!\big(1,\; c/m\big),
   \qquad
   \lambda_0 \;\leftarrow\; 1 - \textstyle\sum_i \lambda_i ,
 \]
 so that historical components can never jointly carry more than $c$ of the
-prior mass; the excess returns to the anchored weak component. The cap is a
+\emph{prior mixture probability}; the excess returns to the anchored weak
+component. The cap is a
 deterministic function of the design-time prior, applies identically in
 simulation and at real-data scoring, requires no retraining, and preserves
 the learned \emph{allocation} across donors while bounding the learned
-\emph{total}. We fix $c = 0.5$ a priori: the historical evidence may at most
-match, and never outweigh, the anchored weak component that represents the
-current trial's own context --- an equal-footing rule in the spirit of
-Pocock's caution about historical controls [1]. The value was fixed in the
-previous revision, before any of the cap-sensitivity computations reported
-here; the full cap--power--error curve over $c \in \{0.1,\dots,0.9\}$
+\emph{total}. We are precise about what it does and does not bound: it caps
+component probability, \emph{not} information or influence --- a precise
+historical component at mass $0.5$ can still dominate the posterior when
+the data favour it, so $c = 0.5$ must not be read as ``at most half the
+information,'' and the equal-footing motivation (historical evidence
+should not carry more prior probability than the anchored representation
+of the current trial's own context, in the spirit of Pocock's caution
+[1]) is a heuristic, not a theorem. The cap's actual protection is
+therefore measured rather than asserted: posterior-influence diagnostics
+on real data and precision-stress simulations (donor arm sizes $\times 4$;
+anchor precision $\times 4$ and $\times 1/4$) are reported in
+Section~\ref{sec:goldsim-results}. The value $c = 0.5$ was fixed before
+any of the round-4 cap analyses (we do not call it a priori in the strict
+sense: it was chosen during a revision cycle, after earlier rounds of data
+contact); the full cap--power--error curve over $c \in \{0.1,\dots,0.9\}$
 (Section~\ref{sec:goldsim-results}) is reported so the reader can see what
 the choice trades away, and neighbouring caps are carried as sensitivity
 analyses in every real-data tier.
 
 \paragraph{The final design.} The complete specified design of this paper is
 the \emph{capped selective prior}: selective two-head allocation
-(Section~\ref{sec:twohead}), EB anchor, borrowed-mass cap $c = 0.5$, and a
+(Section~\ref{sec:twohead}), EB anchor, mixture-mass cap $c = 0.5$, and a
 success threshold calibrated as specified in
 Section~\ref{sec:goldsim}. It contains no outcome-adaptive component:
 the SAM adapter of Section~\ref{sec:sam} is measured to be largely redundant
@@ -923,7 +952,7 @@ Borrowing head-to-head + calibration & held-out split 281; development set 1{,}4
 Selective / two-head training & 80\%/20\% split (seed 20260603) & Fit on 80\%; the 20\% is out-of-fit but not out-of-development (see provenance paragraph) & ORR \\
 Forward validation (outcome-fit temporal split) & disjoint windows 181/204/390 (train 632/813/1{,}017) & Each window $(c_k,c_{k+1}]$ scored once by the model and EB anchor refit on data $\le c_k$ & ORR \\
 Donor-availability analysis & same windows; as-of-cutoff pools 323/494/651 & Training queries and donors restricted to results posted by the cutoff; scoring donors to results posted before each query's start & ORR \\
-Primary analysis (proxy $\times$ title-screened) & title-screened windows 128/155/306; pools 221/336/444 & Registry-availability proxy intersected with the audit-informed title-screened ORR subset; final design (cap $0.5$) scored alongside the uncapped ablation; upper-bound analyses labelled hypothetical & strict ORR (title-screened) \\
+Primary analysis (proxy $\times$ title-screened) & title-screened windows 128/155/306; pools 221/336/444 & Registry-availability proxy intersected with the audit-informed title-screened ORR subset; final design (cap $0.5$) scored alongside the uncapped ablation; upper-bound analyses labelled hypothetical & binary response-type, title-screened ($\approx 80\%$ strict-ORR purity) \\
 Gold-standard \& external-control simulation & 2{,}000 replicates per cell & Known-truth simulation (no real-data leakage) & Simulated binary endpoint \\
 Extraction-quality audit & 7{,}173 trials (26{,}603 primary-endpoint arm rows); single-rater author audits: 80 stratified + 60 out-of-sample rows & Automated consistency checks + synthetic round-trip ($8/8$) + six-item single-rater registry check (Section~\ref{sec:limitations-data}) & All extracted counts \\
 \bottomrule
@@ -1166,13 +1195,18 @@ nominal $0.025$ as the achievable reference level.
 jointly with the frame in which its threshold is calibrated, and the frames
 differ in what they concede. Under \emph{unrestricted worst-case} control ---
 type I error $\le 0.025$ at every conflict value, however large --- no
-borrowing method can retain a power advantage over no borrowing; this is not
-a defect of any particular architecture but a general result [28], which our
-grid reproduces empirically. We therefore report the worst-case threshold
-$\tau^{*}$ (the smallest threshold whose worst-case type I error over all
-null cells is $\le 0.025$, computed from per-replicate posterior
-probabilities, so any threshold is evaluable offline) for completeness, and
-calibrate the final design in an \emph{empirical-mixture} frame instead. Its
+borrowing method can retain a power advantage over no borrowing in
+one-parameter settings of the present kind, where the test with the
+external information fixed admits a UMP or UMP-unbiased competitor [28];
+our single-arm one-sided binomial design is within that scope, our grid
+reproduces the conclusion empirically, and we do not extrapolate it beyond
+that scope. We therefore report the worst-case threshold
+$\hat\tau^{*}$ (the smallest threshold whose worst-case type I error over
+all null cells is $\le 0.025$; an \emph{empirical-quantile} estimate from
+stored per-replicate posterior probabilities, not a closed-form quantity)
+for completeness, and accompany the final design with a
+\emph{corpus-specific decision analysis}, which we label
+\emph{exploratory} throughout. Its
 mixing measure is estimated from the corpus itself: for every title-screened
 query with at least two gated title-screened donors we compute the per-query
 mean donor--query drift on the empirical-logit scale, deconvolve the
@@ -1180,17 +1214,29 @@ sampling noise by the method of moments, and discretise the resulting normal
 law (mean $+0.12$, SD $1.33$ logits) onto the two-sided uniform-shift grid
 $\{-1.5, \dots, +1.5\}$, edge bins absorbing the tails. The mixture
 threshold $\tau_{\mathrm{mix}}$ is the smallest threshold $\ge 0.975$ whose
-drift-weighted average type I error is $\le 0.025$, subject to a
-pre-specified hard ceiling: worst-case type I error at
-$\tau_{\mathrm{mix}}$ over \emph{all} null cells (two-sided uniform and
-partial-conflict) may not exceed $0.05$, twice nominal. Average control
-under an empirically grounded mixing measure plus a bounded worst case is
-what the mixture frame guarantees; it does not guarantee strict control at
-any single adverse drift, and we say so wherever the design is recommended.
-Thresholds and the cap were selected on a $2{,}000$-replicate-per-cell
-selection batch and then re-evaluated, unchanged, on an independent
-$10{,}000$-replicate-per-cell validation batch simulated under a fresh seed
-base, reporting per-cell type I error, the worst cell with its
+drift-weighted average type I error is $\le 0.025$ on the selection batch,
+subject to a pre-specified \emph{tolerated pointwise inflation ceiling}:
+type I error at $\tau_{\mathrm{mix}}$ in \emph{any} null cell (two-sided
+uniform and partial-conflict) may not exceed $0.05$. The ceiling is a
+declared tolerance --- twice nominal --- not a derived quantity: we have no
+utility function or regulatory argument that fixes it, and a reader who
+tolerates less inflation should read the per-cell profiles directly. We are
+equally explicit about what this analysis is not: the mixing measure maps
+\emph{observed} corpus drift onto the simulation's \emph{latent uniform}
+shift, is estimated from the same corpus the method is evaluated on rather
+than from a deployment population, is used for both null and alternative
+averaging, and rests on a normal approximation --- so the drift-weighted
+averages are a decision-analytic summary under a documented, imperfect
+mixing measure, \emph{not} a verified average frequentist guarantee.
+Robustness to the mixing measure (nonparametric, stratified, bootstrap,
+and canonical alternatives) is therefore reported alongside, and all
+comparisons between designs are additionally made \emph{size-matched}:
+thresholds interpolated so that competing designs have identical validated
+average type I error, so a difference in liberality can never masquerade
+as a power benefit. Thresholds and the cap were fixed on a
+$2{,}000$-replicate-per-cell selection batch and re-evaluated, unchanged,
+on an independent $10{,}000$-replicate-per-cell validation batch under a
+fresh seed base, reporting per-cell type I error, the worst cell with its
 Clopper--Pearson $95\%$ upper confidence bound, and mixture power ---
 so threshold selection and error-rate assessment never share simulation
 data. Because the query sample size is ancillary (fixed by design in a real
@@ -1276,7 +1322,8 @@ without the endpoint restriction ($-0.001$, CI $[-0.017, +0.016]$;
 available-donor subgroup $-0.003$, CI $[-0.072, +0.072]$). The primary
 conclusion of the real-data evaluation is therefore: \emph{no demonstrated
 predictive gain on decision-time-available data} --- the final design is
-safe but not yet useful there, the uncapped ablation is actively harmful,
+predictively neutral but not yet useful there, the uncapped ablation is
+actively harmful,
 and training-pool size together with registry maturation is the binding
 constraint.
 
@@ -1290,15 +1337,17 @@ $+0.173$) --- the failure is systematic, not a training accident.
 \emph{Equal-size composition control}: models trained on random subsamples
 of the \emph{full} title-screened pools downsampled to the availability
 pools' sizes ($221/336/444$) --- same size, no availability restriction ---
-are harmful to the same degree (engaged subgroup $+0.100$/$+0.162$/$+0.131$
-over three draws), so the harm tracks pool \emph{size}, not
+are harmful to a comparable degree in every one of eight draws (engaged
+subgroup $+0.082$ to $+0.230$, mean $+0.13$; per-draw bootstrap intervals
+in the released artifact), so the harm tracks pool \emph{size}, not
 availability-specific composition. \emph{Dose--response}: training on
 $25\%/50\%/100\%$ of the full pools moves the engaged subgroup
 monotonically from harm toward the full-pool models' neutrality
-(Section~S2 for the curve), completing the attribution: small training
+(Section~S2 for the curve). Together these experiments \emph{support} ---
+we do not claim they complete --- the attribution: small training
 pools make the learned allocation over-confident, the cap bounds the
-consequences, and pool growth --- registry maturation --- is what removes
-the cause.
+consequences, and pool growth --- registry maturation --- is the expected
+remover of the cause.
 
 \begin{table}[htbp]
 \centering
@@ -1380,11 +1429,14 @@ $[+0.073,+0.237]$), the best-tuned robust-MAP ($3.0427$), and the classical
 comparators all sit \emph{above} it. Much of what borrowing appeared to add
 over the flat $\mathrm{Beta}(1,1)$ prior ($3.1641$) was marginal-distribution
 information that a two-parameter fit supplies for free. Second, the
-\emph{selective} model is the only design-time prior below the EB reference:
-test NLL $2.8716$, paired $\Delta$ $-0.0295$ (CI $[-0.0722,+0.0109]$) against
-EB and $-0.0504$ (CI $[-0.1066,+0.0003]$) against the stratified EB variant
+selective architecture supplies the only design-time priors below the EB
+reference: the final design (capped) at
+test NLL $2.8765$, paired $\Delta$ $-0.0247$ (CI $[-0.0588,+0.0097]$), and
+its uncapped ablation at $2.8716$, $\Delta$ $-0.0295$
+(CI $[-0.0722,+0.0109]$; $-0.0504$, CI $[-0.1066,+0.0003]$ against the
+stratified EB variant)
 --- consistent leads whose intervals narrowly include zero (stable across
-five training seeds: $-0.029$ to $-0.038$). Third, the
+five training seeds: $-0.029$ to $-0.038$ uncapped). Third, the
 \emph{architecture matters, and the attribution is now exact}: against the
 fixed-budget predecessor the
 selective model improves by $-0.0581$ (CI $[-0.1170,-0.0026]$), a significant
@@ -1406,9 +1458,13 @@ historical candidates are expert-approved for borrowing.
 \begin{table}[htbp]
 \centering
 \caption{EB-referenced borrowing head-to-head: mean beta-binomial predictive
-NLL (lower is better) on the $20\%$ held-out split ($n=281$; primary
-comparison) and on the full development set ($n=1{,}407$; includes training
-outcomes for learned rows and EB fits, reported for context). Design-time
+NLL (lower is better) on the $20\%$ held-out split ($n=281$; the
+\emph{principal upper-bound comparison} --- the primary analysis is
+Table~\ref{tab:primary}) and on the full development set ($n=1{,}407$;
+includes training
+outcomes for learned rows and EB fits, reported for context). The final
+design row is the capped selective prior; the uncapped selective row is
+its ablation. Design-time
 priors are fixed before the scored outcome; outcome-adaptive rows consult the
 scored outcome through the SAM adapter, carry a partly mechanical advantage
 (Section~\ref{sec:sam}), and are not compared as equals --- their proper
@@ -1420,7 +1476,8 @@ evaluation is the simulation of Section~\ref{sec:goldsim-results}.}
 Method & Family & Test NLL ($n{=}281$) & Development NLL ($n{=}1{,}407$) \\
 \midrule
 \multicolumn{4}{l}{\emph{Design-time priors}}\\
-\textbf{selective} & learned, EB anchor & \textbf{2.8716} & 2.8335 \\
+\textbf{Final design (cap $0.5$)} & capped selective & \textbf{2.8765} & 2.8411 \\
+selective (uncapped ablation) & learned, EB anchor & 2.8716 & 2.8335 \\
 EB (intercept-only) & marginal reference & 2.9012 & 2.8992 \\
 EB (disease-stratified) & marginal reference & 2.9221 & 2.8688 \\
 two\_head (fixed budget) & learned ablation & 2.9297 & 2.8957 \\
@@ -1447,18 +1504,14 @@ likelihood: the current ORR point-prediction correlation was low, indicating
 the model is better viewed as a borrowing-weight calibration model than as an
 ORR regression model.
 
-To answer whether a standard robust prior would suffice, Table~\ref{tab:headtohead}
+To answer whether a standard robust prior would suffice,
+Table~\ref{tab:headtohead}
 includes a tuned robust
-meta-analytic-predictive (MAP) prior [5] in the style of the RBesT tools [15]
-(a robustified mixture of a pooled MAP
-component and a vague component). Its best-tuned configuration reached test
-NLL $3.043$ --- better than flat-anchored borrowing but above the plain EB
-reference, and sensitive to its robustification weight, degrading to $3.198$
-at $w = 0.9$ as a single pooled MAP over-borrowed
-from homogeneously treated historical evidence. The comparison that matters
-for practice is therefore not ``robust prior versus naive borrowing'' but
-``does any candidate-level construction beat the marginal fit,'' and on that
-comparison only the selective architecture qualifies.
+meta-analytic-predictive (MAP) prior [5] in the style of the RBesT tools
+[15]: its best-tuned configuration ($3.043$) beats flat-anchored borrowing
+but not the plain EB reference, so the practical comparison is ``does any
+candidate-level construction beat the marginal fit,'' and only the
+selective architecture qualifies (tuning details in Supplement~S3).
 
 \begin{figure}[htbp]
   \centering
@@ -1496,9 +1549,11 @@ matures; none of it carries decision-time evidential weight
 (the availability-consistent primary analysis is
 Section~\ref{sec:primary-results}).
 
-Pooled over the $775$ future trials (Table~\ref{tab:forward}), the selective
-prior achieved NLL $2.8175$ versus $2.8440$ for the past-fit EB reference
-(paired $\Delta$ $-0.0266$, $95\%$ CI $[-0.0591,+0.0064]$) and $2.8839$ for
+Pooled over the $775$ future trials (Table~\ref{tab:forward}), the final
+design (capped) achieved NLL $2.8027$ versus $2.8440$ for the past-fit EB
+reference (paired $\Delta$ $-0.0413$, $95\%$ CI $[-0.0625,-0.0202]$); its
+uncapped ablation reached $2.8175$
+($\Delta$ $-0.0266$, CI $[-0.0591,+0.0064]$) and $2.8839$ for
 the fixed-budget predecessor ($\Delta$ $-0.0665$, CI $[-0.0993,-0.0346]$ ---
 the architectural gain replicates out of time). Per window, the selective
 lead over EB was $-0.0062$ (CI $[-0.0874,+0.0855]$), $-0.0074$
@@ -1560,8 +1615,11 @@ and none of it survives the registry-availability proxy of the primary
 analysis above. Restricting this upper-bound tier to the title-screened ORR
 subset preserves the pattern for the uncapped prior (retrained
 title-screened pooled $\Delta$ $-0.034$, CI $[-0.074,+0.007]$; frozen-model
-title-screened filtering $-0.033$, CI $[-0.068,+0.001]$), so endpoint
-contamination was not driving it.
+title-screened filtering $-0.033$, CI $[-0.068,+0.001]$) --- so the
+direction of the advantage does not depend on the unscreened endpoint mix,
+though because the screened subset itself retains $\approx 20\%$ non-ORR
+endpoints (Section~\ref{sec:eval}), none of these results should be read
+as established for a pure-ORR population.
 
 \begin{figure}[htbp]
   \centering
@@ -1587,16 +1645,20 @@ refits; donor availability at decision time NOT enforced; see the primary
 analysis of Section~\ref{sec:primary-results} for the availability-consistent
 result, which shows no benefit). NLL pooled over the three windows
 ($n=775$); paired delta versus the past-fit intercept-EB reference with
-bootstrap $95\%$ CI. The ensemble row is exploratory. Learned rows and EB
+bootstrap $95\%$ CI. The final design row is the capped selective prior
+(cap applied at scoring); the uncapped selective row is its ablation; the
+ensemble row is exploratory. Learned rows and EB
 anchors are refit on past-only data at each window's left cutoff.}
 \label{tab:forward}
 \begin{tabular}{lrl}
 \toprule
 Method & Pooled future NLL & Paired $\Delta$ vs EB [$95\%$ CI] \\
 \midrule
+\textbf{Final design (cap $0.5$)} & \textbf{2.8027} &
+$\mathbf{-0.0413}$ $[-0.0625,-0.0202]$ \\
 selective (5-seed ensemble) & 2.8084 & $-0.0356$ $[-0.0670,-0.0059]$ \\
 EB (disease-stratified) & 2.8152 & $-0.0288$ $[-0.0452,-0.0128]$ \\
-\textbf{selective} & \textbf{2.8175} & $-0.0266$ $[-0.0591,+0.0064]$ \\
+selective (uncapped ablation) & 2.8175 & $-0.0266$ $[-0.0591,+0.0064]$ \\
 EB (intercept-only) & 2.8440 & reference \\
 two\_head (fixed budget) & 2.8839 & $+0.0399$ $[-0.0071,+0.0872]$ \\
 fixed\_discount & 2.9483 & --- \\
@@ -1612,7 +1674,7 @@ power\_prior\_like & 3.1737 & --- \\
 \end{table}
 
 \paragraph{The final design on the upper-bound tiers.} Scoring the same
-tiers with the borrowed-mass cap of the final design
+tiers with the mixture-mass cap of the final design
 (Section~\ref{sec:cap}; the cap was fixed at $0.5$ in the previous revision,
 before any of these numbers were computed) \emph{improves} the upper-bound
 results rather than taxing them: pooled forward $\Delta$ versus EB
@@ -1621,11 +1683,14 @@ $-0.0266$ was not), held-out test $-0.0247$ (CI $[-0.0588,+0.0097]$),
 retrained title-screened subset $-0.0485$ (CI $[-0.0742,-0.0233]$), and
 frozen-model title-screened filtering $-0.0440$ (CI $[-0.0667,-0.0223]$);
 neighbouring caps $0.3$ and $0.7$ give the same picture (forward $-0.0365$
-and $-0.0380$, both significant). Restricting borrowed mass evidently acts
+and $-0.0380$, both significant). Restricting historical mass evidently acts
 as regularisation against over-confident allocations out of time, so the
-safety mechanism costs nothing on the favourable tiers --- the two
+harm-bounding mechanism costs nothing on the favourable tiers --- the two
 significant title-screened upper-bound intervals are the strongest real-data
-evidence for the final design, and they remain upper-bound-tier evidence.
+evidence for the final design; they remain upper-bound-tier evidence, and
+they inherit the title-screened subset's measured $\approx 80\%$
+strict-ORR purity, so they are statements about the screened
+binary-response estimand, not about a pure ORR population.
 
 \paragraph{Dependence and unit-provenance sensitivity.} Queries are distinct
 registered trials but share donors ($12.7\%$ of forward query pairs share at
@@ -1701,7 +1766,8 @@ Method & Mean NLL & PIT KS & Cov50 & Cov80 & Cov95 \\
 \midrule
 \multicolumn{6}{l}{\emph{Design-time priors}}\\
 EB (intercept-only) & 2.901 & \textbf{0.035} & 0.680 & 0.911 & 0.979 \\
-\textbf{selective} & \textbf{2.872} & 0.094 & 0.683 & 0.925 & 0.975 \\
+\textbf{Final design (cap $0.5$)} & \textbf{2.877} & 0.097 & 0.690 & 0.929 & 0.979 \\
+selective (uncapped ablation) & 2.872 & 0.094 & 0.683 & 0.925 & 0.975 \\
 two\_head (fixed budget) & 2.930 & 0.173 & 0.544 & 0.858 & 0.972 \\
 rule & 3.054 & 0.252 & 0.484 & 0.819 & 0.979 \\
 weak\_only ($\mathrm{Beta}(1,1)$) & 3.164 & 0.317 & 0.459 & 0.819 & 0.996 \\
@@ -1805,9 +1871,13 @@ now including the selective architecture. Three findings matter, and they cut
 in different directions.
 
 First, under exchangeability the selective prior converts its predictive
-gains into design gains. With no prior-data conflict its type I error was
-$0.024$ (nominal $0.025$; no-borrowing reference $0.037$) with power $0.613$
---- the best of any method that controlled the type I error, against $0.588$
+gains into design gains. With no prior-data conflict its \emph{estimated}
+type I error was
+$0.024$ (nominal $0.025$; no-borrowing reference $0.037$; $2{,}000$
+replicates, so this is a point estimate compatible with modest inflation,
+not demonstrated control) with power $0.613$
+--- the highest observed power among methods whose estimated error was
+$\le 0.025$ in that cell, against $0.588$
 for the fixed-budget predecessor, $0.556$ for the rule mixture, and $0.536$
 without borrowing. The EB-only reference is safe but pays for its ignorance of
 the candidates (power $0.497$); full pooling and the power prior remain
@@ -1840,7 +1910,7 @@ the selectivity that makes the prior efficient when
 borrowing is warranted is precisely what makes it exploitable by conflict
 that design-time features cannot see, so the uncapped prior must never be
 deployed bare --- but the component that discharges this obligation in the
-final design is the borrowed-mass cap, not SAM: the cap achieves a
+final design is the mixture-mass cap, not SAM: the cap achieves a
 tighter worst case ($0.044$ versus SAM's $0.070$) without consuming the
 outcome, and adding SAM on top of the cap is measurably redundant. What
 either mechanism provides is mitigation, not strict control, and we
@@ -1858,19 +1928,20 @@ $0.243$ under uniform displacement); per-replicate posterior probabilities
 are stored, so every design's rejection rate is available at any threshold.
 Three layers of findings follow.
 
-\emph{First, the worst-case frame is a dead end for every borrowing method,
-ours included.} Exact worst-case calibration (the empirical
-$97.5\%$ quantile over all null cells) yields $\tau^{*} = 0.9999$ for the
+\emph{First, the worst-case frame concedes everything in this setting, for
+every borrowing method, ours included.} Empirical-quantile worst-case
+calibration (the $97.5\%$ quantile over all null cells; a Monte Carlo
+estimate, not an exact threshold) yields $\hat\tau^{*} = 0.9999$ for the
 standalone selective prior --- control is technically reachable but
 degenerate, with no-conflict power $0.069$ against the no-borrowing
-reference's $0.448$ at its own $\tau^{*}$ --- and for every other design a
-$\tau^{*}$ at which no material power advantage over no borrowing survives
-(the largest apparent gain, $+0.7$ points at cap $0.1$, is within Monte
-Carlo error). This is the expected outcome, not a surprise: power gains
-from external information are typically impossible under strict type~I
-control [28]. We therefore report $\tau^{*}$ for completeness and calibrate
-the final design in the empirical-mixture frame of
-Section~\ref{sec:goldsim}.
+reference's $0.448$ at its own $\hat\tau^{*}$ --- and for every other design
+a $\hat\tau^{*}$ at which no material power advantage over no borrowing
+survives (the largest apparent gain, $+0.7$ points at cap $0.1$, is within
+Monte Carlo error). This is the expected outcome for a one-parameter,
+one-sided design of the present kind, where [28]'s conditions apply; we do
+not claim the impossibility for settings outside that scope. We therefore
+report $\hat\tau^{*}$ for completeness and turn to the corpus-specific
+decision analysis of Section~\ref{sec:goldsim}, labelled exploratory.
 
 \emph{Second, the cap--power--error curve} (Table~\ref{tab:capcurve})
 answers what the pre-committed cap value trades away. Along
@@ -1884,8 +1955,8 @@ references everywhere (favourable-band gain $+1$--$2$ points), while at the
 pre-committed $c = 0.5$ the gain where donors are approximately
 exchangeable reaches $+5$ points at the same mixture average --- the cap
 buys conditional upside with bounded downside rather than mixture-average
-performance. We retain $c = 0.5$ as fixed a priori
-(Section~\ref{sec:cap}) rather than re-tuning on this curve; SAM added to
+performance. We retain $c = 0.5$ as fixed before any of the round-4 cap
+analyses (Section~\ref{sec:cap}) rather than re-tuning on this curve; SAM added to
 any capped design changes worst cases by at most $0.004$ while costing
 $1$--$2$ points of mixture power (e.g.\ cap $0.5$: $0.5104$ with SAM versus
 $0.5210$ without), which is the measured redundancy behind its exclusion
@@ -1896,10 +1967,12 @@ from the final design.
 \small
 \caption{Cap--power--error curve on the selection batch ($2{,}000$
 replicates per cell; two-sided uniform plus partial-conflict null cells).
-$\tau^{*}$: exact worst-case threshold (worst null cell $\le 0.025$), with
-no-conflict power at $\tau^{*}$. $\tau_{\mathrm{mix}}$: mixture-calibrated
+$\hat\tau^{*}$: empirical-quantile worst-case threshold (worst null cell
+$\le 0.025$), with no-conflict power at $\hat\tau^{*}$.
+$\tau_{\mathrm{mix}}$: mixture-calibrated
 threshold (drift-weighted average type~I $\le 0.025$), with mixture power
-and worst-case type~I at $\tau_{\mathrm{mix}}$; the pre-specified ceiling
+and worst-case type~I at $\tau_{\mathrm{mix}}$; the pre-specified tolerated
+pointwise inflation ceiling
 for the latter is $0.05$. The final design row is bold; SAM variants shown
 for the redundancy measurement.}
 \label{tab:capcurve}
@@ -1907,7 +1980,7 @@ for the redundancy measurement.}
 \hline
  & Worst T1 & \multicolumn{2}{c}{Worst-case frame} &
 \multicolumn{3}{c}{Mixture frame} \\
-Design & @$0.975$ & $\tau^{*}$ & Power$_{s=0}$ & $\tau_{\mathrm{mix}}$ &
+Design & @$0.975$ & $\hat\tau^{*}$ & Power$_{s=0}$ & $\tau_{\mathrm{mix}}$ &
 Mix.\ power & Worst T1 \\
 \hline
 No borrowing         & 0.038 & 0.9857 & 0.448 & 0.9805 & 0.511 & 0.032 \\
@@ -1934,32 +2007,113 @@ design.}\\
 \end{tabular}
 \end{table}
 
-\emph{Third, the mixture frame delivers a small but genuine calibrated net
-benefit, concentrated where the method's premise holds}
-(Figure~\ref{fig:profiles}; Table~\ref{tab:calibrated} carries the
-validated values, which are the ones we cite). At the frozen thresholds,
-on the independent $10{,}000$-replicate batch, the final design's
-drift-weighted average type~I error is $0.0258$ (Monte Carlo se $0.0005$;
-calibrated no borrowing itself validates at $0.0251$ --- threshold
-selection contributes about $\pm 0.001$ of average-error uncertainty, which
-is the reason the validation batch exists), its worst null cell is
-$0.0360$ (Clopper--Pearson $95\%$ upper bound $0.0392$; Bonferroni over
-all $22$ null cells, $0.0416$ --- comfortably inside the pre-specified
-$0.05$ ceiling), and its mixture power is $0.5154$: a paired net benefit
-of $+0.0066$ (within-replicate MC se $0.0007$) over calibrated no
-borrowing and $+0.0021$ over the EB anchor alone. The validated profile
-shows where the average comes from: $+4.4$ to $+5.3$ points over no
-borrowing at drifts $0$ to $+1.0$, near parity at small negative drift,
-and a $4$--$7$-point deficit at strong negative drift, where borrowed-down
-donors cost power --- insurance economics, not dominance. Conditionally by
-query size (validation batch), the net benefit is $+0.0$ points in the
-smallest stratum ($n_0 = 20$--$28$: too little internal data for the
-learned allocation to help), $+1.3$ points in the middle stratum
-($n_0 = 29$--$37$), and $+0.7$ points in the largest --- borrowing needs
-enough internal data to be adjudicated, and its value peaks in mid-sized
-trials rather than the smallest ones. The SAM variant validates
-\emph{below} no borrowing ($-0.3$ points), completing the measured case
-for its exclusion from the final design.
+\emph{Third, the corpus-specific decision analysis (exploratory) finds at
+most a marginal size-matched average gain, with the conditional structure
+as the substantive content} (Figure~\ref{fig:profiles};
+Tables~\ref{tab:calibrated} and~\ref{tab:sizematched}). At the frozen
+thresholds, on the independent $10{,}000$-replicate batch, the final
+design's drift-weighted average type~I error is $0.0258$ (Monte Carlo se
+$0.0005$) against calibrated no borrowing's $0.0251$ --- so the frozen
+thresholds do \emph{not} deliver a point estimate $\le 0.025$, and the two
+designs are not at exactly the same size; both facts matter. Its worst
+null cell is $0.0360$ (Clopper--Pearson $95\%$ upper bound $0.0392$;
+Bonferroni over all $22$ null cells, $0.0416$ --- inside the tolerated
+pointwise inflation ceiling of $0.05$, which is to say: tolerated, not
+controlled at nominal). At those unequal sizes the mixture-power
+difference is $+0.0066$; \emph{size-matched} --- thresholds interpolated
+so every design's validated average type~I error equals no-borrowing's
+$0.0251$ --- two thirds of that difference disappears: $+0.0024$
+(within-replicate MC se $0.0007$) for the final design, $+0.0057$ for cap
+$0.3$, $-0.0015$ for the EB anchor alone (its apparent gain was entirely
+liberality), $-0.0010$ for cap $0.5$ + SAM. Under a conservative
+calibration requiring the Monte Carlo $95\%$ upper bound of average
+type~I to sit below $0.025$, the ordering is unchanged (no borrowing
+$0.5028$; final design $0.5055$; cap $0.3$ $0.5090$). The size-matched
+gain is robust in sign but not in magnitude across mixing measures
+(Table~\ref{tab:sizematched}): $+0.0010$ to $+0.0063$ under corpus-derived
+alternatives (nonparametric raw and shrunken, era- and
+availability-stratified, all-pairs; bootstrap of the mixing weights:
+$95\%$ interval $[+0.0006, +0.0044]$), rising steeply as the assumed
+drift distribution narrows ($+0.013$ under $N(0,1)$, $+0.040$ under
+$N(0,0.5)$, $+0.077$ at no drift) --- the average value of borrowing is a
+decreasing function of drift dispersion, and this corpus's dispersion is
+wide. We therefore no longer describe the mixture analysis as
+demonstrating a validated net power benefit: what it supports,
+exploratorily, is that the final design gives up essentially nothing on
+average under this corpus's drift profile, and that its material gains
+are \emph{conditional}: $+4.4$ to $+5.3$ points over no borrowing at
+drifts $0$ to $+1.0$ (where its own per-cell type~I error runs
+$0.024$--$0.036$, the tolerated inflation made explicit), near parity at
+small negative drift, and a $4$--$7$-point deficit at strong negative
+drift. Conditionally by query size, the frozen-threshold net difference
+is $+0.0$ / $+1.3$ / $+0.7$ points across the $n_0$ strata --- borrowing
+needs enough internal data to be adjudicated, and its value peaks in
+mid-sized trials. The SAM variant sits below no borrowing under every
+frame examined, completing the measured case for its exclusion from the
+final design.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Size-matched exploratory decision analysis on the validation
+batch. Top: mixture power at thresholds interpolated so each design's
+validated average type~I error equals no-borrowing's $0.0251$ (paired
+within-replicate MC se in parentheses), and at conservatively calibrated
+thresholds (MC $95\%$ upper bound of average type~I $\le 0.025$).
+Bottom: the final design's size-matched difference versus no borrowing
+under alternative mixing measures --- sign-robust, magnitude-variable,
+and steeply increasing as drift dispersion shrinks.}
+\label{tab:sizematched}
+\begin{tabular}{lccc}
+\hline
+Design & Size-matched power & $\Delta$ vs no borrow (se) & UCB-calibrated
+power \\
+\hline
+No borrowing & 0.5088 & --- & 0.5028 \\
+EB-only & 0.5073 & $-0.0015$ (0.0003) & 0.5028 \\
+Selective, cap $0.1$ & 0.5114 & $+0.0026$ (0.0003) & 0.5055 \\
+Selective, cap $0.3$ & 0.5144 & $+0.0057$ (0.0006) & 0.5090 \\
+\textbf{Final design (cap $0.5$)} & 0.5112 & $+0.0024$ (0.0007) & 0.5055 \\
+Cap $0.5$ + SAM & 0.5077 & $-0.0010$ (0.0006) & 0.4999 \\
+\hline
+\multicolumn{4}{l}{\emph{Final design's size-matched $\Delta$ under
+alternative mixing measures}}\\
+\multicolumn{4}{l}{corpus-derived: canonical $+0.0024$; nonparametric raw
+$+0.0010$; shrunken $+0.0063$;}\\
+\multicolumn{4}{l}{\quad era-stratified $+0.0025$; availability-stratified
+$+0.0024$; all-pairs $+0.0011$;}\\
+\multicolumn{4}{l}{\quad bootstrap of mixing weights: $95\%$ interval
+$[+0.0006, +0.0044]$}\\
+\multicolumn{4}{l}{canonical alternatives: $U(-1.5,1.5)$ $+0.0059$;
+$N(0,1)$ $+0.0127$; $N(0,0.5)$ $+0.0403$;}\\
+\multicolumn{4}{l}{\quad point mass at $0$ (no conflict) $+0.0767$}\\
+\hline
+\end{tabular}
+\end{table}
+
+\paragraph{What the cap does and does not bound: influence diagnostics and
+precision stress.} Because the cap bounds prior mixture probability rather
+than information (Section~\ref{sec:cap}), we measured its actual
+protection. On real data, the \emph{posterior} historical weight of the
+capped design exceeds $0.5$ for $28\%$ of upper-bound forward queries
+(exceeds $0.8$ for $1.3\%$; maximum $0.92$) --- Bayes updating can and
+does push influence past the prior cap when donors fit the outcome ---
+yet the resulting posterior-mean shifts relative to the anchor-only
+posterior stay modest (median $0.004$, $99$th percentile $0.063$, maximum
+$0.13$ on the rate scale; on the primary rows, median $0$, maximum
+$0.085$), and the capped weighted nominal borrowed size has median $6.2$
+and maximum $85$ observations. In simulation, a component-precision
+stress world with donor arm sizes scaled $\times 4$ \emph{amplifies} the
+uncapped prior's failure (type I error $0.14/0.32/0.48$ at shifts
+$0.5/1.0/1.5$, versus $0.06/0.15/0.24$ at standard precision) while the
+capped design stays at reference level throughout
+($0.025$--$0.040$; no borrowing $0.026$--$0.038$): against
+information-rich donors the cap's protection \emph{holds}. Its soft spot
+is the anchor, not the donors: scaling the \emph{anchor's} precision
+$\times 4$ lifts the capped design to $0.059$ at shift $1.0$ --- at, and
+marginally above, the tolerated ceiling --- echoing the external-control
+lesson that over-precise anchors, not capped donors, are where inflation
+enters ($\times 1/4$ anchor precision stays at $0.025$--$0.050$).
 
 \begin{table}[htbp]
 \centering
@@ -2096,7 +2250,7 @@ the current outcome: UIP-JS, which computes its weights against the current
 data, attained $0.813$ under the primary labels ($0.839$ under the
 process-compatible labels) in the same scenario. We regard this as the honest
 boundary of design-time borrowing rather than as a deficiency of the specific
-signal, and it is why the final design carries an explicit borrowed-mass cap
+signal, and it is why the final design carries an explicit mixture-mass cap
 and mixture-calibrated threshold (Section~\ref{sec:goldsim-results}) --- and
 why the outcome-dependent SAM layer remains reported as a sensitivity
 analysis: something must bound what design-time features cannot see.
@@ -2384,53 +2538,21 @@ Two-head, fixed budget ($0.80$) & 0.285 & \textbf{2.780} & yes \\
 \end{tabular}
 \end{table}
 
-\paragraph{Case 2 (withholding limits harm; held-out test query).} A second,
-independent example is
-NCT03046953, a completed single-arm Phase~2 trial of avelumab in relapsed or
-refractory peripheral T-cell lymphoma, with its objective response held out
-(true outcome 5 of 32, observed ORR $0.156$; a test-split query no model saw
-in training). Stage~1--2 again admitted six endpoint-compatible historical
-arms, but with modest usable information. Here borrowing is not clearly
-warranted (Table~\ref{tab:case2}): the EB reference reaches NLL $3.026$, and
-the fixed-budget model, forced to place $0.80$ of its mass on the candidates,
-does \emph{worse} ($3.182$). The selective model borrows only $0.40$ of its
-mass and lands within $0.021$ of the EB reference ($3.047$) --- the
-triage behaviour of Section~\ref{sec:triage-results} operating at the level of
-a single query: withholding does not beat the marginal reference here ---
-the EB prior remains best --- but it avoids most of the penalty that the
-forced budget pays. (The
-rule prior happens to do well here, $2.978$, because its size-tilted weights
-landed near the low observed rate; single queries carry no significance
-either way.)
-
-\begin{table}[htbp]
-\centering
-\caption{Second worked case study (NCT03046953, held-out ORR $5/32 = 0.156$;
-held-out test-split query). When borrowing is not clearly warranted, the
-fixed-budget prior is penalised for borrowing anyway; the selective prior
-withholds most of its mass and stays close to the EB reference.}
-\label{tab:case2}
-\begin{tabular}{lrrc}
-\toprule
-Prior & Predicted ORR & Held-out NLL & 95\% interval covers truth \\
-\midrule
-Weak-only $\mathrm{Beta}(1,1)$ & 0.500 & 3.497 & yes \\
-EB reference (no borrowing) & 0.284 & \textbf{3.026} & yes \\
-Rule prior & 0.355 & 2.978 & yes \\
-Selective (borrowed mass $0.40$) & 0.271 & 3.047 & yes \\
-Two-head, fixed budget ($0.80$) & 0.315 & 3.182 & yes \\
-\textit{Observed (held out)} & \textit{0.156} & --- & --- \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Read together, the two case studies show both halves of the intended
-behavior: borrowing is taken up where compatible evidence sharpens the
-held-out prediction (Case~1), and it is largely withheld where the marginal
+A second worked example --- NCT03046953, a held-out test-split query where
+borrowing is \emph{not} clearly warranted --- shows the complementary
+behaviour and is reported in full in Supplement~S3: the fixed-budget model,
+forced to place $0.80$ of its mass on the candidates, does worse than the
+EB reference ($3.182$ vs $3.026$), while the selective model borrows only
+$0.40$ and lands within $0.021$ of the reference --- the triage behaviour
+of Section~\ref{sec:triage-results} at the level of a single query. Read
+together, the two case studies show both halves of the intended
+behaviour: borrowing taken up where compatible evidence sharpens the
+held-out prediction (Case~1), and largely withheld where the marginal
 reference is the better bet, limiting the damage that a forced borrowing
-budget would otherwise cause (Case~2). Outcome-adaptive SAM rows are omitted
+budget would otherwise cause (Supplement~S3). Outcome-adaptive SAM rows
+are omitted
 here under the partition rule of Section~\ref{sec:eval}; the aggregate
-counterpart of this per-query behavior --- borrowing helping under
+counterpart of this per-query behaviour --- borrowing helping under
 exchangeability and doing harm under conflict --- is what the gold-standard
 simulation operating characteristics (Section~\ref{sec:goldsim-results}) and the
 external-control analysis (Section~\ref{sec:ec-results}) quantify in aggregate.
@@ -2457,7 +2579,7 @@ robust-MAP, and our own earlier fixed-budget learned model --- delivered
 of the apparent benefit of borrowing in flat-referenced comparisons, our own
 earlier drafts included, is marginal-distribution information in disguise.
 Second, \emph{selectivity plus an explicit cap is what earns back the
-difference, and the demonstrated value is bounded-cost insurance}: making
+difference, and the demonstrated value is harm-bounding}: making
 the total borrowing learnable per query, anchored at the EB fit, produced a
 significant paired improvement over the fixed-budget architecture in and out
 of time (robust to donor-block resampling), the only design-time prior at or
@@ -2466,8 +2588,10 @@ approaching the EB reference at lower NLL; capping that learned total at
 $0.5$ then \emph{improved} the out-of-time results further (the capped
 forward and title-screened deltas are the tiers' only significant
 selective-versus-EB intervals) while converting the primary analysis from
-harmful to neutral --- the profile of an insurance mechanism, gaining where
-the premise holds and bounding losses where it fails. The learned mass ranks
+harmful to neutral --- gaining where
+the premise holds and bounding (not eliminating: pointwise error inflation
+up to the tolerated ceiling remains) losses where it fails. The learned
+mass ranks
 the realized benefit of borrowing on unseen data (rank correlation $+0.16$,
 stable across windows), and where it is low the forced-borrowing damage of
 the predecessor ($+0.148$ against EB) is eliminated to neutrality
@@ -2482,15 +2606,18 @@ addressable population is best understood as growing with registry maturity
 --- $31\%$ of latest-window queries already have an available gated donor ---
 rather than as the whole retrospective corpus. Fourth, the known-truth
 simulation now cuts both ways for the revised architecture: under
-exchangeability the selective prior converts predictive gains into the best
-type-I-controlled power in our comparison, but its learnable total borrowing
+exchangeability the selective prior attains the highest observed power
+among methods whose \emph{estimated} type I error was $\le 0.025$ in that
+cell (a Monte Carlo statement at $2{,}000$ replicates, not proof of
+control), but its learnable total borrowing
 removes the fixed budget's accidental cap, its standalone type I error
 escapes under uniform whole-set conflict ($0.243$ at the strongest shift),
 and its per-source discount response is flat; no companion restores strict
 control --- the anchored SAM adapter only mitigates the inflation (worst
-case $0.070$), and it is the explicit borrowed-mass cap of the final design
-that bounds it ($0.044$, within the pre-specified $0.05$ ceiling) while
-average-case control comes from the mixture calibration --- while in the
+case $0.070$), and it is the explicit mixture-mass cap of the final design
+that bounds it ($0.044$, within the tolerated $0.05$ ceiling; the
+drift-averaged behaviour is characterised only in the exploratory
+decision analysis) --- while in the
 external-control world, trained on a conflict-rich draw, the same head
 learns to withhold external controls almost entirely, with operating
 characteristics that the anchor stress-test battery shows belong to the
@@ -2508,24 +2635,31 @@ control at thresholds where power has collapsed below the no-borrowing
 reference, so the rescue is degenerate, not absent by artefact), while the
 SAM companion had simulation evidence but could not be scored on real data.
 The final design resolves that composition problem \emph{structurally}: the
-borrowed-mass cap is a deterministic design-time projection, so the capped
+mixture-mass cap is a deterministic design-time projection, so the capped
 selective prior is one and the same object in both evidence systems --- on
-real data it is neutral in the primary analysis and significantly better
+real data it is predictively neutral in the primary analysis and
+significantly better
 than the EB reference on the title-screened upper-bound tiers, and in
-known-truth simulation it carries mixture-calibrated average type~I control
-with a bounded worst case and a small validated mixture power benefit. What
+known-truth simulation its worst-case behaviour is measured against a
+declared tolerance and its drift-averaged behaviour is characterised in an
+exploratory decision analysis. What
 remains outside any single evidence stream is expert-level donor
 discrimination (not demonstrated anywhere) and strict worst-case safety
-with power benefit (impossible for any borrowing method [28]). A sixth
+with power benefit (unavailable to any borrowing method in one-parameter
+settings of this kind [28]). A sixth
 observation grades the effectiveness claim by frame, and we commit to this
 grading wherever the method is described: \emph{conditional on approximate
 donor--query exchangeability} (small non-negative drift) the final
-design buys up to $5$ points of power over no borrowing at controlled
-average error (validated: $+4.4$ to $+5.3$ at drifts $0$ to $+1$,
-averaging about $+3$ over the $|{\rm drift}| \le 0.5$ band); \emph{averaged over the drift actually observed in this
-corpus} the net benefit is small but positive; \emph{under adversarial
+design buys up to $5$ points of power over no borrowing (validated:
+$+4.4$ to $+5.3$ at drifts $0$ to $+1$ --- where its own per-cell type~I
+error runs up to $0.036$, inside the tolerated $0.05$ ceiling but above
+nominal); \emph{averaged over the drift actually observed in this corpus,
+at matched validated size}, the exploratory net difference is marginal
+($+0.002$ to $+0.006$ across corpus-derived mixing measures) and grows
+only as drift dispersion shrinks; \emph{under adversarial
 drift} no design-time method retains a benefit, ours included, and the cap
-exists to bound the cost of being wrong.
+exists to bound --- at the tolerated ceiling, not at nominal --- the cost
+of being wrong.
 
 These findings locate the contribution against each of the three families
 surveyed in the Introduction. Relative to the statistical borrowing literature
@@ -2747,7 +2881,7 @@ cannot see inflates its standalone type I error to $0.243$ at the strongest
 shift we simulated --- four times the fixed-budget predecessor's --- and its
 per-source discount response is flat, so nothing at the donor level
 compensates. We therefore do not claim that
-prospective selection can stand alone: the borrowed-mass cap of the final
+prospective selection can stand alone: the mixture-mass cap of the final
 design is the component that bounds this failure mode (worst case $0.044$
 against $0.243$ uncapped, within the pre-specified $0.05$ ceiling), the
 outcome-dependent SAM layer is a simulation-evaluated sensitivity analysis
@@ -2755,8 +2889,9 @@ for the uncapped prior that mitigates but does not eliminate the inflation,
 and unrestricted worst-case calibration erases the net power benefit of any
 borrowing method [28] --- the design's power case lives in the
 empirical-mixture frame, whose own limitation is stated below
-(Table~\ref{tab:calibrated}). Third, the availability-controlled analysis of
-Section~\ref{sec:forward-results} bounds what the forward validation can
+(Table~\ref{tab:calibrated}). Third, the availability-controlled primary
+analysis of
+Section~\ref{sec:primary-results} bounds what the forward validation can
 claim: under the registry-availability proxy applied at each query's design
 date, most
 of the pooled advantage over the EB reference is not realisable, because the
@@ -2834,7 +2969,7 @@ borrowed-size discount $a_i$, with the weighted nominal borrowed sample size
 reported as bookkeeping (not a Morita-style prior ESS); simulation operating
 characteristics with Monte Carlo standard errors and a prior-data-conflict
 sweep; a prior-sensitivity and weight-tuning analysis; an explicit
-borrowed-mass cap with a calibrated threshold; and a pinned, reproducible
+mixture-mass cap with a calibrated threshold; and a pinned, reproducible
 evidence package. We emphasize that this is
 a retrospective methodological \emph{alignment with}, not a demonstration of
 \emph{compliance under}, that guidance. Any use in a real trial would require
@@ -2872,9 +3007,11 @@ predictive gain on decision-time-available data, and grades the harm: the
 uncapped availability-trained model is significantly harmful where borrowing
 engages (a training-pool-size effect, reproduced at matched pool sizes
 without the availability restriction), while the final capped design is
-neutral there --- safe but not yet useful. The favourable real-data
-evidence lives above the primary tier: the capped design's forward and
-title-screened upper-bound deltas are the evaluation's only significant
+neutral there --- predictively neutral but not yet useful. The favourable
+real-data
+evidence lives above the primary tier, on the title-screened estimand
+(measured $\approx 80\%$ strict-ORR purity): the capped design's forward
+and title-screened upper-bound deltas are the evaluation's only significant
 selective-versus-EB intervals; selective borrowing improves substantially
 on the flawed fixed-budget predecessor in and out of time under every
 resampling scheme and seed; an exploratory five-seed ensemble exceeds the
@@ -2886,20 +3023,23 @@ bound becomes realisable only as registry reporting matures. The
 known-truth simulation adds the design-side account in two frames. Under
 strict worst-case calibration over the two-sided conflict grid, no
 borrowing design retains a material power advantage --- the uncapped
-selective prior is rescuable only degenerately ($\tau^{*} = 0.9999$, power
-$0.069$) --- which is the general impossibility of [28], not a defect
-specific to this architecture. Under the empirical-mixture frame, whose
-mixing measure is the corpus-estimated drift distribution and whose
-worst case is capped by construction at the pre-specified $0.05$ ceiling,
-the final design carries a small validated net mixture-power benefit over
-calibrated no borrowing, concentrated exactly where approximate
-exchangeability holds and absent where it fails; thresholds were selected
-and validated on independent simulation batches. The SAM adapter is
+selective prior is rescuable only degenerately ($\hat\tau^{*} = 0.9999$,
+power $0.069$) --- the expected consequence of [28] in this one-parameter
+one-sided setting, not a defect specific to this architecture. The
+accompanying corpus-specific decision analysis is exploratory and we state
+it as such: with thresholds frozen before an independent validation batch
+and all comparisons made at matched validated size, the final design's
+drift-averaged power difference over calibrated no borrowing is marginal
+($+0.002$ to $+0.006$ across corpus-derived mixing measures), its
+conditional gains concentrate where approximate exchangeability holds,
+its pointwise error inflation is tolerated up to a declared $0.05$
+ceiling (observed worst cell $0.036$) rather than controlled at nominal,
+and the mixing measure itself is estimated from this corpus, not from a
+deployment population. The SAM adapter is
 measured to be redundant under the cap and is retained only as a
-sensitivity analysis; the frequentist statement we make for the final
-design is average-case control under a documented, empirically grounded
-mixing measure with a bounded worst case --- not strict control, which
-nothing borrowing can offer with a power benefit.
+sensitivity analysis. What the evidence supports, in one sentence: the
+cap bounds the predictive harm of learned borrowing, and a
+decision-time benefit has not been demonstrated.
 
 These are calibration and simulation results, not clinical ones. They do not
 establish average superiority of candidate-level borrowing over marginal
@@ -3087,8 +3227,16 @@ out-of-sample audit both reported; measured out-of-sample purity $80\%$,
 CI $61$--$92$). & Operationalises the strict-ORR
 estimand; primary; full binary-response corpus is a sensitivity
 population. \\
+Corpus-specific decision analysis & Drift-weighted operating
+characteristics under the corpus-estimated drift distribution, with
+size-matched between-design comparisons. & Exploratory throughout; not a
+verified average frequentist guarantee. \\
+Tolerated pointwise inflation ceiling & Pre-specified bound ($0.05$, twice
+nominal) that per-cell type I error may not exceed at the calibrated
+threshold. & A declared tolerance, not a derived or safety-justified
+quantity. \\
 Final design & Capped selective prior: selective allocation, EB anchor,
-borrowed-mass cap $0.5$, mixture-calibrated threshold; no outcome-adaptive
+mixture-mass cap $0.5$, mixture-calibrated threshold; no outcome-adaptive
 component. & The design every ``final design'' row refers to; uncapped
 selective is its ablation. \\
 SAM adapter & Prior-data conflict adapter used as a sensitivity analysis for

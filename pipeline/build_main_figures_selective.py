@@ -98,20 +98,22 @@ DESIGN = ["selective", "eb", "eb_strat", "two_head_old", "fixed_discount",
           "robust_map_w0.9", "map_like", "power_prior_like"]
 
 
-def barh_panel(ax, rows, methods, ref_val, xlab):
-    vals = sorted(((m, mean(rows, m)) for m in methods), key=lambda t: t[1], reverse=True)
+def barh_panel(ax, rows, methods, ref_val, xlab, extra=()):
+    vals = sorted(list(((m, mean(rows, m)) for m in methods)) + list(extra),
+                  key=lambda t: t[1], reverse=True)
     names = [v[0] for v in vals]
     xs = [v[1] for v in vals]
     y = range(len(names))
     ax.barh(list(y), xs, color=[C.get(m, "#9aa4ab") for m in names], edgecolor="white", height=0.72)
     for i, (m, v) in enumerate(vals):
         ax.text(v + 0.004, i, f"{v:.3f}", va="center", fontsize=7.5,
-                fontweight="bold" if m == "selective" else "normal")
+                fontweight="bold" if m in ("selective", "final_design") else "normal")
     ax.axvline(ref_val, color="#333", lw=1.0, ls="--")
     ax.text(ref_val, len(names) - 0.25, " EB ref.", fontsize=7, color="#333", va="bottom")
     ax.set_yticks(list(y))
     ax.set_yticklabels([LAB.get(m, m) for m in names])
-    ax.get_yticklabels()[names.index("selective")].set_fontweight("bold")
+    bold_key = "final_design" if "final_design" in names else "selective"
+    ax.get_yticklabels()[names.index(bold_key)].set_fontweight("bold")
     lo = min(xs) - 0.05
     ax.set_xlim(lo, max(xs) + 0.06)
     ax.set_xlabel(xlab)
@@ -128,14 +130,23 @@ def f1():
     d, lo, hi = paired(TEST, "selective")
     check("F1 delta selective", d, -0.0295, 2e-3)
 
+    CAPPED_TEST_NLL = 2.8765          # scripts/capped_table_rows_round5.py
+    CAPPED_TEST_DELTA = (-0.0247, -0.0588, 0.0097)  # real_capped summary
+    LAB["final_design"] = "final design (cap 0.5)"
+    C["final_design"] = "#1b9e77"
     fig, (axL, axR) = plt.subplots(1, 2, figsize=(9.6, 4.8), gridspec_kw={"width_ratios": [2.1, 1.3]})
     barh_panel(axL, TEST, DESIGN, mean(TEST, "eb"),
-               "Mean predictive NLL on held-out split (n = 281, lower is better)")
+               "Mean predictive NLL on held-out split (n = 281, lower is better)",
+               extra=[("final_design", CAPPED_TEST_NLL)])
     axL.set_title("a  Design-time priors vs the EB reference")
-    show = ["selective", "eb_strat", "two_head_old", "robust_map_w0.5", "rule"]
+    show = ["final_design", "selective", "eb_strat", "two_head_old",
+            "robust_map_w0.5", "rule"]
     ys = range(len(show))
     for i, m in enumerate(show):
-        d, lo, hi = paired(TEST, m)
+        if m == "final_design":
+            d, lo, hi = CAPPED_TEST_DELTA
+        else:
+            d, lo, hi = paired(TEST, m)
         axR.errorbar([d], [i], xerr=[[d - lo], [hi - d]], fmt="o", color=C.get(m, "#888"),
                      ms=5.5, capsize=3, lw=1.4)
         axR.text(hi + 0.006, i, f"{d:+.3f}", va="center", fontsize=7.5)
@@ -145,8 +156,9 @@ def f1():
     axR.invert_yaxis()
     axR.set_xlabel("Paired $\\Delta$NLL vs EB (95% bootstrap CI)")
     axR.set_title("b  Paired deltas vs EB")
-    fig.suptitle("Only the selective prior improves on the intercept-only EB reference",
-                 fontsize=11, fontweight="bold", y=1.02)
+    fig.suptitle("Hypothetical upper bound I: held-out comparisons vs the EB reference\n"
+                 "(availability-consistent primary analysis reported separately)",
+                 fontsize=11, fontweight="bold", y=1.05)
     save(fig, "F1_headtohead_nll")
 
 

@@ -89,6 +89,10 @@ class SimConfig:
     # Query arm size.
     query_n: tuple[int, int] = (20, 45)
     feature_noise: float = 0.55
+    # Round-5: multiplier on donor arm sizes (precision-stress worlds). The
+    # default 1.0 takes the released code path verbatim, so all released
+    # scenario seeds remain bit-identical.
+    donor_n_scale: float = 1.0
     # Design-based operating characteristics. When set, the query's true
     # response rate is pinned to this value by shifting the WHOLE system (query
     # and donors) on the logit scale by a common offset. Recentring rather than
@@ -190,7 +194,11 @@ def simulate_query(cfg: SimConfig, rng: np.random.Generator) -> dict:
             obs_bias += rng.normal(0.0, 0.07)
         theta_obs = float(np.clip(theta_true + obs_bias, 0.01, 0.99))
 
-        n_c = int(np.clip(rng.lognormal(np.log(38), 0.55), 8, 400))
+        if cfg.donor_n_scale == 1.0:
+            n_c = int(np.clip(rng.lognormal(np.log(38), 0.55), 8, 400))
+        else:
+            n_c = int(np.clip(rng.lognormal(np.log(38), 0.55) * cfg.donor_n_scale,
+                              8, 400 * cfg.donor_n_scale))
         y_c = int(rng.binomial(n_c, theta_obs))
 
         # ---- observed features (noisy, decoupled from the truth) ----

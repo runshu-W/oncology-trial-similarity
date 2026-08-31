@@ -119,10 +119,20 @@ def main() -> None:
                                  linewidth=1.4, color=RED, zorder=6))
 
     arrow(ax, cx, 0.346, 0.326)
-    node(ax, cx, 0.288, 0.46, 0.068, "SAM conflict adapter",
-         "under prior–data conflict, shrinks historical mass back "
-         "toward the anchored weak component",
-         edge=RED, lw=1.6)
+    node(ax, cx, 0.288, 0.46, 0.068, "Historical mixture-mass cap (final design)",
+         "λᵢ ← λᵢ · min(1, 0.5/Σλᵢ): historical mixture mass ≤ 0.5;\n"
+         "excess probability returns to the EB anchor",
+         edge=RED, title_color=RED, lw=2.0, face="#fdf6f4")
+    # side panel: SAM as sensitivity analysis only (not in the final design)
+    sam = FancyBboxPatch((0.782, 0.252), 0.187, 0.072,
+                         boxstyle="round,pad=0.004,rounding_size=0.014",
+                         facecolor="#f4f4f4", edgecolor="#8a8a8a",
+                         linestyle="--", linewidth=1.3, zorder=5)
+    ax.add_patch(sam)
+    ax.text(0.8755, 0.305, "SAM conflict adapter", ha="center", va="center",
+            fontsize=9.0, fontweight="bold", color="#555555", zorder=6)
+    ax.text(0.8755, 0.276, "sensitivity analysis only —\nnot part of the final design",
+            ha="center", va="center", fontsize=7.4, color="#555555", zorder=6)
     arrow(ax, cx, 0.254, 0.228, label="assembled prior p(θ)")
 
     node(ax, cx, 0.157, 0.50, 0.082, "EB-referenced, label-free validation",
@@ -130,8 +140,8 @@ def main() -> None:
          "calibration · known-truth simulation operating characteristics")
 
     ax.text(0.5, 0.038,
-            "Retrievability ≠ comparability ≠ borrowing behaviour: retrieval and reranking find candidates;\n"
-            "the selective two-head prior decides whether, from whom, and how much to borrow.",
+            "Retrievability ≠ comparability ≠ borrowing behaviour: retrieval and reranking find candidates; the selective\n"
+            "two-head prior decides whether, from whom, and how much to borrow; the mixture-mass cap bounds the total.",
             ha="center", va="center", fontsize=9.2, style="italic", color="#44505e")
 
     for path in (OUT_MAN / "F7_pipeline_schematic.pdf",

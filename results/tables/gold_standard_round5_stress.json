@@ -1,0 +1,285 @@
+{
+ "invariance_default_scale_ok": true,
+ "rows": [
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 0.0,
+   "method": "weak_only",
+   "reject": 0.0385
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 0.0,
+   "method": "selective",
+   "reject": 0.0345
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 0.0,
+   "method": "cap50",
+   "reject": 0.0245
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "null",
+   "shift": 0.0,
+   "method": "cap50_anchor_x4",
+   "reject": 0.034
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "null",
+   "shift": 0.0,
+   "method": "cap50_anchor_q4",
+   "reject": 0.0245
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 0.5,
+   "method": "weak_only",
+   "reject": 0.03
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 0.5,
+   "method": "selective",
+   "reject": 0.142
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 0.5,
+   "method": "cap50",
+   "reject": 0.0365
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "null",
+   "shift": 0.5,
+   "method": "cap50_anchor_x4",
+   "reject": 0.0415
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "null",
+   "shift": 0.5,
+   "method": "cap50_anchor_q4",
+   "reject": 0.028
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 1.0,
+   "method": "weak_only",
+   "reject": 0.026
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 1.0,
+   "method": "selective",
+   "reject": 0.3195
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 1.0,
+   "method": "cap50",
+   "reject": 0.04
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "null",
+   "shift": 1.0,
+   "method": "cap50_anchor_x4",
+   "reject": 0.0595
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "null",
+   "shift": 1.0,
+   "method": "cap50_anchor_q4",
+   "reject": 0.0495
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 1.5,
+   "method": "weak_only",
+   "reject": 0.0345
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 1.5,
+   "method": "selective",
+   "reject": 0.4765
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "null",
+   "shift": 1.5,
+   "method": "cap50",
+   "reject": 0.039
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "null",
+   "shift": 1.5,
+   "method": "cap50_anchor_x4",
+   "reject": 0.055
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "null",
+   "shift": 1.5,
+   "method": "cap50_anchor_q4",
+   "reject": 0.038
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 0.0,
+   "method": "weak_only",
+   "reject": 0.5705
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 0.0,
+   "method": "selective",
+   "reject": 0.73
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 0.0,
+   "method": "cap50",
+   "reject": 0.609
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "alt",
+   "shift": 0.0,
+   "method": "cap50_anchor_x4",
+   "reject": 0.609
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "alt",
+   "shift": 0.0,
+   "method": "cap50_anchor_q4",
+   "reject": 0.5525
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 0.5,
+   "method": "weak_only",
+   "reject": 0.5735
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 0.5,
+   "method": "selective",
+   "reject": 0.7905
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 0.5,
+   "method": "cap50",
+   "reject": 0.6005
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "alt",
+   "shift": 0.5,
+   "method": "cap50_anchor_x4",
+   "reject": 0.6385
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "alt",
+   "shift": 0.5,
+   "method": "cap50_anchor_q4",
+   "reject": 0.576
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 1.0,
+   "method": "weak_only",
+   "reject": 0.5605
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 1.0,
+   "method": "selective",
+   "reject": 0.797
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 1.0,
+   "method": "cap50",
+   "reject": 0.5485
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "alt",
+   "shift": 1.0,
+   "method": "cap50_anchor_x4",
+   "reject": 0.653
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "alt",
+   "shift": 1.0,
+   "method": "cap50_anchor_q4",
+   "reject": 0.5655
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 1.5,
+   "method": "weak_only",
+   "reject": 0.5425
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 1.5,
+   "method": "selective",
+   "reject": 0.8605
+  },
+  {
+   "axis": "donor_n_x4",
+   "world": "alt",
+   "shift": 1.5,
+   "method": "cap50",
+   "reject": 0.5295
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "alt",
+   "shift": 1.5,
+   "method": "cap50_anchor_x4",
+   "reject": 0.645
+  },
+  {
+   "axis": "anchor_prec",
+   "world": "alt",
+   "shift": 1.5,
+   "method": "cap50_anchor_q4",
+   "reject": 0.5475
+  }
+ ]
+}

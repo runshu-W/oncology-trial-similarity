@@ -104,10 +104,12 @@ The paper's primary real-data result (dedicated Table~2 and forest
 Figure~13); upper-bound analyses labelled hypothetical. \\
 The uncapped ablation's primary-tier harm is a training-pool-size effect. &
 Seed stability: engaged-subgroup harm $+0.102$--$+0.150$ under four extra
-seeds; equal-$n$ downsampled full-pool controls harmful to the same degree
-($+0.100/+0.162/+0.131$); dose--response $25\%/50\%/100\%$ of full pools:
-$+0.219/+0.198/+0.080$, canonical full-corpus model $-0.011$. & Supported
-(mechanism experiments on identical scoring rows). \\
+seeds; equal-$n$ downsampled full-pool controls harmful in all eight draws
+($+0.082$ to $+0.230$, mean $+0.13$); dose--response $25\%/50\%/100\%$ of
+full pools:
+$+0.219/+0.198/+0.080$, canonical full-corpus model $-0.011$. & Supports
+(not completes) the size attribution; mechanism experiments on identical
+scoring rows. \\
 The borrowed-mass cap improves, not taxes, the upper-bound tiers. & Capped
 ($c=0.5$) vs EB: forward $-0.0413$ CI $[-0.0625,-0.0202]$; retrained
 title-screened $-0.0485$ CI $[-0.0742,-0.0233]$; frozen title-screened
@@ -160,16 +162,30 @@ largest apparent gain over no borrowing at any $\tau^{*}$ is $+0.7$ points
 (cap $0.1$), within MC error; consistent with Kopp-Schneider et al.\ 2020.
 & Supported (simulation); the reference-matched framing of the previous
 revision is withdrawn. \\
-Under the empirical-mixture frame the final design carries a small
-validated net benefit with a bounded worst case. & Independent
-$10{,}000$-replicate validation at frozen thresholds: avg type I $0.0258$
-(MC se $0.0005$; no-borrowing $0.0251$), worst null cell $0.0360$
-[CP $95\%$ UCB $0.0392$; Bonferroni $0.0416$] vs ceiling $0.05$; mixture
-power $0.5154$, paired $+0.0066$ (se $0.0007$) vs no borrowing; profile
-$+4.4$ to $+5.3$ points at drifts $0$ to $+1$, deficits at strong negative
-drift; $n_0$ strata $+0.0/+1.3/+0.7$ points. & Supported (average-case
-control under the corpus-estimated drift mixture; not strict worst-case
-control). \\
+The corpus-specific decision analysis (exploratory) finds a marginal
+size-matched average difference and material conditional structure. &
+Independent $10{,}000$-replicate validation at frozen thresholds: avg type
+I $0.0258$ (MC se $0.0005$; no-borrowing $0.0251$; neither exactly
+$0.025$), worst null cell $0.0360$ [CP $95\%$ UCB $0.0392$; Bonferroni
+$0.0416$] vs the tolerated ceiling $0.05$; size-matched power difference
+vs no borrowing $+0.0024$ (paired MC se $0.0007$; cap $0.3$: $+0.0057$;
+EB-only: $-0.0015$), robust in sign across corpus-derived mixings
+($+0.0010$ to $+0.0063$; bootstrap $[+0.0006,+0.0044]$), rising as drift
+dispersion narrows ($+0.040$ under $N(0,0.5)$); conditional profile
+$+4.4$ to $+5.3$ points at drifts $0$ to $+1$ where per-cell type I runs
+to $0.036$; $n_0$ strata $+0.0/+1.3/+0.7$. & Exploratory
+(corpus-specific mixing measure; tolerated, not nominal, pointwise
+control; no claim of verified average frequentist control). \\
+The cap's protection holds under donor-precision stress; its soft spot is
+anchor precision. & Donor arm sizes $\times 4$: uncapped type I
+$0.14/0.32/0.48$ at shifts $0.5/1.0/1.5$ vs $0.06/0.15/0.24$ at standard
+precision; capped $0.025$--$0.040$ throughout (no borrowing
+$0.026$--$0.038$). Anchor precision $\times 4$: capped design reaches
+$0.059$ at shift $1.0$; $\times 1/4$: $\le 0.050$. Real-data posterior
+historical weight exceeds $0.5$ for $28\%$ of forward queries (max
+$0.92$) with posterior-mean shifts $\le 0.13$. & Supported (stress
+simulations + influence diagnostics); the cap bounds mixture probability,
+not information. \\
 SAM is measurably redundant under the cap and is excluded from the final
 design. & Cap-$0.5$+SAM validates at mixture power $0.5057$ ($-0.31$
 points vs no borrowing) with worst cell $0.0322$ vs the cap-only
@@ -420,6 +436,32 @@ heterogeneity cells. Round-4 artifacts under
 forest) and \texttt{F14} (mixture operating profile) built by
 \texttt{scripts/\allowbreak build\_round4\_figures.py}.
 
+\paragraph{Round-5 additions (this revision).} Size-matched comparisons:
+per-design size--power curves on the validation batch over the threshold
+grid $0.970$--$0.9999$; thresholds interpolated so each design's
+drift-weighted average type I equals the target (no-borrowing's validated
+$0.02513$, the nominal $0.025$, or the largest threshold whose MC $95\%$
+upper bound of average type I is $\le 0.025$); paired within-replicate
+power differences at the matched thresholds are released as
+\texttt{gold\_standard\_\allowbreak size\_matched.json}. Mixing-measure
+robustness:
+alternative mixings = nonparametric raw and shrunken histograms of the
+per-query mean drift, era- and availability-stratified normal mixtures,
+all-pairs, $N(0,0.5)$, $N(0,1)$, $U(-1.5,1.5)$, point mass at $0$; $500$
+bootstrap resamples of the $939$ drift queries propagate mixing-weight
+uncertainty (\texttt{gold\_standard\_mixing\_robustness.json}).
+Cap-protection stress: donor arm sizes $\times 4$ (fresh cells,
+\texttt{donor\_n\_scale} DGM field, default path bit-identical) and anchor
+precision $\times 4$/$\times 1/4$ on released cells
+(\texttt{gold\_standard\_round5\_stress.json}); posterior-influence
+diagnostics on real data (\texttt{influence\_diag.json}). Equal-$n$
+downsampling is extended to eight draws, released as
+\texttt{starvation\_summary.json} and
+\texttt{equal\_n\_\allowbreak extra.json}.
+Final-design rows for the held-out/development, forward, and calibration
+tables computed by \texttt{scripts/\allowbreak
+capped\_table\_rows\_round5.py}.
+
 \paragraph{Sensitivity artifacts.} Repository artifacts include section-weight
 sensitivity (\texttt{results/tables/\allowbreak section\_weight\_sensitivity.csv}),
 feature ablation, $\lambda_0$-frontier and conflict sweeps from the
@@ -429,5 +471,51 @@ every table in this revision
 artifact set); regeneration commands are given in
 \texttt{docs/reproducibility.md} and the figure scripts assert every plotted
 headline value against the manuscript numbers before writing output.
+
+\section{Material moved from the main text (round 5)}
+
+\paragraph{Robust-MAP tuning detail.} The tuned robust
+meta-analytic-predictive (MAP) prior of Table~3 of the main text is a
+robustified mixture of a pooled MAP component and a vague component in the
+style of the RBesT tools. Its best-tuned configuration reached test NLL
+$3.043$ --- better than flat-anchored borrowing but above the plain EB
+reference --- and is sensitive to its robustification weight, degrading to
+$3.198$ at $w = 0.9$ as a single pooled MAP over-borrows from
+homogeneously treated historical evidence.
+
+\paragraph{Second worked case study (withholding limits harm).}
+NCT03046953 is a completed single-arm Phase~2 trial of avelumab in
+relapsed or refractory peripheral T-cell lymphoma, with its objective
+response held out (true outcome $5$ of $32$, observed ORR $0.156$; a
+test-split query no model saw in training). Stages~1--2 admitted six
+endpoint-compatible historical arms with modest usable information.
+Borrowing is not clearly warranted here: the EB reference reaches NLL
+$3.026$; the fixed-budget model, forced to place $0.80$ of its mass on
+the candidates, does worse ($3.182$); the selective model borrows only
+$0.40$ of its mass and lands within $0.021$ of the reference ($3.047$).
+The rule prior happens to do well ($2.978$) because its size-tilted
+weights landed near the low observed rate; single queries carry no
+significance either way.
+
+\begin{table}[htbp]
+\centering
+\caption{Second worked case study (NCT03046953, held-out ORR
+$5/32 = 0.156$; held-out test-split query). When borrowing is not clearly
+warranted, the fixed-budget prior is penalised for borrowing anyway; the
+selective prior withholds most of its mass and stays close to the EB
+reference.}
+\begin{tabular}{lrrc}
+\toprule
+Prior & Predicted ORR & Held-out NLL & 95\% interval covers truth \\
+\midrule
+Weak-only $\mathrm{Beta}(1,1)$ & 0.500 & 3.497 & yes \\
+EB reference (no borrowing) & 0.284 & \textbf{3.026} & yes \\
+Rule prior & 0.355 & 2.978 & yes \\
+Selective (borrowed mass $0.40$) & 0.271 & 3.047 & yes \\
+Two-head, fixed budget ($0.80$) & 0.315 & 3.182 & yes \\
+\textit{Observed (held out)} & \textit{0.156} & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \end{document}
