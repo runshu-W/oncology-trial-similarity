@@ -1,0 +1,47 @@
+{
+ "R": 200,
+ "runs": {
+  "canonical@0.02513": {
+   "mean": 0.00247,
+   "eval_size_weak_mean": 0.02514,
+   "eval_size_cap50_mean": 0.02514,
+   "eval_size_gap_mean": -7e-06,
+   "frac_positive": 1.0
+  },
+  "canonical@0.025": {
+   "mean": 0.00249,
+   "eval_size_weak_mean": 0.02502,
+   "eval_size_cap50_mean": 0.02501,
+   "eval_size_gap_mean": -9e-06,
+   "frac_positive": 1.0
+  },
+  "N(0,1)@0.02513": {
+   "mean": 0.01276,
+   "eval_size_weak_mean": 0.02514,
+   "eval_size_cap50_mean": 0.02513,
+   "eval_size_gap_mean": -1.2e-05,
+   "frac_positive": 1.0
+  },
+  "N(0,0.5)@0.02513": {
+   "mean": 0.0397,
+   "eval_size_weak_mean": 0.02515,
+   "eval_size_cap50_mean": 0.02515,
+   "eval_size_gap_mean": -2e-06,
+   "frac_positive": 1.0
+  },
+  "N(+0.124,1)@0.02513": {
+   "mean": 0.01171,
+   "eval_size_weak_mean": 0.02514,
+   "eval_size_cap50_mean": 0.02513,
+   "eval_size_gap_mean": -1.4e-05,
+   "frac_positive": 1.0
+  },
+  "N(+0.124,0.5)@0.02513": {
+   "mean": 0.03615,
+   "eval_size_weak_mean": 0.02515,
+   "eval_size_cap50_mean": 0.02514,
+   "eval_size_gap_mean": -1.7e-05,
+   "frac_positive": 1.0
+  }
+ }
+}

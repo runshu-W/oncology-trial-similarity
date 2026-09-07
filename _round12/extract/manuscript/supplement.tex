@@ -1,0 +1,880 @@
+% =====================================================================
+%  Supplementary Material for
+%  "Retrospective predictive calibration of oncology trial similarity
+%   for Bayesian historical borrowing"
+%
+%  Standalone document. Compile with:
+%     latexmk -pdf supplement.tex
+%  Updated 2026-08-31 for the selective-borrowing revision: the
+%  Claim--Evidence Map matches the EB-referenced evaluation and the
+%  selective two-head architecture; Section S2 collects the precise
+%  configuration constants requested in pre-submission review.
+% =====================================================================
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+
+\title{Supplementary Material:\\
+Retrospective predictive calibration of oncology trial similarity
+for Bayesian historical borrowing}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+
+\section{Claim--Evidence Map}
+
+This table maps each principal claim in the main text to its supporting
+evidence and the boundary of that evidence. It is a cross-check aid: every
+``Status'' entry states the setting in which the claim is supported and does
+not assert clinical or regulatory validity. All real-data values correspond to
+the unit-corrected data; ``test'' is the held-out $20\%$ split ($n=281$;
+out-of-fit but not out-of-development, see the provenance paragraph of the
+main text), ``forward'' the pooled disjoint future windows ($n=775$,
+past-only refits). Design-time and outcome-adaptive comparisons are never
+mixed.
+
+\begin{longtable}{p{0.32\textwidth} p{0.39\textwidth} p{0.19\textwidth}}
+\toprule
+\textbf{Claim} & \textbf{Evidence} & \textbf{Status} \\
+\midrule
+\endhead
+Flat-referenced borrowing gains are largely marginal-distribution information
+in disguise. & Intercept-only EB (2 parameters, no candidates): test NLL
+$2.9012$ vs weak $3.1641$; every fixed-budget borrowing construction at or
+above EB (rule $3.0542$, paired $\Delta$ $+0.153$ CI $[+0.073,+0.237]$; best
+robust-MAP $3.0427$). & Supported (retrospective ORR). \\
+The selective architecture significantly improves on fixed-budget borrowing.
+& Paired vs predecessor: test $-0.0581$ CI $[-0.1170,-0.0026]$; forward
+$-0.0665$ CI $[-0.0993,-0.0346]$; stable across five seeds ($-0.058$ to
+$-0.075$) and under donor-block resampling ($[-0.105,-0.030]$). & Supported
+(test and forward). \\
+The architectural gain is an interaction, not a sum of parts. & $2\times2$
+factorial, pooled forward vs EB: flat/fixed $+0.0399$; EB anchor alone
+$+0.0002$; learnable $\lambda_0$ alone $+0.0413$; combination $-0.0266$. &
+Supported; attribution to ``selectivity alone'' not claimed. \\
+Single-fit selective priors consistently but not significantly lead the EB
+reference. & Test $\Delta$ $-0.0295$ CI $[-0.0722,+0.0109]$; forward
+$-0.0266$ CI $[-0.0591,+0.0064]$; negative under all five seeds (forward
+$-0.018$ to $-0.035$). & Supported as stated. \\
+An exploratory five-seed ensemble exceeds the EB reference on pooled
+(upper-bound) forward validation. & Ensemble NLL $2.8084$ vs $2.8440$;
+$\Delta$ $-0.0356$
+CI $[-0.0670,-0.0059]$; test-split
+ensemble inconclusive ($-0.0336$ CI $[-0.0755,+0.0070]$). & Exploratory
+(rule fixed within the revision cycle, not independently registered);
+upper-bound tier only. \\
+The most-recent-window lead is real and consistent with a learning curve. &
+Window-3 ensemble $\Delta$ $-0.0480$, Bonferroni $98.33\%$ CI
+$[-0.0947,-0.0024]$; composition-controlled comparison on the same 390
+queries: 1{,}017-example model beats 813-example model by $-0.0236$ CI
+$[-0.0424,-0.0057]$. & Supported; window-level residual confounding noted. \\
+The learned total borrowing ranks realized benefit on unseen data
+(uncapped-architecture mechanism diagnostic), and the structure
+survives the cap for the final design. &
+Uncapped: Spearman(mass, $\mathrm{NLL}_{EB}-\mathrm{NLL}_{sel}$) $= +0.16$ CI
+$[+0.08,+0.24]$, $+0.16$ in each window; hand rule $+0.14$. Final
+design (post-cap mass, capped NLL): $+0.136$ CI $[+0.064,+0.207]$;
+$+0.144/+0.151/+0.127$ by window; $281$-row tie atom at $0.5$. &
+Supported
+(modest, stable); final-design claims rest on the final-design
+numbers. \\
+The triage's demonstrated value is graded harm avoidance (coarse risk
+grouping, not a per-query ranking). & Uncapped mechanism diagnostic:
+lowest mass
+tertile predecessor $+0.148$ vs EB, selective $+0.003$ CI $[-0.007,+0.012]$;
+middle tertile $-0.054$ CI $[-0.089,-0.019]$; top tertile $-0.029$ CI
+$[-0.117,+0.060]$. Final design (capped): groups $+0.005$ / $-0.051$ /
+$-0.074$ (the $0.5$ atom, CI $[-0.121,-0.025]$); post-cap mass $= 0.5$
+for $36\%$ of forward queries. & Supported as grouping; the
+selection-rule comparison is descriptive only (neither superiority nor
+equivalence established). \\
+PRIMARY: no demonstrated predictive gain on decision-time-available
+data; the final
+capped design is not detectably different from the EB reference there;
+the uncapped ablation is harmful; the direct within-query
+capped-versus-uncapped contrast shows a tail-heavy but
+leave-one-out-robust mean reduction. &
+Registry-availability proxy $\times$ title-screened subset: final design
+pooled $+0.006$ CI $[-0.005,+0.016]$ (block $[-0.004,+0.016]$), engaged
+subgroup ($n=119$) $+0.030$ CI $[-0.021,+0.079]$; uncapped $+0.035$ CI
+$[+0.008,+0.067]$, engaged $+0.173$ CI $[+0.040,+0.324]$, win $38\%$;
+direct capped$-$uncapped pooled $-0.0289$ (ordinary
+$[-0.0530,-0.0091]$, block $[-0.0527,-0.0101]$), engaged $-0.1428$
+(block $[-0.2581,-0.0556]$; $50$ binding rows: median $-0.030$,
+trimmed$_{10}$ $-0.154$, LOO query/block ranges $[-0.030,-0.021]$;
+window means $-0.012/+0.004/-0.053$, Table~\ref{tab:s-tail});
+frozen canonical control shows no gain ($-0.002$ CI $[-0.015,+0.010]$);
+$4.2\%$
+of gated observations available, $2\%\to31\%$ of queries across windows. &
+The paper's primary real-data result (dedicated Table~2 and forest
+Figure~2); upper-bound analyses labelled hypothetical. \\
+The uncapped ablation's primary-tier harm is a training-pool-size effect. &
+Seed stability: engaged-subgroup harm $+0.102$--$+0.150$ under four extra
+seeds; equal-$n$ downsampled full-pool controls harmful in all eight draws
+($+0.082$ to $+0.230$, mean $+0.13$); dose--response $25\%/50\%/100\%$ of
+full pools:
+$+0.219/+0.198/+0.080$, canonical full-corpus model $-0.011$. & Supports
+(not completes) the size attribution; mechanism experiments on identical
+scoring rows. \\
+The mixture-mass cap improved the forward-tier mean (a tail-driven,
+insurance-like effect) and is directionally inconclusive on the
+title-screened tiers (direct
+within-query contrasts; post hoc
+redesign evaluation). & Direct capped$-$uncapped paired differences:
+forward $-0.0148$ (ordinary $[-0.0301,-0.0011]$, block
+$[-0.0299,-0.0014]$; $281/775$ binding; binding-row median $+0.021$,
+trimmed$_{10}$ $+0.017$ sign-flipped, LOO ranges $[-0.015,-0.012]$);
+retrained title-screened
+$-0.0147$ (block $[-0.0371,+0.0054]$); frozen $-0.0108$ (block
+$[-0.0260,+0.0029]$). Capped
+($c=0.5$) vs EB: forward $-0.0413$ CI $[-0.0625,-0.0202]$, block
+$[-0.0665,-0.0166]$; retrained
+title-screened $-0.0485$ CI $[-0.0742,-0.0233]$, block
+$[-0.0815,-0.0189]$; frozen title-screened
+$-0.0440$ CI $[-0.0667,-0.0223]$, block $[-0.0707,-0.0179]$; held-out
+test $-0.0247$ CI
+$[-0.0588,+0.0097]$; caps $0.3/0.7$ similar; uncapped counterparts
+non-significant ($-0.027/-0.034/-0.033$). & Post hoc exploratory redesign
+evaluation (the cap postdates examination of earlier uncapped results on
+these outcome sets); the title-screened paired intervals include zero
+--- compatible with both modest improvement and modest worsening, no
+directional conclusion; the capped-vs-EB
+intervals are significant, as is the exploratory five-seed ensemble. \\
+The directional upper-bound pattern survives title-based endpoint
+enrichment. &
+Retrained title-screened subset pooled $\Delta$ $-0.034$ CI
+$[-0.074,+0.007]$ ($n=589$); frozen-model title-screened filtering
+$-0.033$ CI $[-0.068,+0.001]$ (uncapped). & Directional survival only:
+with $\approx 20\%$ residual non-ORR endpoints, one rater, and wide PPV
+intervals, a causal exclusion of endpoint contamination is not
+supported. \\
+The endpoint canonicaliser is audit-informed and title-screened; its
+apparent accuracy is a resubstitution estimate, with a frozen-rule
+out-of-sample check added. & Apparent (resubstitution): $98.6\%$ on 74
+unambiguous rows from the audit the rules were iterated against ($100\%$
+sensitivity, $91.7\%$ specificity; one FP is a title--definition
+mismatch); corpus rates $73.1\%$ of queries, $84.0\%$ of donor
+observations; out-of-sample (rules frozen at recorded hash, 60 fresh
+blinded records, same single rater): accuracy $82.8\%$ CI $[70.6,91.4]$,
+sensitivity $85.7\%$, specificity $80.0\%$, subset purity (PPV) $80.0\%$
+CI $[61.4,92.3]$; 2 records indeterminate. & Resubstitution optimism
+confirmed and quantified; rules NOT retuned on the errors; not
+independent dual-rater validation. \\
+Shared-donor dependence does not drive the conclusions. & $12.7\%$ of query
+pairs share a gated donor; donor-block bootstrap CIs match query-level;
+leave-one-donor-out pooled deltas $-0.018$ to $-0.037$. & Supported;
+connected-components clustering degenerate and reported as such. \\
+The advantage concentrates in percentage-derived, recent, larger trials. &
+Count-reported query outcomes only: $-0.003$ CI $[-0.049,+0.047]$; dropping
+percentage-derived donor observations: $-0.001$ CI $[-0.022,+0.020]$;
+percentage-outcome group $-0.050$ (median year 2023). & Supported; the
+completed audit vindicates the percentage stratum ($42/42$ denominators). \\
+Selective calibration approaches the EB reference at lower NLL. & Test PIT-KS
+$0.094$ (EB $0.035$, fixed-budget $0.173$); coverage $0.683/0.925/0.975$ at
+nominal $0.50/0.80/0.95$. & Supported (held-out split). \\
+Under exchangeability the selective prior gives the highest observed power
+among methods with estimated type I error $\le 0.025$ in that simulated
+cell. & Simulation, no conflict: estimated type I $0.024$ ($2{,}000$
+replicates; a point estimate, not demonstrated control), power
+$0.613$ (predecessor $0.588$; no borrowing $0.536$; EB-only $0.497$). &
+Supported as a Monte Carlo observation. \\
+Standalone selective borrowing is unsafe under uniform whole-set conflict;
+SAM mitigates but does not restore control. & Type I $0.056/0.145/0.243$ at
+shifts $0.5/1.0/1.5$; selective+SAM $0.041/0.070/0.046$ (worst still
+$2.8\times$ nominal); partial-conflict cells easier (worst $0.112$
+standalone). & Supported (simulation); wording per round-3 review. \\
+Worst-case calibration is degenerate for the uncapped prior and yields no
+material gain for any design. & Exact $\tau^{*}=0.9999$ for standalone
+selective with power $0.069$ (no-borrowing $0.448$ at its own $\tau^{*}$);
+largest apparent gain over no borrowing at any $\tau^{*}$ is $+0.7$ points
+(cap $0.1$), within MC error; consistent with Kopp-Schneider et al.\ 2020.
+& Supported (simulation); the reference-matched framing of the previous
+revision is withdrawn. \\
+The corpus-specific decision analysis (exploratory) finds a small
+size-standardized average advantage, positive in this conditional
+analysis ($+0.0025$; all $200$ examined splits and $499/500$
+mixing-weight bootstrap resamples; conditional on the validation batch
+and estimated mixing), an order of magnitude
+larger under narrower drift; a cell-specific ROC-efficiency
+diagnostic locates a local advantage at small drift of either sign. &
+Independent $10{,}000$-replicate validation at frozen thresholds: avg type
+I $0.0258$ (MC se $0.0005$; no-borrowing $0.0251$; neither exactly
+$0.025$), worst null cell $0.0360$ [CP $95\%$ UCB $0.0392$; Bonferroni
+$0.0416$] vs the tolerated ceiling $0.05$. In-validation size-adjusted
+reanalysis: single-analysis point estimates positive ($+0.0024$ full
+batch; $+0.0057$ single cross-fit; $+0.0010$ to $+0.0063$ across
+corpus-derived mixings); deterministic-threshold repeated cross-fitting
+($R=200$) centres the
+difference near zero (mean $-0.0007$, median $-0.0009$; a descriptive
+range conditional on the validation batch, not a confidence interval),
+an artifact of threshold granularity; size standardization by
+randomized-boundary tests at a common target (training-half size
+exact) gives $+0.0025$ (split SD
+$0.0004$; central range $[+0.0018,+0.0032]$; all $200$ splits positive;
+matching the plug-in $+0.0024$) --- small, positive in this
+conditional analysis; the
+dispersion
+gradient is stable across the examined splits at the common target
+($+0.0128$
+under $N(0,1)$, $+0.0397$ under $N(0,0.5)$; location-held
+$+0.0117$/$+0.0362$; every split positive). ROC-efficiency
+diagnostic (per-cell null rejection $=0.025$, cross-fitted; conditions on
+the unknown true drift, not implementable): $\approx +0.07$ at
+$|{\rm drift}| \le 0.25$, fading through $\pm 0.5$--$0.75$, reversing to
+$-0.02$/$-0.03$ beyond $|1|$; partial-conflict cells track displaced
+fraction; $n_0$ strata $+0.0/+1.3/+0.7$ (frozen thresholds). &
+Exploratory
+(reanalysis thresholds estimated on the validation batch itself;
+corpus-specific mixing measure; tolerated, not nominal, pointwise
+control; no claim of verified average frequentist control). \\
+The cap's protection holds under donor-precision stress; its soft spot is
+anchor precision. & Donor arm sizes $\times 4$: uncapped type I
+$0.14/0.32/0.48$ at shifts $0.5/1.0/1.5$ vs $0.06/0.15/0.24$ at standard
+precision; capped $0.025$--$0.040$ throughout (no borrowing
+$0.026$--$0.038$). Anchor precision $\times 4$: capped design reaches
+$0.0595$ at shift $1.0$ (MC se $0.0053$; one-sided CP $95\%$ bound
+$0.069$) --- exceeding the tolerated ceiling; $\times 1/4$: $\le 0.050$.
+Real-data posterior
+historical weight exceeds $0.5$ for $28\%$ of forward queries (max
+$0.92$) with posterior-mean shifts $\le 0.13$. & Supported (stress
+simulations + influence diagnostics); the cap bounds mixture probability,
+not information. \\
+SAM is measurably redundant under the cap and is excluded from the final
+design. & Cap-$0.5$+SAM validates at mixture power $0.5057$ ($-0.31$
+points vs no borrowing) with worst cell $0.0322$ vs the cap-only
+$0.0360$; selection batch: worst-case changes $\le 0.004$, mixture power
+$-1.1$ points. & Supported; SAM retained as sensitivity for the uncapped
+prior only. \\
+The corpus-measured donor--query drift is wide, explaining why
+decision-time gains are hard. & Per-query mean drift (gated
+title-screened pairs, $n=939$): deconvolved $N(+0.12, 1.33^2)$ logits;
+median $|D| = 0.95$; $\approx 30\%$ of mass beyond $|1.5|$. & New
+measurement; the mixture frame's mixing measure. \\
+In the selective architecture the per-source discount response is flat;
+adaptivity migrates to the set level. & Borrowed size by true distance:
+selective $43.6/43.7/43.8/43.9$ (flat) vs fixed-budget-with-signal
+$31.3/30.4/28.0/23.6$ (declining). & Supported (simulation); reported as a
+mechanistic regression. \\
+Design-time signals of the kind used here cannot detect uniform whole-set
+conflict. & S4 primary-label ROC-AUC $0.43$--$0.45$ (all design-time methods
+below chance); outcome-dependent UIP-JS $0.813$ ($0.839$ process-compatible
+labels). & Supported (simulation; structural). \\
+In the external-control world the selective prior withholds borrowing and
+its safety is the anchor's, not the method's. & Selective rows coincide with
+EB-only at every drift; anchor battery: mean $-0.4$ logit $\Rightarrow$
+type I $0.104$--$0.126$; precision $\times4$ $\Rightarrow$ $0.033$
+($0.076$ het); heterogeneity (SD $0.3$) lifts the correct anchor to
+$0.041$--$0.049$; precision $\times1/4$ safe everywhere ($\le0.029$) with
+power $0.433$ vs $0.237$. & Supported (simulation battery); EC safety not
+claimed as method-level. \\
+The EC battery is a systematic stress test, not hyperparameter-uncertainty
+propagation; the latter is measured separately and is negligible. &
+Bootstrap of the anchor fit ($B=500$; refit reproduces the released anchor
+exactly): logit-mean $95\%$ range $\pm 0.06$, precision ratio
+$0.70$--$1.24$ (battery: $\pm 0.4$, $\times 4$); per-replicate propagation
+leaves type I at $0.011$--$0.019$ (canonical $0.010$--$0.019$), het cells
+$0.036$--$0.044$ (canonical $0.041$--$0.049$). & Supported; scopes stated
+explicitly. \\
+SAM layers are outcome-adaptive and scored separately, against each prior's
+own weak component. & OA rows recomputed under the released adapter with
+documented semantics: selective\_sam test $2.7995$ (KS $0.094$), two\_head\_sam
+$2.8154$, rule\_sam $2.9226$. & Supported; descriptive only. \\
+Numeric extraction integrity in the admitted subset is high, and the
+percentage-reconstruction path is vindicated. & Single-rater author audit, 80 stratified
+rows, six items vs the live registry: arm $98.8\%$, numerator $97.5\%$,
+denominator $97.5\%$, population $97.5\%$; all four jointly $93.8\%$ CI
+$[86.2,97.3]$; percentage stratum denominators $42/42$. & Supported
+(completed single-rater author audit). \\
+The two numeric errors found do not move the conclusions. & Proportion-row
+double misparse (one observation, one query) and registry-version drift on
+the most-shared donor ($4/12$ snapshot vs $4/13$ current, 307 examples);
+corrected sensitivity: test $-0.0295 \to -0.0298$, forward $-0.0266 \to
+-0.0273$. & Supported; guard added for the misparse signature. \\
+About one in five admitted ``ORR'' rows is a neighbouring binary response
+endpoint, the main residual data-quality limitation. & ORR-definition
+agreement $77.5\%$ CI $[67.2,85.3]$ (count-reported $60.7\%$,
+percentage-reported $83.3\%$); CR-only, CBR, pCR, composite remission,
+molecular response, one non-tumour endpoint. & Supported; endpoint
+canonicalisation identified as the fix; about $44\%$ of raw rows remain
+excluded by the admission rule (synthetic round-trip $8/8$). \\
+The endpoint-unit defect is quantified and corrected, and results were
+regenerated. & $804/3{,}319$ arm-level ORR rows provably wrong pre-correction;
+corpus $= 7{,}173$ trials, $26{,}603$ primary-endpoint arm rows;
+$1{,}470 \to 1{,}407$ examples; full re-run with fixed seeds. & Supported. \\
+Every partition is out-of-fit but none is out-of-development. & Provenance
+paragraph (Section 2.11) discloses what each split was exposed to at each
+stage; forward windows carry confirmatory weight for the pre-specified
+uncapped architecture comparisons only (not for the post hoc capped
+redesign); prospective registry
+vintages identified as the true lockbox. & Supported (disclosure). \\
+Reported learned results use genuine, freshly trained checkpoints, and the
+round-2 machinery reproduces the published numbers before extending them. &
+Selective replication drift $\le 1.4\times10^{-5}$; fixed-budget recompute
+drift $\le 4\times10^{-13}$; simulation datasets bit-identical to the
+released run, worst published-cell drift $0.0015$. & Supported. \\
+\bottomrule
+\end{longtable}
+
+\section{Configuration constants and reproducibility details}
+
+\paragraph{Candidate features (9 dimensions).} As defined in the main text:
+$s_i$ = Stage-2 overall similarity $/100$; disease, regimen, endpoint,
+follow-up, and eligibility match scores = the corresponding Stage-2 $0$--$5$
+dimension scores $/5$; result-quality score $/5$; negative red-flag severity
+$-\mathrm{rf}_i \in [-1,0]$; and $\log(1+n_i)$. Stage-2 dimension scores are
+produced by the deterministic reranker released with the code
+(\texttt{pipeline/\allowbreak oncology\_trial\_similarity\_pipeline.py}); the scoring
+rules, keyword tables, and gate conditions are implemented there verbatim and
+exercised by the released unit tests.
+
+\paragraph{Gate and rule prior.} The conservative gate multiplies factors for
+endpoint compatibility ($<1.5/5$ blocks), result usability ($0$ blocks),
+disease match ($<1.5/5$ scales by $0.2$; $<2.5/5$ by $0.6$), and low-severity
+red flags (scale $0.5$). Rule discounts $a^{\mathrm{rule}}_i$ follow the
+suitability ladder $0.75/0.40/0.15/0$; the rule prior fixes $\lambda_0=0.2$
+with a flat $\mathrm{Beta}(1,1)$ anchor.
+
+\paragraph{Selective model.} DeepSets encoder $\phi$: $9 \to 16 \to 16$
+(ReLU); score head $\rho$ and discount head: $32 \to 16 \to 1$; weak-component
+head $\psi$: $16 \to 16 \to 1$ on the pooled context. Training: Adam, learning
+rate $0.01$, $100$ epochs, full batch, seed $20260603$ (primary and every
+window refit); KL-to-rule weight $\rho = 0.1$ on normalised candidate
+allocation; listwise term disabled ($\eta = 0$); borrowed-information penalty
+$10^{-4}\max(\sum_i \lambda_i a_i n_i - 100, 0)^2$. EB anchors by
+beta-binomial MLE (grid plus coordinate refinement): training split
+$\mathrm{Beta}(0.68, 1.70)$; past-only fits $\mathrm{Beta}(0.65,1.61)$,
+$(0.68,1.70)$, $(0.69,1.72)$ at the 2020/2021/2022-12-31 cutoffs.
+Disease-stratified EB: per-primary-site MLE for strata with $\ge 40$ training
+queries, global fallback otherwise.
+
+\paragraph{Evaluation constants.} Held-out split: deterministic $80/20$
+(seed $20260603$), $n = 281$. Disjoint forward windows by primary completion
+date: (2020-12-31, 2021-12-31] $n=181$; (2021-12-31, 2022-12-31] $n=204$;
+after 2022-12-31, $n=390$; past-only training pools $632/813/1{,}017$.
+Paired bootstrap: $4{,}000$ resamples, percentile intervals. PIT: randomized
+form, RNG seed $20260707$; prediction intervals: equal-tailed on the exact
+beta-binomial mixture pmf. Pre-specified information subgroup: $I = \sum_i
+\mathrm{gate}_i a^{\mathrm{rule}}_i n_i \ge 8$, fixed from exploratory
+analysis of the two earlier windows before the final window was examined.
+Robust-MAP baseline: DerSimonian--Laird heterogeneity on the rate scale,
+Haldane-smoothed rates, MAP ESS cap $200$, $\epsilon = 10^{-4}$,
+robustification weights $w \in \{0.5, 0.9\}$. SAM adapter: temperature
+$\tau = 1$; multiplier $\min(1, R^{\tau})$ with $R$ the
+historical-to-weak predictive ratio at the observed outcome.
+
+\paragraph{Gold-standard simulation.} As released in
+\texttt{simulation/gold\_standard/}: $2{,}000$ replicates per cell (estimation
+and design worlds), simulation training set $300$ queries, $60$ epochs, seed
+$20260720$; design test $H_0: \theta \le 0.20$ at one-sided $0.025$,
+alternative $\theta_0 = 0.35$; conflict grid $0$--$1.5$ logit shift; success
+threshold $0.975$; fixed-discount comparator $0.35$. Data-generating
+constants, trap/hidden-gem composition, and per-cell outputs are archived in
+\texttt{results/tables/\allowbreak gold\_standard\_*}.
+
+\paragraph{Round-2 additions (this revision).} Donor-availability analysis:
+availability dates are ClinicalTrials.gov results-first-posted dates for all
+$7{,}173$ corpus trials; the analysis-time rule restricts training queries and
+their donors to results posted on or before each fold cutoff (pools
+$323/494/651$; surviving donor observations $26.7\%/35.6\%/45.0\%$; refit EB
+anchors $\mathrm{Beta}(0.68,1.57)$, $(0.66,1.58)$, $(0.68,1.66)$), and the
+design-time scoring rule restricts each query's donors to results posted
+before that query's start date; availability-filtered selective refits use
+the canonical hyperparameters and seed. Dependence analysis: donor-block
+bootstrap with blocks defined by each query's strongest gated donor ($346$
+blocks over the $775$ forward queries, largest $36$; $4{,}000$ resamples,
+seed $20260821$); connected components of the sharing graph are reported as
+degenerate (one component holds $98\%$ of queries). Count-only sensitivity:
+percentage-derived means the reported unit string contains
+``percent(age)''; $3{,}678$ of $6{,}813$ donor observations and $683$ of
+$1{,}407$ query outcomes are percentage-derived. Simulation round 2: primary
+gold-standard labels use $|\theta_k - \theta_0| \le 0.05$ on latent rates
+(secondary process-compatible labels use $\theta^{\mathrm{obs}}_k$); the
+same per-cell dataset seeds as the released run (draws verified
+bit-identical); selective simulation models trained on the same
+$300$-query draw ($60$ epochs, seed $20260603$); simulation EB anchors
+$\mathrm{Beta}(1.137, 2.103)$ (gold) and $\mathrm{Beta}(19.05, 78.66)$ (EC,
+reflecting that world's homogeneous control rates); SAM for selective priors
+is anchored (ratio and returned mass against the prior's own EB weak
+component). Outcome-adaptive rows in the main tables were recomputed under
+the released adapter implementation with each prior's own weak component
+(randomized PIT seed $20260707$); the manual-audit sampling frame
+(\texttt{docs/\allowbreak manual\_audit\_sample\_2026-08-31.csv}) oversamples
+percentage-derived and most-shared donors (seed $20260822$); the completed
+audit (\texttt{docs/} \texttt{manual\_audit\_sample\_2026-08-31\_completed.csv})
+is analysed with Wilson $95\%$ intervals. The audit-corrected
+sensitivity rescoring (fix
+NCT03290079 $\to 2/18$, NCT03331250 $\to 4/13$;
+drop two flagged $100\%$-proportion rows; 221 scorings touched, rescored
+with the frozen canonical models, bootstrap seed $20260823$) is archived in
+\texttt{artifacts/\allowbreak round2/audit\_sensitivity\_meta.json}.
+
+\paragraph{Round-3 additions.} Endpoint canonicaliser: rule set released
+with the code (the canonicaliser script under \texttt{scripts/});
+validation frame =
+the 74 unambiguous audited rows. Calibration study: per-replicate posterior
+probabilities stored for every design cell; pre-specified grid = uniform
+shifts $\{0,0.25,\dots,1.5\}$ at full conflict plus partial-conflict cells
+$f\in\{0.25,0.5,0.75\}\times$ shifts $\{0.5,1.0,1.5\}$ (new seeds via the
+released seed function; full-conflict cells reuse released seeds and
+reproduce the round-2 rejection rates at $0.975$); threshold grid
+$0.975$--$0.9995$ step $0.0005$; cap variant projects historical mass onto
+$\le 0.5$. The partial-conflict and control-heterogeneity DGM extensions
+(the \texttt{conflict\_fraction} and \texttt{theta\_control\_sd} fields)
+draw no extra
+randomness at their released defaults (draw signatures verified
+bit-identical). EC anchor battery: mean $\pm0.4$ logit at preserved
+precision, precision $\times4$/$\times1/4$ at preserved mean, flat; new
+heterogeneity worlds SD $0.3$ (logit) at drifts $-0.8$ and $0.0$. Strict-ORR
+reruns: strict windows $128/155/306$; strict pools $439/567/722$ (primary
+tier) and $221/336/444$ (availability-consistent), canonical
+hyperparameters and seed; design-weighted audit estimates use stratum sizes
+$10/404/261$ (donors: top-shared census / percentage / count) and
+$395/380$ (queries), with finite-population correction; block-bootstrap
+sensitivity schemes: strongest-donor blocks (346) and top-two-donor unions
+(58, degenerate, reported for transparency); audit-corrected sensitivity
+seeds and all round-3 artifacts under
+\texttt{artifacts/\allowbreak round3/}.
+
+\paragraph{Round-4 additions (this revision).} Borrowed-mass cap: projection
+$\lambda_i \leftarrow \lambda_i \min(1, c/m)$, $m=\sum_i\lambda_i$, excess to
+the anchored weak component; final-design value $c=0.5$ fixed in the
+previous revision; sweep grid $c \in \{0.1,\dots,0.9\}$ with and without
+anchored SAM, base selective prior built once per replicate. Two-sided
+cells: uniform shifts $\{-1.5,\dots,-0.25\}$ added in both worlds (fresh
+deterministic seeds via the released seed function from the cell name).
+Empirical drift distribution: per-query mean donor--query drift on the
+empirical-logit ($+0.5$) scale over gated title-screened pairs with $\ge 2$
+donors ($n=939$ queries); noise correction $\mathrm{mean}(v)/m$ per query
+(idiosyncratic donor variation deliberately retained in the systematic
+estimate, which enlarges the spread); deconvolved law
+$N(+0.124, 1.328^2)$; mixture weights = that law discretised on the
+$0.25$-step two-sided grid, edge bins absorbing tails; the all-pairs
+sensitivity version is $N(+0.125, 1.391^2)$. Mixture calibration:
+$\tau_{\mathrm{mix}}$ = smallest threshold $\ge 0.975$ (grid step $0.0005$
+to $0.9995$, then $0.9999$) with drift-weighted average type I $\le 0.025$;
+hard ceiling $0.05$ = worst null cell (two-sided uniform + partial) at
+$\tau_{\mathrm{mix}}$; exact worst-case $\tau^{*}$ = maximum over null
+cells of the empirical $97.5\%$ quantile of stored posterior probabilities.
+Selection batch: $2{,}000$ replicates per cell, seed base $20260720$
+(round-3 store reused for positive cells; \texttt{cap50} columns verified
+bit-identical to the round-3 \texttt{selective\_cap50} store). Independent
+validation batch: $10{,}000$ replicates per cell, all $44$ cells, fresh
+seed base $20260901$, thresholds frozen from the selection batch; reporting
+= per-cell type I, worst cell with pointwise and Bonferroni
+Clopper--Pearson $95\%$ upper bounds, mixture average with MC standard
+error, paired (within-replicate) mixture-power differences.
+$n_0$-conditional operating characteristics: strata $20$--$28$, $29$--$37$,
+$38$--$45$, replicate $n_0$ recovered by regenerating each cell's dataset
+from its seed. Capped real-data rescoring: every tier (held-out test,
+forward, retrained title-screened, availability-consistent primary, frozen
+title-screened) at caps $\{0.3, 0.5, 0.7\}$ plus uncapped, cap applied at
+scoring only; uncapped scores verified to reproduce the stored per-example
+values ($\le 1.6\times10^{-4}$); primary-analysis blocks = strongest
+gated available donor per query ($534$ blocks, largest $7$); bootstrap
+seed $20260901$, $4{,}000$ resamples. Training-pool mechanism experiments
+(identical primary scoring rows and fold anchors throughout): seed
+stability = availability-consistent retraining at seeds $+1..+4$; equal-$n$
+composition control = full title-screened pools randomly downsampled to
+$221/336/444$ (three draws, RNG $500{+}k$); dose--response = $25/50/100\%$
+of the full pools (RNG $900$). Out-of-sample endpoint audit: canonicaliser
+frozen at SHA-256
+\texttt{df78ad8a\ldots} (full hash in the released key file) before
+sampling; $60$ records from trials untouched by the first audit, stratified
+by role $\times$ frozen prediction ($15$ per stratum, seed $20260901$),
+predictions withheld from the auditor; adjudication against registry
+outcome descriptions. EC anchor-fit uncertainty: nonparametric bootstrap of
+the $300$ training control arms ($B=500$, RNG $20260901$); propagation =
+one bootstrap anchor drawn per evaluation replicate (RNG $20260902$) for
+EB-only and frozen-selective over the released drift grid and
+heterogeneity cells. Round-4 artifacts under
+\texttt{artifacts/\allowbreak round4/}; new figures \texttt{F13} (primary
+forest) and \texttt{F14} (mixture operating profile) built by
+\texttt{scripts/\allowbreak build\_round4\_figures.py}.
+
+\paragraph{Round-5 additions (this revision).} Size-matched comparisons:
+per-design size--power curves on the validation batch over the threshold
+grid $0.970$--$0.9999$; thresholds interpolated so each design's
+drift-weighted average type I equals the target (no-borrowing's validated
+$0.02513$, the nominal $0.025$, or the \emph{smallest} threshold whose MC
+$95\%$
+upper bound of average type I is $\le 0.025$ --- smallest, because power
+falls in the threshold); paired within-replicate
+power differences at the matched thresholds are released as
+\texttt{gold\_standard\_\allowbreak size\_matched.json}. Mixing-measure
+robustness:
+alternative mixings = nonparametric raw and shrunken histograms of the
+per-query mean drift, era- and availability-stratified normal mixtures,
+all-pairs, $N(0,0.5)$, $N(0,1)$, $U(-1.5,1.5)$, point mass at $0$; $500$
+bootstrap resamples of the $939$ drift queries propagate mixing-weight
+uncertainty (\texttt{gold\_standard\_mixing\_robustness.json}).
+Cap-protection stress: donor arm sizes $\times 4$ (fresh cells,
+\texttt{donor\_n\_scale} DGM field, default path bit-identical) and anchor
+precision $\times 4$/$\times 1/4$ on released cells
+(\texttt{gold\_standard\_round5\_stress.json}); posterior-influence
+diagnostics on real data (\texttt{influence\_diag.json}). Equal-$n$
+downsampling is extended to eight draws, released as
+\texttt{starvation\_summary.json} and
+\texttt{equal\_n\_\allowbreak extra.json}.
+Final-design rows for the held-out/development, forward, and calibration
+tables are computed by the released script
+\texttt{capped\_\allowbreak table\_\allowbreak rows\_\allowbreak
+round5.py} under \texttt{scripts/}.
+
+\paragraph{Round-6 additions (this revision).} Cross-fitted size
+adjustment: each validation cell's $10{,}000$ replicates split in half;
+size-matching thresholds interpolated on one half, paired power
+differences and achieved sizes evaluated on the other, both folds
+averaged. Pointwise size matching: per uniform-drift cell, thresholds set
+to the empirical $97.5\%$ null quantile of the matching half, differences
+evaluated on the other half. Anchor-stress inference: worst
+anchor-$\times 4$ cell reported with binomial MC standard error and
+one-sided Clopper--Pearson $95\%$ bound. Strongest-donor block bootstrap
+extended to the capped forward and title-screened comparisons ($4{,}000$
+resamples, seed $20260906$). Artifacts:
+\texttt{gold\_standard\_\allowbreak round6\_analysis.json},
+\texttt{round6\_block\_capped.json}. Post-hoc scoping: every capped
+real-data evaluation is labelled a post hoc exploratory redesign
+evaluation (the cap postdates examination of earlier uncapped results);
+independent confirmation requires a new registry vintage, an untouched
+window, or external data.
+
+\paragraph{Round-7 additions.} Repeated cross-fitting:
+$R = 200$ random half-splits of each validation cell; per split,
+size-matching thresholds solved by bisection on one half (weighted
+average type I $= 0.02513$ under the canonical mixing) and the paired
+difference evaluated on the other, folds averaged
+(\texttt{gold\_standard\_round7\_crossfit.json}; RNG $20260908$). The
+pointwise ROC-efficiency diagnostic is extended to all $13$ two-sided
+uniform and $9$ partial-conflict cells (per-cell null rejection $=
+0.025$, cross-fitted; RNG $20260909$). Block-rule provenance: the capped
+block bootstrap assigns each query its strongest gated donor by rule
+weight, with no-donor queries as singleton blocks ($365$ blocks over the
+$775$ forward queries); the earlier released dependence analysis used its
+own strongest-gated-donor assignment ($346$ blocks) with a different
+handling of no-donor queries; rule sensitivity for the capped forward
+interval --- strongest-by-rule-weight $[-0.0669,-0.0169]$, no-donor
+pooled $[-0.0665,-0.0182]$, and strongest-by-gate $[-0.0634,-0.0203]$
+--- is released as \texttt{round7\_block\_rules.json}.
+
+\paragraph{Round-8 additions.} Direct paired
+capped-versus-uncapped contrasts: for every row of the primary, forward,
+and title-screened analyses, both $\mathrm{NLL}_{\mathrm{capped}(0.5)}$
+and $\mathrm{NLL}_{\mathrm{uncapped}}$ are computed on the identical
+query and donor set and differenced \emph{within} query; ordinary and
+strongest-donor block bootstrap intervals ($B = 4{,}000$; RNG $20260910$)
+are reported for the primary pooled and engaged rows, the forward tier,
+and both title-screened tiers (\texttt{round8\_direct\_paired.json}; the
+primary rows reuse the released per-example artifact of the primary
+scoring run). The paired difference is exactly zero for any query whose
+uncapped borrowed mass is at most the cap; binding counts accompany each
+interval. Repeated-cross-fit distribution: the $R = 200$ split estimates
+are reproduced bit-identically (identical RNG $20260908$) and summarised
+by the $2.5/25/50/75/97.5\%$ split quantiles
+($-0.00144/-0.00114/-0.00094/-0.00072/+0.00390$), the median
+($-0.00094$) alongside the mean ($-0.00073$), and $20$-bin histogram
+counts; the released summary is
+\texttt{gold\_standard\_\allowbreak round8\_crossfit\_dist.json}. Of the
+$200$ splits, $192$ lie below $+0.0001$, and the remaining $8$ form a
+separated positive tail between $+0.0022$ and $+0.0057$, which is why
+the mean sits above the median. The split interval is a descriptive
+quantile range over random half-splits of the single validation batch:
+conditional on that batch, it is not a confidence interval for the
+population difference and does not include between-batch sampling
+variability (we call it the central $95\%$ split-quantile range
+throughout).
+
+\paragraph{Round-9 additions.} Tail robustness of the
+direct paired contrasts: per-example rows are released for all four
+scored tiers (\texttt{round9\_rows.json}; the fwd/strictA/strictC
+rescoring reproduces the round-8 means to $<10^{-6}$), and
+Table~\ref{tab:s-tail} reports, per analysis, the binding-row
+distribution (median, IQR, $5$--$95\%$ quantiles, range), $10\%$-trimmed
+and $5\%$-winsorized binding-row means, and leave-one-query-out and
+leave-one-donor-block-out ranges of the pooled mean (artifact
+\texttt{round9\_\allowbreak tail\_robustness.json}; bootstrap RNG
+$20260912$).
+Split-distribution diagnostics: re-running the $200$ canonical splits
+with per-split records (\texttt{round9\_crossfit\_diag.json}; identical
+RNG $20260908$) shows the split estimate correlating $0.91$ with the
+evaluation-half size gap between the calibrated tests; the no-borrowing
+threshold takes only $4$ distinct values over the $400$ fold-halves
+(discrete test statistic; bisection residual up to $0.0013$), landing
+oversized on the evaluation half in typical splits ($0.0257$ vs the
+$0.02513$ target) and undersized in exactly the $8$ tail splits
+($0.0249$), while the final design's evaluation-half size is stable
+($0.02514$--$0.02515$); per-cell contributions are nearly identical for
+tail and non-tail splits (stored in the artifact). Figure~\ref{fig:s-cf}
+shows the histogram and ECDF. Repeated cross-fit under narrower
+mixings, on the identical $200$ splits (size-matching target = no
+borrowing's full-batch weighted type I at its frozen threshold under
+that mixing): $N(0,1)$ (target $0.02535$) mean $+0.0097$, median
+$+0.0094$, central $95\%$ split-quantile range $[+0.0090,+0.0149]$;
+$N(0,0.5)$ (target $0.02620$) mean $+0.0382$, median $+0.0373$, range
+$[+0.0365,+0.0432]$; every split positive under both.
+
+\paragraph{Round-10 additions.} Size standardization: the repeated
+cross-fit is re-run with randomized-boundary
+tests --- on each training half, for each design, $(c, \gamma)$ solves
+the weighted average type I exactly (reject above $c$; with probability
+$\gamma$ at $c$), and the fixed $(c, \gamma)$ is applied to the
+evaluation half in expectation, adding no randomization noise --- at
+\emph{common} targets $0.02513$ and $0.025$ for both designs under the
+canonical, $N(0,1)$, and $N(0,0.5)$ mixings on the identical $200$
+splits (\texttt{round10\_\allowbreak randomized\_crossfit.json}; RNG
+$20260908$). Canonical at $0.02513$: $+0.00247$ (SD $0.00035$; central
+range $[+0.00184,+0.00322]$; all $200$ splits positive;
+evaluation-half sizes average $0.02514$ for both designs; at target
+$0.025$: $+0.00249$); $N(0,1)$: $+0.01276$ $[+0.01218,+0.01359]$;
+$N(0,0.5)$: $+0.03970$ $[+0.03827,+0.04069]$ --- every split positive
+throughout. The deterministic-threshold centring near zero is thereby
+identified as granularity bias, and the round-8/9 alternative-mixing
+runs (mixing-specific targets) are superseded by these common-target
+runs. Figure~\ref{fig:s-cf}(b) shows the contrast. Triage
+recomputation for the final design: post-cap mass
+$\min(1-\lambda_0, 0.5)$ against capped NLL
+(\texttt{round10\_triage\_capped.json}; the released uncapped
+quartiles $0.15/0.36/0.65$, correlation $+0.16$, per-window stability,
+and tertile deltas are reproduced first): average-rank Spearman
+$+0.136$ (CI $[+0.064,+0.207]$; $+0.144/+0.151/+0.127$ by window; a
+$281$-row tie atom at $0.5$), groups $+0.005$ (non-binding rows below
+their median mass) / $-0.051$ (non-binding above) / $-0.074$ (the
+$0.5$ atom; CI $[-0.121,-0.025]$); strict tertiles with stable
+tie-breaking $+0.003/-0.052/-0.075$; selecting the atom yields
+$+0.074$ against $+0.080$ for the pre-specified $I \ge 8$ rule under
+the same capped scoring.
+
+\paragraph{Round-11 additions (this revision).} Inference-scope
+clarifications, all stored in the round-11 artifact named at the end
+of this paragraph: (i)
+evaluation-half size-gap distributions for every randomized run
+(identical RNG $20260908$; estimates asserted equal to the round-10
+artifact) --- canonical at the common target: gap mean
+$-7\times10^{-6}$, central $95\%$ range $[-0.000215, +0.000207]$,
+maximum magnitude $0.000577$; all runs stay within $\pm 0.00075$;
+per-split gaps are stored. (ii) The full-batch randomized plug-in at
+the common target is $+0.00252$ with within-replicate Monte Carlo se
+$0.00070$ recomputed for the randomized estimator (evaluation sizes
+$0.02513/0.02513$). (iii) The mixing-weight bootstrap is re-run under
+randomized matching at the fixed common target ($500$ resamples, RNG
+$20260905$): mean $+0.00244$, $95\%$ interval $[+0.00052, +0.00449]$,
+$499/500$ positive --- superseding, for this purpose, the
+interpolated-analysis interval $[+0.0006,+0.0044]$. (iv) Location-held
+mixings on the identical splits separate dispersion from location:
+$N(+0.124, 1)$ gives $+0.01171$ $[+0.01105,+0.01249]$ and
+$N(+0.124, 0.5)$ gives $+0.03615$ $[+0.03512,+0.03725]$, against
+$+0.01276$/$+0.03970$ for the zero-centred versions. (v)
+Selection-rule overlap in Section 4.4: the post-cap $0.5$ atom
+($n=281$) and the $I \ge 8$ rule ($n=291$) share $169$ queries.
+Uncertainty sources remain examined separately (split and threshold
+estimation; finite simulation; mixing-weight estimation); they are not
+jointly propagated, and no independent replicate batch has been
+generated. All quantities above are stored in the artifact
+\texttt{round11\_\allowbreak inference\_scope.json}.
+
+\begin{table}[htbp]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{1.5pt}
+\caption{Tail statistics of the direct paired capped$-$uncapped
+contrasts (round-9). ``Binding'' rows are those whose uncapped borrowed
+mass exceeds the cap; all other rows contribute exact zeros to the
+pooled means of the main text's direct-contrast table (Section~4.2). Trim$_{10}$/Wins$_{5}$ are the
+$10\%$-trimmed and $5\%$-winsorized means of the binding rows;
+LOO$_{q}$/LOO$_{b}$ are the ranges of the pooled mean under
+leave-one-query-out and leave-one-donor-block-out. The primary pooled
+and engaged analyses share the same $50$ binding rows.}
+\label{tab:s-tail}
+\fontsize{7.2}{8.8}\selectfont
+\begin{tabular}{lrrrrrrrll}
+\toprule
+Analysis & Bind & Median & IQR & $5$--$95\%$ & Range & Trim$_{10}$ &
+Wins$_{5}$ & LOO$_{q}$ & LOO$_{b}$ \\
+\midrule
+Primary, pooled & 50 & $-0.030$ & $[-0.39,+0.07]$ & $[-2.06,+0.36]$ &
+$[-4.66,+0.44]$ & $-0.154$ & $-0.273$ & $[-0.030,-0.021]$ & $[-0.030,-0.021]$ \\
+Primary, engaged & 50 & $-0.030$ & $[-0.39,+0.07]$ & $[-2.06,+0.36]$ &
+$[-4.66,+0.44]$ & $-0.154$ & $-0.273$ & $[-0.148,-0.105]$ & $[-0.152,-0.105]$ \\
+Forward & 281 & $+0.021$ & $[-0.06,+0.11]$ & $[-0.69,+0.30]$ &
+$[-2.16,+0.52]$ & $+0.017$ & $-0.016$ & $[-0.015,-0.012]$ & $[-0.015,-0.012]$ \\
+Title-scr., retrained & 156 & $+0.020$ & $[-0.08,+0.17]$ &
+$[-0.70,+0.40]$ & $[-3.48,+0.58]$ & $+0.021$ & $-0.009$ & $[-0.016,-0.009]$ &
+$[-0.017,-0.009]$ \\
+Title-scr., frozen & 176 & $+0.022$ & $[-0.05,+0.11]$ & $[-0.69,+0.29]$
+& $[-1.65,+0.49]$ & $+0.016$ & $-0.018$ & $[-0.012,-0.008]$ & $[-0.012,-0.007]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{FS1_crossfit_dist}
+  \caption{Repeated cross-fit split distribution. (a)~The $200$
+  deterministic-threshold canonical-mixing split estimates (the round-9
+  diagnosis): mean $-0.00073$, median $-0.00094$; the $8$-split positive
+  tail ($+0.0023$ to $+0.0057$) comprises exactly the splits in which
+  the discrete no-borrowing threshold lands undersized on the
+  evaluation half. (b)~ECDFs of the deterministic (grey) and
+  randomized-boundary size-standardized (green; common target
+  $0.02513$; training-half size exact, evaluation-half average size
+  approximately matched) canonical estimates on the identical splits
+  --- the
+  randomized run concentrates at $+0.0025$ with every split positive
+  --- together with the medians and central $95\%$ split-quantile
+  ranges of the randomized runs under $N(0,1)$ and $N(0,0.5)$ at the
+  same common target.}
+  \label{fig:s-cf}
+\end{figure}
+
+\paragraph{Sensitivity artifacts.} Repository artifacts include section-weight
+sensitivity (\texttt{results/tables/\allowbreak section\_weight\_sensitivity.csv}),
+feature ablation, $\lambda_0$-frontier and conflict sweeps from the
+operating-characteristics engine, and the per-example evaluation rows behind
+every table in this revision
+(\texttt{artifacts/\allowbreak rerun\_unitfix\_2026-08-14/} and the selective-revision
+artifact set); regeneration commands are given in
+\texttt{docs/reproducibility.md} and the figure scripts assert every plotted
+headline value against the manuscript numbers before writing output.
+
+\section{Material moved from the main text (round 5)}
+
+\paragraph{Robust-MAP tuning detail.} The tuned robust
+meta-analytic-predictive (MAP) prior of Table~3 of the main text is a
+robustified mixture of a pooled MAP component and a vague component in the
+style of the RBesT tools. Its best-tuned configuration reached test NLL
+$3.043$ --- better than flat-anchored borrowing but above the plain EB
+reference --- and is sensitive to its robustification weight, degrading to
+$3.198$ at $w = 0.9$ as a single pooled MAP over-borrows from
+homogeneously treated historical evidence.
+
+\paragraph{Second worked case study (withholding limits harm).}
+NCT03046953 is a completed single-arm Phase~2 trial of avelumab in
+relapsed or refractory peripheral T-cell lymphoma, with its objective
+response held out (true outcome $5$ of $32$, observed ORR $0.156$; a
+test-split query no model saw in training). Stages~1--2 admitted six
+endpoint-compatible historical arms with modest usable information.
+Borrowing is not clearly warranted here: the EB reference reaches NLL
+$3.026$; the fixed-budget model, forced to place $0.80$ of its mass on
+the candidates, does worse ($3.182$); the selective model borrows only
+$0.40$ of its mass and lands within $0.021$ of the reference ($3.047$).
+The rule prior happens to do well ($2.978$) because its size-tilted
+weights landed near the low observed rate; single queries carry no
+significance either way.
+
+\begin{table}[htbp]
+\centering
+\caption{Second worked case study (NCT03046953, held-out ORR
+$5/32 = 0.156$; held-out test-split query). When borrowing is not clearly
+warranted, the fixed-budget prior is penalised for borrowing anyway; the
+selective prior withholds most of its mass and stays close to the EB
+reference.}
+\begin{tabular}{lrrc}
+\toprule
+Prior & Predicted ORR & Held-out NLL & 95\% interval covers truth \\
+\midrule
+Weak-only $\mathrm{Beta}(1,1)$ & 0.500 & 3.497 & yes \\
+EB reference (no borrowing) & 0.284 & \textbf{3.026} & yes \\
+Rule prior & 0.355 & 2.978 & yes \\
+Selective (borrowed mass $0.40$) & 0.271 & 3.047 & yes \\
+Two-head, fixed budget ($0.80$) & 0.315 & 3.182 & yes \\
+\textit{Observed (held out)} & \textit{0.156} & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{The prospective conflict signal: full analysis (moved from the
+main text, round 6)}
+
+The ablation gave a clear and initially unwelcome answer. Adding the
+prospective set-level conflict signal changed the borrowing-discrimination
+ROC-AUC (primary, parameter-level labels) by $+0.017$, $+0.008$, $+0.006$,
+$+0.001$ and $+0.005$ across the five scenarios for the fixed-budget
+architecture, and by $+0.012$ to $-0.000$ for the selective architecture
+--- negligible relative to Monte Carlo error --- and did not improve type
+I error. On the outcome the signal was designed to improve, it does
+essentially nothing.
+
+The reason is structural. The signal measures a donor's deviation from
+the consensus of the remaining donors, so it can only detect
+heterogeneity \emph{within} the candidate set. When prior-data conflict
+displaces the whole set uniformly, the consensus moves with it and no
+donor appears deviant. Under conflict the ROC-AUC of every design-time
+method fell below chance ($0.43$--$0.45$ in scenario S4 under the primary
+labels; the selective prior itself scored $0.429$), because surface
+features actively mislead when the entire retrieved history is biased.
+Detecting that situation requires the current outcome: UIP-JS, which
+computes its weights against the current data, attained $0.813$ under the
+primary labels ($0.839$ under the process-compatible labels) in the same
+scenario.
+
+The signal does, however, do something else in the fixed-budget
+architecture, which the borrowed-size response curve
+(Figure~\ref{fig:s4-ess}) makes visible. Without it, the learned discount
+head is inert: the per-source borrowed sample size is flat across donors
+at every true distance from the query rate ($43.6$, $43.7$, $43.8$,
+$43.9$ across distance bins, pooled over the five scenarios). With the
+signal, the borrowed size declines monotonically with true distance
+($31.3$, $30.4$, $28.0$, $23.6$). The nine reranking dimensions describe
+design similarity only; none carries information about outcome-space
+discrepancy, so a discount head conditioned on them alone collapses to a
+constant, and the set-level signal supplies exactly the missing
+information while never touching the query outcome.
+
+The selective architecture changes this picture in a way we did not
+anticipate and report as a finding. Even with the prospective signal, the
+selective model's discount response is flat ($43.6$, $43.7$, $43.8$,
+$43.9$): once the total-borrowing head exists, training reallocates the
+comparability response to the set level and the per-source discount stops
+grading donors (Figure~\ref{fig:s4-ess}). Per-donor discrimination under
+the selective model is therefore no better than under the fixed-budget
+model (Figure~\ref{fig:s4-roc}) --- its gains come from deciding how much
+to borrow overall, not from grading whom to borrow from more finely. The
+defensible claim is narrower than the one we set out to make: the
+prospective signal does not improve donor ranking; in the fixed-budget
+model it is what makes the per-source discount function at all; and in
+the selective model even that role disappears.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F9_ess_response}
+  \caption{Learned per-source borrowed sample size $a_k n_k$, binned by
+  the donor's true distance $|\theta_k - \theta_0|$ from the query rate
+  (pooled over the five estimation scenarios). A flat line means the
+  discount head is inert. In the fixed-budget architecture the
+  prospective signal activates the head (declining curve); in the
+  selective architecture the response is flat even with the signal ---
+  adaptivity migrates to the set-level total-borrowing head. The
+  fixed-discount ablation is flat by construction.}
+  \label{fig:s4-ess}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{F10_discrimination}
+  \caption{Borrowing-decision discrimination: ROC-AUC for identifying
+  genuinely exchangeable donors against the parameter-level gold
+  standard, by scenario. Under prior-data conflict (S4) every design-time
+  method falls below chance; only outcome-using UIP-JS remains
+  informative. Error bars are Monte Carlo standard errors.}
+  \label{fig:s4-roc}
+\end{figure}
+
+\end{document}
